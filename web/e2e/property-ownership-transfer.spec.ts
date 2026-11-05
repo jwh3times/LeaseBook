@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { runA11y, SCENARIO_STAFF, signIn } from './helpers';
+import { orgToday, runA11y, SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
 // Transferring a property to another owner (#555, ADR-036), driven in the scenario organization
@@ -17,12 +17,13 @@ const OWNERS = ['Harborview Holdings', 'Meridian Estates'] as const;
 // Avery Whitfield's $1,200 and Rosa Delgado's $1,000, held since the cutover; nothing else moves them.
 const HELD_FOR_PROPERTY_CENTS = 220_000;
 
-/** The viewer's calendar date `daysAgo` days back, as the date field takes it. */
+/**
+ * The organization's calendar date `daysAgo` days back, as the date field takes it (#642): counted from
+ * its today, not this Node process's, which is UTC in CI and a day ahead on a US evening.
+ */
 function localDaysAgo(daysAgo: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const [year, month, day] = orgToday().split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(year, month - 1, day - daysAgo)).toISOString().slice(0, 10);
 }
 
 /** Reads a figure the screen shows (`$2,200.00`, or the dash that stands for zero) as cents. */

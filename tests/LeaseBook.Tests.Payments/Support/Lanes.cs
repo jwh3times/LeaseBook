@@ -25,7 +25,7 @@ internal sealed class Lane : OrgLane<Lane>
         _accounting = PaymentsHarness.AccountingOver(Db, Org, Actor);
         _refundChecks = new(() => RefundCheckHarness.ServicesOver(Db, Org, Actor, clock));
         Ledger = new RecordingLedger(_accounting.GetRequiredService<IAccountingEvents>(), ownerId, bankId);
-        Payments = new PaymentEngine(Db, Org, clock, Ledger, eligibility, feeRules);
+        Payments = new PaymentEngine(Db, Org, clock, Ledger, eligibility, feeRules, new StubOrgTimeZone());
         Settlements = new SettlementEngine(Db, clock, Payments, Ledger);
     }
 

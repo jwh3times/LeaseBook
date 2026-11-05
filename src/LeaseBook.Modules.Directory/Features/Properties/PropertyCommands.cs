@@ -48,16 +48,18 @@ public sealed class UpdatePropertyValidator : AbstractValidator<UpdateProperty>
     }
 }
 
+/// <summary>
+/// A date after the organization's today is not refused here: every transfer moves the property's
+/// held deposits through Accounting, whose guard refuses it as <c>posting_date_in_future</c> (#642), the
+/// same answer any money dated after today gets.
+/// </summary>
 public sealed class TransferPropertyOwnershipValidator : AbstractValidator<TransferPropertyOwnership>
 {
     public TransferPropertyOwnershipValidator()
     {
         RuleFor(command => command.PropertyId).NotEmpty();
         RuleFor(command => command.ToOwnerId).NotEmpty();
-        RuleFor(command => command.EffectiveDate)
-            .NotEmpty()
-            .Must(effectiveDate => effectiveDate <= DateOnly.FromDateTime(DateTime.UtcNow))
-            .WithMessage("A property ownership transfer cannot be scheduled for a future date.");
+        RuleFor(command => command.EffectiveDate).NotEmpty();
         RuleFor(command => command.SourceRef).NotEmpty().MaximumLength(200);
     }
 }
@@ -171,6 +173,8 @@ internal sealed class TransferPropertyOwnershipHandler(DbContext db, IPropertyDe
         }
 
         var fromOwnerId = property.OwnerId;
+        // Always called, deposits or none: it is also where a date after the organization's today is
+        // refused (posting_date_in_future, #642), before anything here is written.
         var depositEntryId = await depositTransfer.TransferAsync(
             property.Id,
             fromOwnerId,

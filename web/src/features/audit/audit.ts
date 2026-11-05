@@ -91,9 +91,11 @@ export function useAuditEvent(id: string | null): UseQueryResult<AuditEventDetai
   });
 }
 
-/** The filtered rows as a CSV download — the same narrowing that is on screen. */
-export function exportAuditCsv(query: AuditQuery): Promise<void> {
-  const stamp = new Date().toISOString().slice(0, 10);
+/**
+ * The filtered rows as a CSV download — the same narrowing that is on screen. `stamp` dates the file
+ * name: the organization's today where it is known (#642).
+ */
+export function exportAuditCsv(query: AuditQuery, stamp: string): Promise<void> {
   return download(
     () => getApiAuditEventsCsv({ query: params(query), parseAs: 'blob' }),
     `audit-log-${stamp}.csv`,

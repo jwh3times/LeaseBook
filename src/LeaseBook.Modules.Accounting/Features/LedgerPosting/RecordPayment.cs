@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel.Cqrs;
 
 namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
@@ -32,10 +33,24 @@ public sealed class RecordPaymentValidator : AbstractValidator<RecordPayment>
     }
 }
 
-internal sealed class RecordPaymentHandler(ITenantPostingDimensions dimensions, IAccountingEvents events)
+internal sealed class RecordPaymentHandler(
+    ITenantPostingDimensions dimensions, IAccountingEvents events, PostingCalendar calendar)
     : ICommandHandler<RecordPayment, PostResult>
 {
     public async Task<PostResult> Handle(RecordPayment command, CancellationToken ct)
+    {
+        // A payment staff record has been received by the day they record it (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
+        return await PostAsync(dimensions, events, command, ct);
+    }
+
+    /// <summary>
+    /// The posting itself, with no check on the date. A processor's receipt (<see cref="RecordSettledReceipt"/>,
+    /// <see cref="PostPaymentSettlement"/>) is dated by the bank's evidence, which the processor's own
+    /// rules bound.
+    /// </summary>
+    internal static async Task<PostResult> PostAsync(
+        ITenantPostingDimensions dimensions, IAccountingEvents events, RecordPayment command, CancellationToken ct)
     {
         var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(

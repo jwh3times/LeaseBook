@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
@@ -31,11 +32,11 @@ public sealed record RentRollRow(
     string Occupancy,
     string Availability);
 
-internal sealed class GetRentRollHandler(DbContext db, TimeProvider clock) : IQueryHandler<GetRentRoll, RentRollResponse>
+internal sealed class GetRentRollHandler(DbContext db, OrgCalendar calendar) : IQueryHandler<GetRentRoll, RentRollResponse>
 {
     public async Task<RentRollResponse> Handle(GetRentRoll query, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
 
         // Left-join unit → lease effective today → tenant. Non-system units/properties only:
         // NotSystem() applied to Unit, Property, and Tenant queryables.

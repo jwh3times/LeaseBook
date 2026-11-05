@@ -1,5 +1,7 @@
+using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Runs;
+using LeaseBook.SharedKernel.Time;
 
 namespace LeaseBook.Tests.Operations;
 
@@ -81,4 +83,10 @@ internal sealed class StubBankAccountInfo(Guid? operatingBankId = null) : IBankA
 
     public Task<(Guid OperatingBankId, string Display)> GetOperatingTrustAsync(CancellationToken ct) =>
         Task.FromResult((operatingBankId ?? DefaultBankId, "Test Trust Bank"));
+}
+
+/// <summary>The organization keeps its books in one listed zone (#642).</summary>
+internal sealed class StubOrgTimeZone(string zone = SupportedTimeZones.Default) : IOrgTimeZone
+{
+    public Task<TimeZoneInfo> GetAsync(CancellationToken ct) => Task.FromResult(SupportedTimeZones.Resolve(zone));
 }

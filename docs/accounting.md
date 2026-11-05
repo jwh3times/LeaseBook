@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-04
+- **Last reviewed:** 2026-11-05
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -209,6 +209,23 @@ Two independent locks keep settled history settled. Each month is an accounting 
 closed month post into the current open month instead. Separately, **reconciling one bank account** for a
 month locks _that account's_ month (see "Banking" below) — a finer-grained lock that is what month-end
 reconciliation actually uses. A post is rejected if either lock covers it.
+
+## Which day it is
+
+The books keep the organization's calendar, not the server's. Each organization's settings carry a US
+time zone (Eastern unless an administrator chooses another), and whenever the system works out
+"today" or "the current month" it reads the clock in that zone. At 21:00 Eastern on 31 October it is
+still 31 October for an Eastern organization, though the UTC date is already 1 November. A void with no
+date of its own is dated that day, the late-fee run assesses on it, the current lease and occupancy are
+read for it, and a statement, run or report with no period named opens on its month
+([ADR-037](adr/ADR-037-effective-dated-lease-attribution.md)).
+
+Money that moves in or out cannot be dated after that day: a payment received, a deposit or prepayment
+collected or applied, deposits moved with a sale, a void, a refund check or its void, and a bank fee,
+interest or transfer. Each has happened by the day it is recorded, so a later date is refused
+(`posting_date_in_future`). A charge or a credit may be billed ahead, and so may the rent, late-fee and
+disbursement runs, which date their entries by the period they bill. A processor's settled payment is
+dated by its bank evidence and is not refused this way.
 
 ## Writing entries through the ledger composer
 

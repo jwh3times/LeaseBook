@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { type Locator, type Page, expect } from '@playwright/test';
-import { signIn } from './helpers';
+import { orgToday, signIn } from './helpers';
 import {
   type Method,
   PASSWORD,
@@ -234,7 +234,7 @@ test('a card payment succeeds, its payout waits for the bank, and bank evidence 
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
 
   // The organization's card rule is the fee Stripe keeps, 2.9% plus $0.30, so the fee the tenant is
   // quoted is the fee the payout's line carries and nothing is left over either way.
@@ -321,7 +321,7 @@ test('an ACH debit is processing, then succeeds, and its payout posts when the b
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const { staff, admin } = await administrator(browser, 'a');
   await chargeStripesFee(admin, 'ach');
 
@@ -485,7 +485,7 @@ test('a refund in full and a refund of part each send a receipted payment to sta
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const run = randomBytes(4).toString('hex');
   const { staff, admin } = await administrator(browser, 'a');
   await chargeStripesFee(admin, 'card');
@@ -594,7 +594,7 @@ test('a payout that fails goes to staff review whether or not it had posted, and
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const run = randomBytes(4).toString('hex');
   const { staff, admin } = await administrator(browser, 'a');
   await chargeStripesFee(admin, 'card');
@@ -726,7 +726,7 @@ test('a bank amount that differs from the processor’s net posts nothing, and a
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const run = randomBytes(4).toString('hex');
   const note = `Bank short by one cent; processor asked ${run}`;
   const { staff, admin } = await administrator(browser, 'a');
@@ -824,7 +824,7 @@ test('the recorded payout arrives with its fifteen lines, goes to staff review, 
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const run = randomBytes(4).toString('hex');
   const { staff, admin } = await administrator(browser, 'a');
 
@@ -944,7 +944,7 @@ test('a payout that holds an ACH debit and that debit’s return posts both when
   browser,
 }) => {
   enabled();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const { staff, admin } = await administrator(browser, 'b');
   await setFeeRule(admin, STRIPE_FEES.ach.group, STRIPE_FEES.ach.rate, '20.00');
 

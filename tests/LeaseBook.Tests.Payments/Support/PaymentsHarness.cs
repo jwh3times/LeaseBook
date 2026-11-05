@@ -5,6 +5,7 @@ using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.SharedKernel.Time;
 using LeaseBook.Tests.Common;
 using LeaseBook.Web.Auth;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +53,7 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         OwnerId = ownerId;
         Tenants = tenants;
         Ledger = new RecordingLedger(accounting.GetRequiredService<IAccountingEvents>(), ownerId, binding.BankId);
-        Payments = new PaymentEngine(scope.Db, scope.Tenant, Clock, Ledger, Eligibility, FeeRules);
+        Payments = new PaymentEngine(scope.Db, scope.Tenant, Clock, Ledger, Eligibility, FeeRules, new StubOrgTimeZone());
         Settlements = new SettlementEngine(scope.Db, Clock, Payments, Ledger);
         _features = FeaturesOver(scope.Db, scope.Tenant, scope.Actor, Clock, Payments, Settlements);
     }
@@ -347,7 +348,8 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         "USD", Binding.BankId, Today, "evidence-" + op.Id.ToString("N"), "payout-" + op.Id.ToString("N"), true,
         Clock.GetUtcNow().UtcDateTime);
 
-    public DateOnly Today => DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+    /// <summary>The organization's today by this clock, in the fixture's zone (#642), not the UTC date.</summary>
+    public DateOnly Today => Clock.TodayIn(LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Resolve(LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Default));
 
     /// <summary>Payout evidence with the bank's word, dated today on this fixture's bank.</summary>
     public ProcessorSettlement Payout(string payoutId, decimal bankAmount, params ProcessorSettlementItem[] items) => new(

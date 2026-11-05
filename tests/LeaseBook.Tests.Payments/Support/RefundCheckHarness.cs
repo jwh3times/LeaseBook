@@ -115,6 +115,7 @@ internal sealed class RefundCheckHarness : IAsyncDisposable
         services.AddSingleton(org);
         services.AddSingleton(actor);
         services.AddSingleton(clock);
+        services.AddSingleton<LeaseBook.Modules.Accounting.Contracts.IOrgTimeZone>(new StubOrgTimeZone());
         services.AddSingleton(LedgerAdapter);
         services.AddSingleton(sp => new CountingRefundLedger((IRefundCheckLedger)sp.GetRequiredService(LedgerAdapter)));
         services.AddSingleton<IRefundCheckLedger>(sp => sp.GetRequiredService<CountingRefundLedger>());

@@ -408,7 +408,7 @@ public sealed class RefundCheckTests(PostgresFixture fixture)
         // The posting lock is given the scope's org; only the handler's own context is empty.
         var refused = await Should.ThrowAsync<InvalidOperationException>(() => scope.RunAsync(() =>
             new VoidRefundCheckHandler(scope.Db, new OrgContext(), new PostingLock(scope.Db, scope.Tenant), Reversal(scope),
-                TimeProvider.System).Handle(new VoidRefundCheck(check.EntryId, "misprinted", Mar5), ct), ct));
+                new PostingCalendar(new FixedOrgTimeZone(), TimeProvider.System)).Handle(new VoidRefundCheck(check.EntryId, "misprinted", Mar5), ct), ct));
 
         refused.Message.ShouldBe("VoidRefundCheck requires an ambient organization context.");
     }

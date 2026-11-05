@@ -32,6 +32,7 @@ public sealed class RunStrategySourceRefTests
                 }),
                 new StubPostedSourceRefs(),
                 new StubFundsInTransit(),
+                new StubOrgTimeZone(),
                 TimeProvider.System)
             .PlanAsync(period, [lateFeeRow.LeaseId], ct);
 

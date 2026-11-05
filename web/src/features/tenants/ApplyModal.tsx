@@ -8,6 +8,7 @@ import { Modal } from '@/components/Modal';
 import { type RefundCheckFund, useRefundCheckOptions } from '@/features/refundChecks/refundChecks';
 import '@/features/refundChecks/refundChecks.css';
 import { num } from '@/lib/directory';
+import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { useBankAccounts } from '@/lib/settings';
 import {
   applyDeposit,
@@ -26,8 +27,6 @@ interface ApplyModalProps {
   onClose: () => void;
   onApplied: (entryId: string) => void;
 }
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 /**
  * Guided deposit/prepayment application (§C.4). A deposit resolves the deposit/operating trust banks by
@@ -73,13 +72,16 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
    * resolves. A stale read is not a good enough basis for that.
    */
   const banksUnavailable = banks.isPending || banks.isError;
+  // The dialog has no date field: the application is dated the organization's today (#642), and with
+  // no settings read there is no today to send.
+  const orgToday = useOrgToday();
   const bankName = (id: string) =>
     banks.data?.find((bank) => bank.id === id)?.name ?? 'Trust account';
 
   const mutation = useMutation<PostResult, LedgerPostError>({
     mutationFn: () => {
       const value = Number.parseFloat(amount);
-      const date = todayIso();
+      const date = orgToday.status === 'ready' ? orgToday.today : '';
       if (kind === 'deposit') {
         return applyDeposit(tenantId, {
           amount: value,
@@ -140,6 +142,10 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       setError({ message: 'No trust bank is configured for this org.' });
       return;
     }
+    if (orgToday.status !== 'ready') {
+      setError({ message: orgTodayUnavailableMessage(orgToday) });
+      return;
+    }
     if (holdingBanksUnavailable) return; // Apply is disabled; Enter must not slip past it.
     if (kind === 'prepayment' && prepaymentBanks && prepaymentBanks.length > 0 && !prepaymentBank) {
       setError({ message: 'Choose which account to apply from.' });
@@ -168,7 +174,12 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
           <Button
             variant="primary"
             icon="check"
-            disabled={mutation.isPending || banksUnavailable || holdingBanksUnavailable}
+            disabled={
+              mutation.isPending ||
+              banksUnavailable ||
+              holdingBanksUnavailable ||
+              orgToday.status !== 'ready'
+            }
             onClick={submit}
           >
             Apply

@@ -39,11 +39,14 @@ internal sealed class TransferPropertyDepositsHandler(
     IPostingLock postingLock,
     IAccountingPeriods periods,
     IReconciliationLock reconciliationLock,
-    IAccountingEvents events)
+    IAccountingEvents events,
+    PostingCalendar calendar)
     : ICommandHandler<TransferPropertyDeposits, Guid?>
 {
     public async Task<Guid?> Handle(TransferPropertyDeposits command, CancellationToken ct)
     {
+        // Held deposits move with a sale that has already happened (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.EffectiveDate, ct);
         await postingLock.AcquireAsync(ct);
 
         var period = await periods.GetOpenPeriodAsync(command.EffectiveDate, ct);

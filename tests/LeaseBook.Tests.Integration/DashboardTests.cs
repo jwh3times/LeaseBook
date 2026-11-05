@@ -5,11 +5,11 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
+using LeaseBook.Web.Calendar;
 using LeaseBook.Web.Dashboard;
 using LeaseBook.Web.Seeding;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
-
 using OrgEntity = LeaseBook.Web.Persistence.Org;
 
 namespace LeaseBook.Tests.Integration;
@@ -36,7 +36,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         var service = new DashboardService(
             sender,
-            new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            new HostOrgCalendar(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero))),
             scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;
@@ -78,6 +78,26 @@ public sealed class DashboardTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Payments_this_month_are_the_organizations_month_on_a_us_evening()
+    {
+        // 01:00 UTC on 1 July 2026 is 21:00 EDT on 30 June: still June for the books (#642), so the
+        // month-to-date receipts are June's golden figure, not July's.
+        var ct = TestContext.Current.CancellationToken;
+        await DemoSeeder.SeedAsync(fixture.Api.Services, ct);
+        await using var scope = fixture.Api.Services.CreateAsyncScope();
+        var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+        var service = new DashboardService(
+            scope.ServiceProvider.GetRequiredService<ISender>(),
+            new HostOrgCalendar(scope.ServiceProvider.GetRequiredService<ISender>(), new FixedClock(new DateTimeOffset(2026, 7, 1, 1, 0, 0, TimeSpan.Zero))),
+            scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
+
+        DashboardResponse dash = null!;
+        await executor.RunAsSystemAsync(DemoSeeder.DemoOrgId, "test-harness", async () => dash = await service.ComposeAsync(ct), ct);
+
+        dash.Kpis.TenantPaymentsMtd.ShouldBe(1_380m);
+    }
+
+    [Fact]
     public async Task A_second_orgs_dashboard_is_empty()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -99,7 +119,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         var service = new DashboardService(
             sender,
-            new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            new HostOrgCalendar(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero))),
             scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;

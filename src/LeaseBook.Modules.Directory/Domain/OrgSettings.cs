@@ -78,5 +78,13 @@ public sealed class OrgSettings : IOrgScoped
     /// <summary>Most a bank-debit payment's fee can be (dollars), or null for no cap.</summary>
     public decimal? AchFeeCap { get; set; }
 
+    /// <summary>
+    /// The calendar the organization's books keep (#642, ADR-037): one of
+    /// <see cref="SupportedTimeZones.All"/>, stored as its IANA id. "Today" for a
+    /// posting date, a default as-of and the current month is the date in this zone. Changing it moves
+    /// no date already posted.
+    /// </summary>
+    public string TimeZone { get; set; } = SupportedTimeZones.Default;
+
     public DateTime CreatedAt { get; set; }
 }

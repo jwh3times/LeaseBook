@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
+using LeaseBook.SharedKernel.Time;
 
 namespace LeaseBook.Modules.Operations.Runs;
 
@@ -41,6 +42,7 @@ public sealed class LateFeeRunStrategy(
     ILateFeePolicyData policies,
     IPostedSourceRefs postedRefs,
     IFundsInTransit fundsInTransit,
+    IOrgTimeZone zone,
     TimeProvider clock) : IRunStrategy
 {
     /// <summary>The caution on a preview row whose tenant has a payment in transit.</summary>
@@ -52,7 +54,7 @@ public sealed class LateFeeRunStrategy(
     /// <inheritdoc />
     public async Task<StrategyPreview> PreviewAsync(RunPeriod period, CancellationToken ct)
     {
-        var assessmentDate = CurrentDate();
+        var assessmentDate = await CurrentDateAsync(ct);
 
         // Fetch delinquent leases and their effective policies in parallel.
         var delinquentRows = await delinquency.GetAsync(period.Year, period.Month, assessmentDate, ct);
@@ -138,7 +140,7 @@ public sealed class LateFeeRunStrategy(
         IReadOnlyList<Guid> selectedTargetIds,
         CancellationToken ct)
     {
-        var assessmentDate = CurrentDate();
+        var assessmentDate = await CurrentDateAsync(ct);
         var allDelinquent = await delinquency.GetAsync(period.Year, period.Month, assessmentDate, ct);
         var byLeaseId = allDelinquent.ToDictionary(r => r.LeaseId);
 
@@ -317,5 +319,6 @@ public sealed class LateFeeRunStrategy(
     private static string SourceRef(Guid rentObligationEntryId) =>
         $"latefee:rent-entry={rentObligationEntryId}";
 
-    private DateOnly CurrentDate() => DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+    /// <summary>The organization's today, not the UTC date (#642): a fee is assessed on the day it is.</summary>
+    private async Task<DateOnly> CurrentDateAsync(CancellationToken ct) => clock.TodayIn(await zone.GetAsync(ct));
 }

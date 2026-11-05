@@ -138,6 +138,8 @@ public sealed class DomainExceptionMessageTests
         yield return (new UnknownAccountException(SampleCode), "unknown_account",
             "The requested account does not exist in this organization.");
         yield return (new PmIncomeOwnerDimException(), "pm_income_owner_dim", "PM income cannot be recorded against an owner.");
+        yield return (new PostingDateInFutureException(new DateOnly(2026, 11, 1), new DateOnly(2026, 10, 31)),
+            "posting_date_in_future", "The date 2026-11-01 is after today, 2026-10-31, in the organization's time zone.");
         yield return (new PeriodClosedException(2026, 3), "period_closed", "Accounting period 2026-03 is closed.");
 
         yield return (new InsufficientLiabilityException(LiabilityKind.Deposit, 900m, 500m), "insufficient_liability",
@@ -273,6 +275,7 @@ public sealed class DomainExceptionMessageTests
         if (t == typeof(Guid)) return SampleId;
         if (t == typeof(decimal)) return 1234.56m;
         if (t == typeof(int)) return 2026;
+        if (t == typeof(DateOnly)) return new DateOnly(2026, 10, 31);
         if (t == typeof(string)) return SampleCode;
 
         throw new NotSupportedException(

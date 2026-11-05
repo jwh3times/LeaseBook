@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Directory.Contracts;
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Features.Tenants;
 using LeaseBook.Modules.Directory.Features.Units;
@@ -20,12 +21,12 @@ public sealed record PropertyDetail(
 internal sealed class GetPropertyDetailHandler(
     DbContext db,
     ITenantFinancials tenantFinancials,
-    TimeProvider clock)
+    OrgCalendar calendar)
     : IQueryHandler<GetPropertyDetail, PropertyDetail?>
 {
     public async Task<PropertyDetail?> Handle(GetPropertyDetail query, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
         var property = await db.Set<Property>().AsNoTracking()
             .NotSystem().FirstOrDefaultAsync(p => p.Id == query.Id, ct);
         if (property is null)

@@ -3,17 +3,9 @@ import { Badge, Button, Card, CardHeader, EmptyState, Icon, Input } from '@/desi
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { asApiError, type ApiError } from '@/api';
 import { useBankBalances } from '@/features/banking/banking';
+import { useOrgToday } from '@/lib/orgCalendar';
 import { SelectChip, type SelectChipOption } from './chips';
 import { downloadCompliancePack, type ReportDescriptor, type ReportsError } from './reports';
-
-// Sensible defaults: the current year to date. Every month in the range must be reconciliation-locked,
-// so the operator adjusts these to a closed period before downloading.
-function currentYearStart(): string {
-  return `${new Date().getFullYear()}-01-01`;
-}
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /**
  * Operator-facing copy for the pack's three known failures. This keys off status as well as `code`
@@ -47,8 +39,15 @@ interface CompliancePackPanelProps {
  */
 export function CompliancePackPanel({ report, isAdmin }: CompliancePackPanelProps) {
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
-  const [from, setFrom] = useState(currentYearStart);
-  const [to, setTo] = useState(today);
+  // Defaults: the organization's year to date, both ends from its today (#642), so they agree on the
+  // evening of 31 December. Every month in the range must be reconciliation-locked, so the operator
+  // adjusts these to a closed period before downloading. null until the operator types a date.
+  const orgToday = useOrgToday();
+  const today = orgToday.status === 'ready' ? orgToday.today : '';
+  const [fromEdit, setFrom] = useState<string | null>(null);
+  const [toEdit, setTo] = useState<string | null>(null);
+  const from = fromEdit ?? (today ? `${today.slice(0, 4)}-01-01` : '');
+  const to = toEdit ?? today;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ReportsError | null>(null);
   const [done, setDone] = useState(false);

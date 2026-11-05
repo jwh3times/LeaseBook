@@ -12,6 +12,7 @@ using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.Modules.Payments.Features;
 using LeaseBook.Modules.Payments.Processing;
 using LeaseBook.SharedKernel;
+using LeaseBook.SharedKernel.Time;
 using LeaseBook.Web.Payments;
 using LeaseBook.Web.Persistence;
 using Microsoft.AspNetCore.Routing;
@@ -712,7 +713,9 @@ public sealed partial class SimulatedPaymentTests
             var db = sp.GetRequiredService<AppDbContext>();
             var tenants = await db.Set<PaymentOperation>().Where(x => x.Id == first.Id || x.Id == second.Id)
                 .ToDictionaryAsync(x => x.Id, x => x.TenantId, ct);
-            var paidOn = DateOnly.FromDateTime(h.Clock.GetUtcNow().UtcDateTime);
+            // The organization's day for the instant it was paid (#642), not the UTC date.
+            var paidOn = h.Clock.TodayIn(LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Resolve(
+                LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Default));
             var map = await sp.GetRequiredService<Modules.Operations.Contracts.IFundsInTransit>()
                 .GetAsync([tenants[first.Id], tenants[second.Id], UuidV7.NewId()], ct);
             map.Count.ShouldBe(2);

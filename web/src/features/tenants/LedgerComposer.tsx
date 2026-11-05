@@ -4,6 +4,7 @@ import { Button, formatMoneyPlain, Icon, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { AudienceHint } from '@/components/InternalNote';
+import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { useBankAccounts } from '@/lib/settings';
 import { trackInteraction } from '@/lib/telemetry';
 import {
@@ -44,7 +45,6 @@ export interface LedgerComposerProps {
 type Mode = 'payment' | 'charge';
 
 const LAST_METHOD_KEY = 'lb.lastPaymentMethod';
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const creditLimitMessage = (owed: number) =>
   `A credit can’t be more than the ${formatMoneyPlain(owed)} the tenant owes. Only an administrator can allow a larger credit.`;
@@ -71,7 +71,10 @@ export function LedgerComposer({
   const [internalNote, setInternalNote] = useState('');
   const [method, setMethod] = useState(() => localStorage.getItem(LAST_METHOD_KEY) ?? 'ach');
   const [category, setCategory] = useState<string>('Rent');
-  const [date, setDate] = useState(todayIso);
+  // null until the operator types one: the field shows the organization's today (#642).
+  const [date, setDate] = useState<string | null>(null);
+  const orgToday = useOrgToday();
+  const effectiveDate = date ?? (orgToday.status === 'ready' ? orgToday.today : '');
   const [bankId, setBankId] = useState('');
   const [error, setError] = useState<LedgerPostError | null>(null);
   const [allowExcess, setAllowExcess] = useState(false);
@@ -119,7 +122,7 @@ export function LedgerComposer({
     setBankId('');
     setError(null);
     setAllowExcess(false);
-    setDate(todayIso());
+    setDate(null);
   }, [mode, open, operatorOpened, initialMode, initialInteractions]);
 
   const mutation = useMutation<PostResult, LedgerPostError>({
@@ -127,7 +130,7 @@ export function LedgerComposer({
       submitLedgerEntry(tenantId, {
         category: activeCategory,
         amount: Number.parseFloat(amount),
-        date,
+        date: effectiveDate,
         description,
         internalNote,
         method,
@@ -171,6 +174,12 @@ export function LedgerComposer({
           ? 'Confirm the larger credit to post it.'
           : creditLimitMessage(knownOwed),
       });
+      return;
+    }
+    if (date === null && orgToday.status !== 'ready') {
+      // The default is the organization's today, and until its settings are read there is no today to
+      // offer: the viewer's own zone is not the organization's (#642).
+      setError({ message: orgTodayUnavailableMessage(orgToday) });
       return;
     }
     if (needsBank && banksUnavailable) {
@@ -238,7 +247,7 @@ export function LedgerComposer({
           <div className="pf-composer-grid">
             <label className="pf-composer-field">
               <span>Date</span>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input type="date" value={effectiveDate} onChange={(e) => setDate(e.target.value)} />
             </label>
 
             {mode === 'payment' ? (

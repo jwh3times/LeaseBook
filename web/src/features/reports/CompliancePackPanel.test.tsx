@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ORG_SETTINGS } from '@/test/mocks/handlers';
 import { server } from '@/test/mocks/server';
 import { CompliancePackPanel } from './CompliancePackPanel';
 import type { ReportDescriptor } from './reports';
@@ -66,6 +67,22 @@ describe('CompliancePackPanel', () => {
     expect(screen.getByText('Trust account')).toBeInTheDocument();
     expect(screen.getByLabelText('From date')).toBeInTheDocument();
     expect(screen.getByLabelText('To date')).toBeInTheDocument();
+  });
+
+  // #642: both ends come from the organization's today. At 09:30 UTC on 1 Jan 2027 it is 04:30 on 1 Jan
+  // in New York, where the viewer is, but 23:30 on 31 Dec 2026 in Honolulu, where the books are kept.
+  it('defaults to the organization’s year to date, both ends in its own zone', async () => {
+    vi.setSystemTime(new Date('2027-01-01T09:30:00Z'));
+    server.use(
+      banksHandler(),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'Pacific/Honolulu' }),
+      ),
+    );
+    renderPanel(true);
+
+    await vi.waitFor(() => expect(screen.getByLabelText('To date')).toHaveValue('2026-12-31'));
+    expect(screen.getByLabelText('From date')).toHaveValue('2026-01-01');
   });
 
   it('gates non-admins with an admin-only message and no download action', () => {

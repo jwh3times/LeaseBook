@@ -8,6 +8,7 @@ using LeaseBook.Modules.Reporting.Delivery;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.Web.Adapters;
+using LeaseBook.Web.Calendar;
 using LeaseBook.Web.Operations;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -74,15 +75,16 @@ internal sealed class GetRunPreviewIssuedCoverageHandler(
     ISender sender,
     AppDbContext db,
     IStatementNames names,
-    TimeProvider clock) : IQueryHandler<GetRunPreviewIssuedCoverage, RunPreviewIssuedCoverageResponse>
+    TimeProvider clock,
+    HostOrgCalendar calendar) : IQueryHandler<GetRunPreviewIssuedCoverage, RunPreviewIssuedCoverageResponse>
 {
     public async Task<RunPreviewIssuedCoverageResponse> Handle(
         GetRunPreviewIssuedCoverage query,
         CancellationToken ct)
     {
-        var periodNow = clock.GetUtcNow();
+        var (year, month) = await calendar.PeriodAsync(query.Year, query.Month, ct); // #642
         var runType = RunTypeRoute.Parse(query.Type);
-        var period = new RunPeriod(query.Year ?? periodNow.Year, query.Month ?? periodNow.Month);
+        var period = new RunPeriod(year, month);
         var candidates = await engine.EligibleTargetsAsync(runType, period, ct);
         if (candidates.Count == 0)
         {

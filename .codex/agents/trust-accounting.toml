@@ -19,6 +19,10 @@ Hold every change to these invariants:
   path). Corrections are linked reversals (`reverses_entry_id`), never mutations.
 - **Locked periods reject postings** (`period_closed`); finalized reconciliations lock the account-month
   (`account_period_locked`).
+- **"Today" is the organization's**, read through `PostingCalendar` in the zone its settings keep, never
+  the UTC date. Money moving in or out is refused when dated after it (`posting_date_in_future`); charges,
+  credits and period-dated runs may bill ahead, and a processor's receipt posts through
+  `RecordSettledReceipt`, which no route maps (docs/accounting.md, "Which day it is"; #642).
 
 When reviewing or designing: name the event(s) and their per-basis lines, verify balance + the trust
 equation, and require the invariant/property/golden suites be run for accounting-adjacent changes. The

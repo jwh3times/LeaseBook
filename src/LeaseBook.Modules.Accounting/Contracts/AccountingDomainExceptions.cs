@@ -64,6 +64,20 @@ public sealed class UnknownAccountException(string accountCode)
 public sealed class PmIncomeOwnerDimException()
     : AccountingDomainException("pm_income_owner_dim", "PM income cannot be recorded against an owner.");
 
+/// <summary>
+/// Money moving in or out is dated after the organization's today (422, #642). "Today" is the date in
+/// the organization's time zone, not the UTC date.
+/// </summary>
+public sealed class PostingDateInFutureException(DateOnly date, DateOnly today)
+    : AccountingDomainException(
+        "posting_date_in_future",
+        $"The date {date:yyyy-MM-dd} is after today, {today:yyyy-MM-dd}, in the organization's time zone.")
+{
+    public DateOnly Date { get; } = date;
+
+    public DateOnly Today { get; } = today;
+}
+
 /// <summary>A posting targets a closed accounting period (409).</summary>
 public sealed class PeriodClosedException(int year, int month)
     : AccountingDomainException("period_closed", $"Accounting period {year}-{month:D2} is closed.")

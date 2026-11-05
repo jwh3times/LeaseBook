@@ -17,6 +17,7 @@ public static class DirectoryModuleServiceCollectionExtensions
     public static IServiceCollection AddDirectoryModule(this IServiceCollection services)
     {
         services.AddScoped<IManagementFeeConfig, ManagementFeeConfig>();
+        services.AddScoped<Features.Settings.OrgCalendar>();
         return services;
     }
 }

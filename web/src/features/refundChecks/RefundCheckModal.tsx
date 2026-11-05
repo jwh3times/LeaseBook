@@ -16,6 +16,7 @@ import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import { num, useOwners, useProperties } from '@/lib/directory';
 import { useBankAccounts } from '@/lib/settings';
+import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { trackInteraction, type BudgetTask } from '@/lib/telemetry';
 import { useLockedPeriodMessage } from '@/features/tenants/ledgerMutations';
 import {
@@ -32,7 +33,6 @@ import {
   type RefundCheckView,
   sourceLabel,
   STATE_PATTERN,
-  todayLocalIso,
   toCents,
   useRefundCheckOptions,
 } from './refundChecks';
@@ -101,7 +101,10 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
   const [chosenKey, setChosenKey] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [checkNumber, setCheckNumber] = useState('');
-  const [date, setDate] = useState(todayLocalIso);
+  // null until the operator types one: the check is dated the organization's today (#642).
+  const [dateEdit, setDate] = useState<string | null>(null);
+  const orgToday = useOrgToday();
+  const date = dateEdit ?? (orgToday.status === 'ready' ? orgToday.today : '');
   const [payeeName, setPayeeName] = useState(tenant.displayName);
   const [addressLine1, setAddressLine1] = useState(tenant.propertyAddress ?? '');
   const [addressLine2, setAddressLine2] = useState(
@@ -260,6 +263,9 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
     const number = Number(checkNumber);
     if (!/^\d+$/.test(checkNumber.trim()) || number < 1 || number > MAX_CHECK_NUMBER) {
       return fail('checkNumber', 'Enter the check number printed on the blank check.');
+    }
+    if (dateEdit === null && orgToday.status !== 'ready') {
+      return fail('date', orgTodayUnavailableMessage(orgToday));
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail('date', 'Enter the check date.');
     if (payeeName.trim() === '') return fail('payeeName', 'Enter who the check is payable to.');

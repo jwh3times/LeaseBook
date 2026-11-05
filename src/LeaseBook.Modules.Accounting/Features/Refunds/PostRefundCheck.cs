@@ -41,11 +41,14 @@ public sealed class PostRefundCheckValidator : AbstractValidator<PostRefundCheck
     }
 }
 
-internal sealed class PostRefundCheckHandler(DbContext db, IPostingLock postingLock, IAccountingEvents events)
+internal sealed class PostRefundCheckHandler(
+    DbContext db, IPostingLock postingLock, IAccountingEvents events, PostingCalendar calendar)
     : ICommandHandler<PostRefundCheck, RefundCheckPosted>
 {
     public async Task<RefundCheckPosted> Handle(PostRefundCheck command, CancellationToken ct)
     {
+        // A check is written on or before the day it is recorded; a postdated check is refused (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
         var source = RefundChecks.Sources[command.Source];
 
         // Read the buckets under the same per-org lock the template takes, so the bucket chosen here is

@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
@@ -27,7 +28,7 @@ public sealed record UnitRow(
             UnitAvailabilityConverter.ToDb(unit.Availability));
 }
 
-internal sealed class ListUnitsHandler(DbContext db, TimeProvider clock)
+internal sealed class ListUnitsHandler(DbContext db, OrgCalendar calendar)
     : IQueryHandler<ListUnits, IReadOnlyList<UnitRow>>
 {
     public async Task<IReadOnlyList<UnitRow>> Handle(ListUnits query, CancellationToken ct)
@@ -36,7 +37,7 @@ internal sealed class ListUnitsHandler(DbContext db, TimeProvider clock)
             .Where(u => u.PropertyId == query.PropertyId).NotSystem()
             .OrderBy(u => u.Label)
             .ToListAsync(ct);
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
         var occupiedIds = await UnitOccupancy.OccupiedIdsAsync(db, units.Select(unit => unit.Id).ToList(), today, ct);
         return [.. units.Select(unit => UnitRow.From(unit, occupiedIds.Contains(unit.Id)))];
     }

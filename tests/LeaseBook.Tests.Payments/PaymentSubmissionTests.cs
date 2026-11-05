@@ -39,6 +39,23 @@ public sealed class PaymentSubmissionTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task Eligibility_is_asked_for_the_organizations_today_not_the_utc_date()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var h = await PaymentsHarness.CreateAsync(fixture, ct);
+        // The next 01:00 UTC is 20:00 or 21:00 the evening before in New York, the fixture's zone (#642).
+        var now = h.Clock.GetUtcNow();
+        var evening = new DateTimeOffset(now.UtcDateTime.Date.AddDays(1).AddHours(1), TimeSpan.Zero);
+        h.Clock.Advance(evening - now);
+
+        await h.InOrg(() => h.Payments.SubmitAsync(h.Binding, h.Tenants[0], h.UserId, UuidV7.NewId(), 100m, "USD",
+            PaymentMethods.Card, 0m, ct), ct);
+
+        h.Eligibility.Asked.ShouldBe(
+            [new(h.Tenants[0], h.Binding.BankId, DateOnly.FromDateTime(evening.UtcDateTime).AddDays(-1))]);
+    }
+
+    [Fact]
     public async Task A_replay_of_the_same_request_finds_the_first_and_a_different_one_under_its_key_is_refused()
     {
         var ct = TestContext.Current.CancellationToken;

@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Directory.Domain;
+using LeaseBook.Modules.Directory.Features.Settings;
 using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel.Cqrs;
@@ -15,12 +16,12 @@ public sealed record GetDirectoryKpis : IQuery<DirectoryKpis>;
 
 public sealed record DirectoryKpis(int Vacancy);
 
-internal sealed class GetDirectoryKpisHandler(DbContext db, TimeProvider clock)
+internal sealed class GetDirectoryKpisHandler(DbContext db, OrgCalendar calendar)
     : IQueryHandler<GetDirectoryKpis, DirectoryKpis>
 {
     public async Task<DirectoryKpis> Handle(GetDirectoryKpis query, CancellationToken ct)
     {
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = await calendar.TodayAsync(ct); // the organization's today, not the UTC date (#642)
         var vacancy = await db.Set<Unit>().AsNoTracking()
             .NotSystem()
             .CountAsync(

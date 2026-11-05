@@ -17,6 +17,8 @@ public sealed class AccountingExceptionStatusTests
         (new InvalidLineException(InvalidLineReason.NoLines), StatusCodes.Status422UnprocessableEntity),
         (new UnknownAccountException("X"), StatusCodes.Status422UnprocessableEntity),
         (new PmIncomeOwnerDimException(), StatusCodes.Status422UnprocessableEntity),
+        (new PostingDateInFutureException(new DateOnly(2026, 11, 1), new DateOnly(2026, 10, 31)),
+            StatusCodes.Status422UnprocessableEntity),
         (new PeriodClosedException(2026, 1), StatusCodes.Status409Conflict),
         (new InsufficientLiabilityException(LiabilityKind.Deposit, 10m, 5m), StatusCodes.Status409Conflict),
         (new InsufficientReceivableException(ReceivableSource.Deposit, 10m, 5m), StatusCodes.Status409Conflict),

@@ -929,6 +929,7 @@ public static class ScenarioSeeder
                 services.GetRequiredService<ILateFeePolicyData>(),
                 services.GetRequiredService<IPostedSourceRefs>(),
                 services.GetRequiredService<IFundsInTransit>(),
+                services.GetRequiredService<LeaseBook.Modules.Operations.Contracts.IOrgTimeZone>(),
                 clock));
 
         return new RunEngine(
@@ -940,10 +941,14 @@ public static class ScenarioSeeder
             services.GetRequiredService<ICapabilitySnapshot>());
     }
 
+    /// <summary>
+    /// Noon UTC on the date, so the organization's today is that date in every listed time zone (#642);
+    /// midnight UTC is the evening before in each of them.
+    /// </summary>
     private sealed class FixedDateTimeProvider(DateOnly date) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() =>
-            new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            new(date.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
     }
 
     /// <summary>

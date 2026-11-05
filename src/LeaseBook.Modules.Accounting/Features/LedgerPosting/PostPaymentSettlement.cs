@@ -118,7 +118,7 @@ internal sealed class PostPaymentSettlementHandler(
             foreach (var receipt in command.Lines.OfType<SettlementReceipt>())
             {
                 current = receipt.Item;
-                var entry = await new RecordPaymentHandler(dimensions, events).Handle(new RecordPayment(
+                var entry = await RecordPaymentHandler.PostAsync(dimensions, events, new RecordPayment(
                     receipt.TenantId, receipt.Amount, command.BankDate, receipt.Method, command.BankAccountId,
                     receipt.Description, SourceRef(command, receipt.Item)), ct);
                 postings.Add(new(receipt.Item, "Receipt", entry.EntryId));

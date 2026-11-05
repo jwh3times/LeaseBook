@@ -43,7 +43,9 @@ public sealed record OrgSettingsResponse(
     decimal? CardFeeCap = null,
     int AchFeeRateBps = 0,
     decimal AchFeeFixed = 0m,
-    decimal? AchFeeCap = null)
+    decimal? AchFeeCap = null,
+    // The books' calendar (#642): an IANA id from SupportedTimeZones.All. Appended for the same reason.
+    string TimeZone = SupportedTimeZones.Default)
 {
     public static OrgSettingsResponse From(OrgSettings s) => new(
         AccountingBasisConverter.ToDb(s.AccountingBasis),
@@ -56,7 +58,8 @@ public sealed record OrgSettingsResponse(
         s.LateFeeRateBps,
         s.StaffCanManagePortalAccess,
         s.CardFeeRateBps, s.CardFeeFixed, s.CardFeeCap,
-        s.AchFeeRateBps, s.AchFeeFixed, s.AchFeeCap);
+        s.AchFeeRateBps, s.AchFeeFixed, s.AchFeeCap,
+        s.TimeZone);
 }
 
 internal sealed class GetOrgSettingsHandler(DbContext db) : IQueryHandler<GetOrgSettings, OrgSettingsResponse>

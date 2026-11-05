@@ -18,7 +18,7 @@ namespace LeaseBook.Modules.Accounting.Features.Refunds;
 /// linger as an outstanding item.
 /// <para>
 /// The reason is staff-only, stored as the reversal's internal note like any void (#468). The reversal
-/// lands in the open period dated <see cref="AsOfDate"/> (default today).
+/// lands in the open period dated <see cref="AsOfDate"/> (default the organization's today, #642; never later).
 /// </para>
 /// </summary>
 public sealed record VoidRefundCheck(Guid EntryId, string Reason, DateOnly? AsOfDate) : ICommand<PostResult>;
@@ -33,11 +33,15 @@ public sealed class VoidRefundCheckValidator : AbstractValidator<VoidRefundCheck
 }
 
 internal sealed class VoidRefundCheckHandler(
-    DbContext db, IOrgContext tenant, IPostingLock postingLock, IReversalService reversal, TimeProvider clock)
+    DbContext db, IOrgContext tenant, IPostingLock postingLock, IReversalService reversal, PostingCalendar calendar)
     : ICommandHandler<VoidRefundCheck, PostResult>
 {
     public async Task<PostResult> Handle(VoidRefundCheck command, CancellationToken ct)
     {
+        // Dated the organization's today unless the void names a day, which cannot be later (#642).
+        var asOf = command.AsOfDate ?? await calendar.TodayAsync(ct);
+        await calendar.EnsureNotAfterTodayAsync(asOf, ct);
+
         await postingLock.AcquireAsync(ct);
 
         var entry = await db.Set<JournalEntry>().AsNoTracking().FirstOrDefaultAsync(e => e.Id == command.EntryId, ct);
@@ -73,7 +77,6 @@ internal sealed class VoidRefundCheckHandler(
             throw new RefundCheckClearedException(command.EntryId);
         }
 
-        var asOf = command.AsOfDate ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var reversalId = await reversal.ReverseAsync(
             command.EntryId, command.Reason, asOf, RefundChecks.VoidSourceRef(command.EntryId), ct);
 

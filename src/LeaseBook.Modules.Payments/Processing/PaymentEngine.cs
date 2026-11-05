@@ -7,6 +7,7 @@ using LeaseBook.Modules.Payments.Contracts;
 using LeaseBook.Modules.Payments.Domain;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Tenancy;
+using LeaseBook.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Payments.Processing;
@@ -20,7 +21,7 @@ public sealed record WaitingPayment(Guid Id, DateTime CreatedAt);
 
 /// <summary>All methods run on the caller's org transaction. No provider I/O occurs here.</summary>
 public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider clock,
-    IPaymentLedger ledger, IPaymentEligibility eligibility, IPaymentFeeRules feeRules)
+    IPaymentLedger ledger, IPaymentEligibility eligibility, IPaymentFeeRules feeRules, IOrgTimeZone zone)
 {
     // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
     public static readonly int[] RetrySeconds = [1, 5, 30, 120, 600];
@@ -84,7 +85,9 @@ public sealed class PaymentEngine(DbContext db, IOrgContext org, TimeProvider cl
         // The tenant is charged what they were shown or nothing at all. If the rule moved between the
         // quote and the confirmation, they must see the new fee before anything is requested.
         if ((await QuoteAsync(binding, amount, method, ct)).Fee != quotedFee) { throw new PaymentFeeQuoteChangedException(); }
-        var request = new PaymentEligibilityRequest(tenantId, binding.BankId, DateOnly.FromDateTime(Now));
+        // Eligible on the organization's today, not the UTC date (#642): a lease that ends today is in
+        // force all evening.
+        var request = new PaymentEligibilityRequest(tenantId, binding.BankId, clock.TodayIn(await zone.GetAsync(ct)));
         if (!(await eligibility.ReadAsync([request], ct)).GetValueOrDefault(request))
         { throw new PaymentUnavailableException(); }
         var operation = new PaymentOperation

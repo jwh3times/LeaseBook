@@ -10,9 +10,11 @@ namespace LeaseBook.Web.Payments;
 
 internal sealed partial class PaymentLedgerAdapter(ISender sender) : IPaymentLedger
 {
+    // RecordSettledReceipt, not RecordPayment: the bank's date is evidence and keeps the processor's own
+    // bound, so it is not refused for being the organization's tomorrow in a US evening (#642).
     public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount,
         DateOnly date, string method, string memo, string sourceRef, CancellationToken ct) =>
-        (await sender.Send(new RecordPayment(tenantId, amount, date, method, bankId, memo, sourceRef), ct)).EntryId;
+        (await sender.Send(new RecordSettledReceipt(new RecordPayment(tenantId, amount, date, method, bankId, memo, sourceRef)), ct)).EntryId;
 
     public async Task<PaymentReturnOutcome> ReturnSettledReceiptAsync(Guid receiptJournalId, DateOnly date,
         string sourceRef, string note, CancellationToken ct)

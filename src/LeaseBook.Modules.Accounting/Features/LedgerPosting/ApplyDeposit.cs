@@ -1,6 +1,7 @@
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel.Cqrs;
 
 namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
@@ -33,11 +34,14 @@ public sealed class ApplyDepositValidator : AbstractValidator<ApplyDeposit>
     }
 }
 
-internal sealed class ApplyDepositHandler(ITenantPostingDimensions dimensions, IAccountingEvents events)
+internal sealed class ApplyDepositHandler(
+    ITenantPostingDimensions dimensions, IAccountingEvents events, PostingCalendar calendar)
     : ICommandHandler<ApplyDeposit, PostResult>
 {
     public async Task<PostResult> Handle(ApplyDeposit command, CancellationToken ct)
     {
+        // Applying a deposit recognises income on the day it is applied, never ahead (#642).
+        await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
         var dims = await LedgerPostingMaps.ResolveAsync(dimensions, command.TenantId, command.Date, ct);
         var id = await events.PostAsync(
             new DepositApplied(

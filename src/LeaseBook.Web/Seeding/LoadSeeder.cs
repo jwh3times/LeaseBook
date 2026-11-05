@@ -745,6 +745,7 @@ public static class LoadSeeder
                     sp.GetRequiredService<ILateFeePolicyData>(),
                     sp.GetRequiredService<IPostedSourceRefs>(),
                     sp.GetRequiredService<IFundsInTransit>(),
+                    sp.GetRequiredService<LeaseBook.Modules.Operations.Contracts.IOrgTimeZone>(),
                     clock)
                 : strategy)
             .ToList();

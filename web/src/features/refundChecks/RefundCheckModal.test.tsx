@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RefundCheckFund, RefundCheckView, TenantDetail } from '@/api';
 import { trackInteraction } from '@/lib/telemetry';
+import { ORG_SETTINGS } from '@/test/mocks/handlers';
 import { server } from '@/test/mocks/server';
 import { RefundCheckModal } from './RefundCheckModal';
 
@@ -184,6 +185,24 @@ describe('RefundCheckModal prefill', () => {
       await screen.findByText('No held deposit or prepaid credit to refund.'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Issue check' })).toBeNull();
+  });
+});
+
+// #642: the check is dated the organization's today, which is not always the viewer's. At 06:30 UTC on
+// 1 Nov 2026 it is 23:30 on 31 Oct in Los Angeles, and 02:30 on 1 Nov in New York, where the viewer is.
+describe('RefundCheckModal check date', () => {
+  it('defaults to the organization’s today in its own zone', async () => {
+    vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));
+    server.use(
+      ...readsFor([DEPOSIT]),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' }),
+      ),
+    );
+    renderModal();
+
+    await screen.findByLabelText('Amount');
+    await vi.waitFor(() => expect(screen.getByLabelText('Check date')).toHaveValue('2026-10-31'));
   });
 });
 

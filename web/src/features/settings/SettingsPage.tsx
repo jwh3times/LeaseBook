@@ -17,6 +17,7 @@ import {
   type BankAccount,
   type OrgSettings,
 } from '@/lib/settings';
+import { ORG_TIME_ZONES } from '@/lib/orgCalendar';
 import { useDraft } from '@/lib/useDraft';
 
 const BANK_PURPOSES = [
@@ -115,6 +116,7 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
         zip: form.zip ?? null,
         phone: form.phone ?? null,
         logoBlobRef: form.logoBlobRef ?? null,
+        timeZone: form.timeZone,
       });
       discard();
       setSaved(true);
@@ -127,7 +129,10 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
 
   return (
     <Card>
-      <CardHeader title="Organization" sub="Profile, accounting basis and money display." />
+      <CardHeader
+        title="Organization"
+        sub="Profile, accounting basis, money display and the time zone the books keep."
+      />
       <form className="pf-pad col gap14" onSubmit={save}>
         <div className="pf-formrow">
           <label htmlFor="s-legal">Legal name</label>
@@ -200,6 +205,27 @@ function OrgProfileForm({ initial }: { initial: OrgSettings }) {
               <option value="parens">Parentheses (1,250.00)</option>
             </Select>
           </div>
+        </div>
+
+        {/* #642: "today" for a posting date and the current month are this zone's, not the UTC date. */}
+        <div className="pf-formrow">
+          <label htmlFor="s-zone">Time zone</label>
+          <Select
+            id="s-zone"
+            aria-describedby="s-zone-hint"
+            value={form.timeZone}
+            onChange={(e) => set('timeZone', e.target.value)}
+          >
+            {ORG_TIME_ZONES.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name}
+              </option>
+            ))}
+          </Select>
+          <span id="s-zone-hint" className="t3 fs12">
+            Which day it is for the books: the default date of a posting, and the current month.
+            Changing it moves no date already posted.
+          </span>
         </div>
 
         <div className="row gap12">

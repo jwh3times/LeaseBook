@@ -18,6 +18,38 @@ next section.
 
 No unreleased changes.
 
+## [0.30.0] - 2026-11-05
+
+### Added
+
+- **Each organization's books keep its own time zone.** Settings has a time zone on the Organization
+  card: Eastern by default, or Central, Mountain, Arizona, Pacific, Alaska or Hawaii. Only an
+  administrator can change it, the change is in the audit trail, and saving another card never resets
+  it. A change moves no date already posted (#642).
+
+### Changed
+
+- **Money dated after the organization's today is refused.** A payment, a deposit or prepayment
+  collected or applied, deposits moved with a property sale, a void, a refund check or its void, and a
+  bank fee, interest or transfer cannot be dated after today, and the refusal names today's date. A
+  charge or a credit can still be billed ahead, and so can the rent, late-fee and owner-disbursement
+  runs. A payment a processor settles keeps the date its bank gave. An ownership transfer dated in the
+  future is now refused the same way as money, where before it was a field error (#642).
+
+### Fixed
+
+- From about 7 or 8 p.m. Eastern until midnight, LeaseBook took tomorrow's date as today's. A payment,
+  charge or credit opened in the ledger composer was dated tomorrow, and so was a deposit or prepaid
+  credit applied from the apply dialog, which has no date field to correct. A void with no date of its
+  own, the late-fee run's assessment, a refund check's default date and its alignment test page did the
+  same. Which lease counted as current, the dashboard's payments this month, and the month a statement,
+  run preview or report opened on could jump to the next day or month. All of these now use the
+  organization's own date. A screen that posts money waits for the organization's settings before
+  offering a date, and says so if they cannot be read (#642).
+- The production container could not have resolved any US time zone, because its base image carries
+  no time-zone data. The image now includes it, and the host refuses to start if any of the seven zones
+  cannot be resolved, rather than falling back to UTC dates (#642).
+
 ## [0.29.1] - 2026-11-04
 
 ### Fixed

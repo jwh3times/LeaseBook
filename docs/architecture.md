@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-11-05
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -56,7 +56,9 @@ transition, current Directory owner and deposit-responsibility handoff commit or
 [ADR-036](adr/ADR-036-effective-dated-property-ownership-transfer.md).
 
 Payments uses its own `IPaymentEligibility` batch port to resolve tenant/date/bank eligibility through
-Directory, and `IPaymentLedger` to dispatch Accounting's existing `RecordPayment` command. The receipt,
+Directory, and `IPaymentLedger` to dispatch Accounting's `RecordSettledReceipt` command, which no route maps and which
+posts a receipt exactly as `RecordPayment` does but is dated by the bank's evidence and so is not
+refused for falling after the organization's today. The receipt,
 payment effect and operation summary share one org transaction. The same port carries a returned
 payment to Accounting's guarded `ReturnTenantPayment`, which an administrator starts and which posts
 the receipt's linked reversal or refuses by name
@@ -144,6 +146,16 @@ There is deliberately no endpoint and no screen that writes this state: the `cap
 the only write surface, and in production it runs as a manual-trigger Container Apps job inside the
 private network, recording an append-only audit row — naming the accountable operator — for every
 change.
+
+## The books' calendar
+
+"Today" is the organization's, not the server's: each organization's settings carry one of seven US
+time zones, and every default date, as-of and current month the server works out is the injected
+`TimeProvider`'s instant read in that zone. Directory owns the setting. Accounting, Operations and
+Payments each declare an `IOrgTimeZone` port that one host adapter fills, and the host's own defaults
+use the same read. Money moving in or out cannot be dated after that day. The chiseled runtime image
+carries a tz database copied from the build stage, and the host resolves every zone at startup, so a
+host that cannot fails to start. See [ADR-037](adr/ADR-037-effective-dated-lease-attribution.md).
 
 ## Request flow (CQRS pipeline)
 

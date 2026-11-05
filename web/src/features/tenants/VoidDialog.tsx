@@ -5,6 +5,7 @@ import { Button, Icon, Input } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
+import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import {
   type LedgerPostError,
   newSourceRef,
@@ -41,9 +42,17 @@ export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDial
   const sourceRef = useRef(newSourceRef());
   const [refundCheckRequired, setRefundCheckRequired] = useState(false);
   const refundCheckNumber = /Refund check #(\d+)/.exec(description ?? '')?.[1];
+  // The reversal is dated the organization's today, sent rather than left to a server default (#642).
+  const orgToday = useOrgToday();
 
   const mutation = useMutation<PostResult, LedgerPostError>({
-    mutationFn: () => voidEntry(entryId, reason.trim(), sourceRef.current),
+    mutationFn: () =>
+      voidEntry(
+        entryId,
+        reason.trim(),
+        orgToday.status === 'ready' ? orgToday.today : '',
+        sourceRef.current,
+      ),
     onSuccess: (result) => onVoided(result.entryId),
     onError: (err) => {
       if (err.code === 'refund_check_void_required') {
@@ -67,6 +76,10 @@ export function VoidDialog({ entryId, description, onClose, onVoided }: VoidDial
   const confirm = () => {
     if (reason.trim() === '') {
       setError({ message: 'A reason is required to void an entry.' });
+      return;
+    }
+    if (orgToday.status !== 'ready') {
+      setError({ message: orgTodayUnavailableMessage(orgToday) });
       return;
     }
     setError(null);

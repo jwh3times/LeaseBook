@@ -1,6 +1,8 @@
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.Modules.Operations.Runs;
+using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
+using LeaseBook.Web.Calendar;
 using LeaseBook.Web.Reporting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -42,8 +44,8 @@ public sealed class OperationsEndpoints : IEndpointModule
         // GET /api/operations/runs/{type}/preview?year=&month=
         // Returns the SPA-shaped preview: rows with label/amount/status + exceptions list.
         group.MapGet("/runs/{type}/preview",
-                async (string type, int? year, int? month, RunEngine engine, HttpContext httpContext,
-                    CancellationToken ct) =>
+                async (string type, int? year, int? month, RunEngine engine, HostOrgCalendar calendar,
+                    HttpContext httpContext, CancellationToken ct) =>
                 {
                     if (!RunTypeRoute.TryParse(type, out var runType))
                     {
@@ -54,9 +56,8 @@ public sealed class OperationsEndpoints : IEndpointModule
                             status: StatusCodes.Status400BadRequest);
                     }
 
-                    var now = DateTime.UtcNow;
-                    var actualYear = year ?? now.Year;
-                    var actualMonth = month ?? now.Month;
+                    // A missing part is the organization's month, not the UTC one (#642).
+                    var (actualYear, actualMonth) = await calendar.PeriodAsync(year, month, ct);
 
                     if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
                     {

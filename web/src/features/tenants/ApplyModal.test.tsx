@@ -184,6 +184,65 @@ describe('ApplyModal when the trust banks cannot be read', () => {
 });
 
 // #468 (ADR-047): the application's reason prints on the owner statement; the note does not.
+// #642: the dialog has no date field, so the date it sends must be the organization's today. The suite
+// runs at 22:00 in New York, when the UTC date is already tomorrow's.
+describe('ApplyModal date', () => {
+  const localToday = () => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  };
+
+  it('applies on the organization’s today, not the UTC date', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.post('/api/accounting/tenants/:tenantId/deposit-applications', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'a1' });
+      }),
+    );
+    const { onApplied } = renderModal();
+
+    await screen.findByText(/Operating Trust/);
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('a1'));
+    expect(body?.date).toBe(localToday());
+    expect(localToday()).not.toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it('applies nothing while the organization’s settings cannot be read', async () => {
+    let posted = false;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { code: 'boom', detail: 'Settings are down.', correlationId: 'corr-1' },
+          { status: 503, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      ),
+      http.post('/api/accounting/tenants/:tenantId/deposit-applications', () => {
+        posted = true;
+        return HttpResponse.json({ entryId: 'a1' });
+      }),
+    );
+    renderModal();
+
+    await screen.findByText(/Operating Trust/);
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByText(/today’s date isn’t known/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
+    expect(posted).toBe(false);
+  });
+});
+
 describe('ApplyModal description and internal note', () => {
   it('labels both fields with their audience and posts them separately', async () => {
     let body: Record<string, unknown> | undefined;
