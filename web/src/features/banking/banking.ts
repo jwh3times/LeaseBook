@@ -121,9 +121,13 @@ export function useReconciliationHistory(
   });
 }
 
+/** The saved CSV column mappings of one bank account; a save invalidates it so the wizard offers it. */
+export const columnMappingsKey = (bankAccountId: string) =>
+  ['csv-mappings', bankAccountId] as const;
+
 export function useColumnMappings(bankAccountId: string): UseQueryResult<ColumnMappingView[]> {
   return useQuery({
-    queryKey: ['csv-mappings', bankAccountId],
+    queryKey: columnMappingsKey(bankAccountId),
     enabled: bankAccountId !== '',
     queryFn: async () =>
       (

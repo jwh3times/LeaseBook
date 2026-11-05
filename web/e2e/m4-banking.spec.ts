@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { runA11y, visualSnapshot } from './helpers';
 import { test } from './test';
 
@@ -190,6 +190,56 @@ test.describe.serial('M4 banking', () => {
     await expect(third.getByText(/duplicate skipped/)).toBeVisible();
     await expect(third.getByText('No statement lines to review.')).toBeVisible();
     await third.getByRole('button', { name: 'Cancel' }).click();
+  });
+
+  // #567: the map step saves the columns it was given under a name, and the next import into the account
+  // offers them (ADR-015). Its one row has no amount, so neither import stores a line for the specs after
+  // this one; reaching that row error is the proof each import read the file through the mapping.
+  test('saves a column mapping and applies it to the next import @scenario:bank-statement-mapping-saved', async ({
+    page,
+  }) => {
+    await login(page);
+    await gotoBanking(page);
+    const name = `e2e export ${Math.random().toString(36).slice(2, 8)}`;
+    const csv = 'Posted,Memo,Value\n2026-06-03,No amount,\n';
+    const openWizard = async () => {
+      await page.getByRole('button', { name: 'Import statement' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Import bank statement' });
+      await dialog.getByLabel('Statement CSV').setInputFiles({
+        name: 'statement.csv',
+        mimeType: 'text/csv',
+        buffer: Buffer.from(csv),
+      });
+      return dialog;
+    };
+    const rowErrorShown = async (dialog: Locator) => {
+      await dialog.getByRole('button', { name: 'Preview matches' }).click();
+      await expect(dialog.getByRole('alert')).toContainText('1 row was not imported.');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await expect(dialog).toBeHidden();
+    };
+
+    // Map the columns by hand, then save them under a name, from the keyboard.
+    const first = await openWizard();
+    await first.getByLabel('Date column').selectOption('Posted');
+    await first.getByLabel('Description column').selectOption('Memo');
+    await first.getByLabel('Amount column').selectOption('Value');
+    await first.getByLabel('Save this mapping as').fill(name);
+    await first.getByLabel('Save this mapping as').press('Enter');
+    await expect(first.getByRole('status', { name: 'Mapping saved' })).toHaveText(
+      `Saved “${name}” for this account.`,
+    );
+    await expect(first.getByLabel('Saved mapping').getByRole('option', { name })).toBeAttached();
+    await runA11y(page);
+    await rowErrorShown(first);
+
+    // The next import offers it, and choosing it maps every column.
+    const second = await openWizard();
+    await second.getByLabel('Saved mapping').selectOption({ label: name });
+    await expect(second.getByLabel('Date column')).toHaveValue('Posted');
+    await expect(second.getByLabel('Description column')).toHaveValue('Memo');
+    await expect(second.getByLabel('Amount column')).toHaveValue('Value');
+    await rowErrorShown(second);
   });
 
   test('reconciles Operating Trust to $0.00, finalizes, and locks the month against new postings @scenario:bank-reconcile-finalize-and-lock', async ({

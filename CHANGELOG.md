@@ -18,6 +18,19 @@ next section.
 
 No unreleased changes.
 
+## [0.29.0] - 2026-11-04
+
+### Added
+
+- **The statement import wizard can save a column mapping.** On the step that maps a bank CSV's columns,
+  the operator can name the columns just chosen and save them for that bank account. The next import into
+  the account offers the mapping in its list of saved mappings, and choosing it fills in the columns.
+  Until now the wizard offered saved mappings that nothing in the product could save, so an organization
+  not seeded with one always saw "No saved mappings yet". Saving a name the account already has replaces
+  that mapping, and the wizard says so before the save. Saving waits until the saved mappings have been
+  read, so that warning cannot be missed, and a save that fails shows the reason and a support reference
+  without stopping the import (#567).
+
 ## [0.28.11] - 2026-11-04
 
 ### Fixed
@@ -1752,7 +1765,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.11...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.29.0
 [0.28.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.11
 [0.28.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.10
 [0.28.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.9
