@@ -18,7 +18,7 @@ namespace LeaseBook.Web.Dashboard;
 /// </summary>
 public sealed class DashboardService(
     ISender sender,
-    TimeProvider clock,
+    HostOrgCalendar calendar,
     DashboardMetricsService operationsMetrics)
 {
     public async Task<DashboardResponse> ComposeAsync(CancellationToken ct)
@@ -30,9 +30,9 @@ public sealed class DashboardService(
         var deposits = await sender.Query(new GetDepositRegister(), ct);
         var directoryKpis = await sender.Query(new GetDirectoryKpis(), ct);
         // The organization's month, not the UTC one (#642).
-        var now = await OrgToday.ReadAsync(sender, clock, ct);
-        var tenantPaymentsMtd = await sender.Query(new GetTenantPaymentsReceived(now.Year, now.Month), ct);
-        var operational = await operationsMetrics.GetAsync(now.Year, now.Month, ct);
+        var today = await calendar.TodayAsync(ct);
+        var tenantPaymentsMtd = await sender.Query(new GetTenantPaymentsReceived(today.Year, today.Month), ct);
+        var operational = await operationsMetrics.GetAsync(today.Year, today.Month, ct);
 
         bool IsSystem(Guid ownerId) => ownerLookup.TryGetValue(ownerId, out var o) && o.IsSystem;
 

@@ -6,6 +6,7 @@ using LeaseBook.Modules.Payments.Features.RefundChecks;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.Web.Auth;
+using LeaseBook.Web.Calendar;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace LeaseBook.Web.Payments;
@@ -101,9 +102,10 @@ public sealed class RefundCheckEndpoints : IEndpointModule
             .RequireAuthorization(AuthPolicies.RequirePMAdmin);
 
         group.MapPost("/print-settings/{bankAccountId:guid}/alignment", async (
-            Guid bankAccountId, ISender sender, TimeProvider clock, HttpContext http, CancellationToken ct) =>
+            Guid bankAccountId, ISender sender, HostOrgCalendar calendar, HttpContext http, CancellationToken ct) =>
         {
-            var sample = RefundCheckPdf.AlignmentSample(DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
+            // Dated the organization's today, as a real check would be (#642).
+            var sample = RefundCheckPdf.AlignmentSample(await calendar.TodayAsync(ct));
             var pdf = await RenderAsync(sender, bankAccountId, sample, ct);
             http.Response.Headers.CacheControl = "no-store";
             return TypedResults.File(pdf, "application/pdf", "check-alignment-test.pdf");

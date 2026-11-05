@@ -304,10 +304,11 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
             var propertyId = await sender.Send(
                 new CreateProperty(sellerId, "1 Future St", "Raleigh", "NC", null, null), ct);
 
-            await Should.ThrowAsync<FluentValidation.ValidationException>(() => sender.Send(
+            // Refused like any money dated after the organization's today (#642).
+            (await Should.ThrowAsync<PostingDateInFutureException>(() => sender.Send(
                 new TransferPropertyOwnership(
                     propertyId, buyerId, new DateOnly(2099, 1, 1), "property-sale:future"),
-                ct));
+                ct))).Code.ShouldBe("posting_date_in_future");
 
             var property = await sender.Query(new GetPropertyDetail(propertyId), ct);
             property.ShouldNotBeNull();

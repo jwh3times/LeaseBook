@@ -116,6 +116,57 @@ describe('VoidDialog reason as an internal note', () => {
   });
 });
 
+// #642: the reversal is dated the organization's today, and the dialog says so in the request rather
+// than leaving it to a server default. The suite runs at 22:00 in New York, a day behind UTC.
+describe('VoidDialog as-of date', () => {
+  it('sends the organization’s today as the reversal’s date', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.post('/api/accounting/entries/:entryId/void', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'rev1' });
+      }),
+    );
+    const { onVoided } = renderDialog('June rent');
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const localToday = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'keyed twice');
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Void entry' })).toBeEnabled());
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onVoided).toHaveBeenCalledWith('rev1'));
+    expect(body?.asOfDate).toBe(localToday);
+    expect(localToday).not.toBe(now.toISOString().slice(0, 10));
+  });
+
+  it('voids nothing while the organization’s settings cannot be read', async () => {
+    let posted = false;
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { code: 'boom', detail: 'Settings are down.', correlationId: 'corr-1' },
+          { status: 503, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      ),
+      http.post('/api/accounting/entries/:entryId/void', () => {
+        posted = true;
+        return HttpResponse.json({ entryId: 'rev1' });
+      }),
+    );
+    renderDialog('June rent');
+
+    await userEvent.type(screen.getByLabelText('Reason (internal note)'), 'keyed twice');
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByText(/today’s date isn’t known/)).toBeInTheDocument();
+    expect(posted).toBe(false);
+  });
+});
+
 // #473: a refund check is voided from its check record, never through the generic entry void.
 describe('VoidDialog on a refund check entry', () => {
   it('points the user to the refund check list on Banking instead of a generic error', async () => {

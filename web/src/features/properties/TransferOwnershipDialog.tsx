@@ -4,7 +4,7 @@ import { Button, Input, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
-import { localDate } from '@/lib/dates';
+import { useOrgToday } from '@/lib/orgCalendar';
 import {
   useOwners,
   useTransferPropertyOwnership,
@@ -13,9 +13,6 @@ import {
 } from '@/lib/directory';
 import { useSession } from '@/features/auth/useSession';
 import { newSourceRef } from '@/features/tenants/ledgerMutations';
-
-/** The viewer's calendar date, the latest effective date a transfer can carry (ADR-036). */
-const today = () => localDate(new Date().toISOString());
 
 /**
  * A closed period or a locked deposit-bank month refuses the transfer. The server's own copy speaks
@@ -69,12 +66,17 @@ export function TransferOwnershipDialog({
   // One key per dialog open, so a retried request records the transfer once.
   const sourceRef = useRef(newSourceRef());
   const [toOwnerId, setToOwnerId] = useState('');
-  const [effectiveDate, setEffectiveDate] = useState(today);
+  // The latest date a transfer can carry is the organization's today, in its own zone, not the
+  // viewer's (ADR-036, #642). null until the operator types a date: the field shows that today.
+  const orgToday = useOrgToday();
+  const today = orgToday.status === 'ready' ? orgToday.today : '';
+  const [dateEdit, setEffectiveDate] = useState<string | null>(null);
+  const effectiveDate = dateEdit ?? today;
   // A string is this dialog's own validation copy; an ApiError is the server's (ADR-025).
   const [error, setError] = useState<string | ApiError | null>(null);
 
   const candidates = (owners.data?.items ?? []).filter((o) => o.id !== property.ownerId);
-  const ready = owners.isSuccess && candidates.length > 0;
+  const ready = owners.isSuccess && candidates.length > 0 && orgToday.status === 'ready';
 
   async function confirm() {
     if (!ready || transfer.isPending) return;
@@ -86,7 +88,7 @@ export function TransferOwnershipDialog({
       setError('Enter the date the transfer takes effect.');
       return;
     }
-    if (effectiveDate > today()) {
+    if (effectiveDate > today) {
       setError(
         'The effective date can’t be in the future. Record the transfer on or after the day it takes effect.',
       );
@@ -184,10 +186,24 @@ export function TransferOwnershipDialog({
             id={`${fieldId}-date`}
             type="date"
             value={effectiveDate}
-            max={today()}
+            max={today || undefined}
             onChange={(e) => setEffectiveDate(e.target.value)}
             onKeyDown={onKeyDown}
           />
+          {orgToday.status === 'error' && (
+            <div className="col gap6">
+              <ApiErrorNotice
+                error={orgToday.error}
+                fallback="Couldn’t load the organization’s settings, so today’s date isn’t known."
+                kind="read"
+              />
+              <ErrorAction
+                error={orgToday.error}
+                onRetry={orgToday.retry}
+                retrying={orgToday.retrying}
+              />
+            </div>
+          )}
         </div>
         {error &&
           (typeof error === 'string' ? (

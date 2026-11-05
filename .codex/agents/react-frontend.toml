@@ -442,6 +442,14 @@ test("records a payment", async () => {
   moving, so timers and waits behave as usual. To start a test at another instant, call
   `vi.setSystemTime(…)` in it (the clock moves on from there). A test that fakes timers itself replaces
   the clock until the next test, and its clock starts frozen at that 22:00, not at real time
+- "Today" for the books is the organization's, in the zone its settings keep (#642, ADR-037), not the
+  viewer's and not UTC's. `useOrgToday()` returns it once the settings read succeeds; a surface that
+  posts money defaults its date to it and blocks the write while it is pending or failed, as it would
+  for any other prerequisite read. The default MSW handler answers that read with
+  `ORG_SETTINGS` (Eastern), so to prove a surface follows the zone and not the viewer, serve another
+  zone at an instant where the two disagree (06:30 UTC on 1 Nov 2026 is 31 Oct in Los Angeles and
+  1 Nov in New York). Playwright pins the browser to `America/New_York`, and a spec's own "today"
+  comes from `orgToday()` in `e2e/helpers.ts`, because the spec runs in Node on CI's UTC clock
 
 ---
 
@@ -471,6 +479,7 @@ test("records a payment", async () => {
 | Ad-hoc `font-variant-numeric`                | `<td className="num">` / `<Money>` / `className="pf-num"`    |
 | New CSS custom properties in feature CSS     | Add to `web/src/design/tokens.css` only                      |
 | `onClick={submit}` on a form's save button   | `type="submit"`; a dialog passes `onSubmit` to `Modal`       |
+| `toISOString().slice(0, 10)` as "today"      | `useOrgToday()` from `@/lib/orgCalendar` (#642)              |
 | Direct `fetch` for XSRF-protected endpoints  | Generated write functions (XSRF is configured automatically) |
 | Bare header `div` inside a `role="listbox"`  | Wrap the run in `<div role="group" aria-label>`              |
 | Visual-only selection in a `combobox` list   | `aria-activedescendant` → the selected option's `id`         |

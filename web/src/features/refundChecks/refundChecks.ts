@@ -274,13 +274,6 @@ export function amountInputValue(value: number | string): string {
   return `${Math.trunc(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
 }
 
-/** Local calendar date as `yyyy-MM-dd` — the date the operator is writing the check, not UTC's. */
-export function todayLocalIso(now = new Date()): string {
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${now.getFullYear()}-${month}-${day}`;
-}
-
 export const STATE_PATTERN = /^[A-Z]{2}$/;
 export const POSTAL_PATTERN = /^\d{5}(-\d{4})?$/;
 export const MAX_CHECK_NUMBER = 99_999_999;

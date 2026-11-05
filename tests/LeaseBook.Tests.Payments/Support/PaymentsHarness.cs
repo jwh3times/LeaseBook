@@ -349,7 +349,7 @@ internal sealed class PaymentsHarness : IAsyncDisposable
         Clock.GetUtcNow().UtcDateTime);
 
     /// <summary>The organization's today by this clock, in the fixture's zone (#642), not the UTC date.</summary>
-    public DateOnly Today => Clock.TodayIn(OrgTimeZones.Resolve(OrgTimeZones.Default));
+    public DateOnly Today => Clock.TodayIn(LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Resolve(LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Default));
 
     /// <summary>Payout evidence with the bank's word, dated today on this fixture's bank.</summary>
     public ProcessorSettlement Payout(string payoutId, decimal bankAmount, params ProcessorSettlementItem[] items) => new(

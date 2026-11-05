@@ -219,19 +219,21 @@ export function voidDescription(original: string | null | undefined): string {
 }
 
 /**
- * Voids a posted entry → a linked reversal (P54 idempotency key; default as-of today server-side). The
+ * Voids a posted entry → a linked reversal dated `asOfDate`, the organization's today (#642; P54
+ * idempotency key). The
  * reason is staff-only: the server stores it as the reversal's internal note, and the owner statement
  * shows `Void — {original description}` instead (#468, ADR-047).
  */
 export async function voidEntry(
   entryId: string,
   reason: string,
+  asOfDate: string,
   sourceRef: string,
 ): Promise<PostResult> {
   return unwrap(
     postApiAccountingEntriesByEntryIdVoid({
       path: { entryId },
-      body: { entryId, reason, asOfDate: null, sourceRef },
+      body: { entryId, reason, asOfDate, sourceRef },
     }),
   );
 }

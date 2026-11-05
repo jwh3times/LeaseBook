@@ -14,6 +14,8 @@ import {
   type TableColumn,
 } from '@/design';
 import { useSession } from '@/features/auth/useSession';
+import { localDate } from '@/lib/dates';
+import { useOrgToday } from '@/lib/orgCalendar';
 import { AuditEventDrawer } from './AuditEventDrawer';
 import {
   DEFAULT_PAGE_SIZE,
@@ -57,11 +59,17 @@ export function AuditPage() {
   const narrow = (patch: Partial<AuditQuery>) =>
     setQuery((current) => ({ ...current, ...patch, page: 1 }));
 
+  const orgToday = useOrgToday();
+
   async function runExport() {
     setExporting(true);
     setExportError(null);
     try {
-      await exportAuditCsv(query);
+      // Only a file name: the viewer's own date stands in if the settings are unread.
+      await exportAuditCsv(
+        query,
+        orgToday.status === 'ready' ? orgToday.today : localDate(new Date().toISOString()),
+      );
     } catch (error) {
       setExportError(asApiError(error));
     } finally {

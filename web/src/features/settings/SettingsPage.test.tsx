@@ -22,6 +22,7 @@ const ORG = {
   lateFeeKind: 'flat',
   lateFeeAmount: 50,
   lateFeeRateBps: 500,
+  timeZone: 'America/New_York',
 };
 
 const ACTIVE_BANK = {
@@ -68,6 +69,60 @@ describe('SettingsPage', () => {
     expect(saved).toEqual(
       expect.objectContaining({ accountingBasis: 'accrual', moneyNegativeDisplay: 'parens' }),
     );
+  });
+
+  // #642: the calendar the books keep. Seven US zones, named for the reader, stored as IANA ids.
+  it('offers the seven US time zones and saves the one chosen', async () => {
+    let saved: Record<string, unknown> | null = null;
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/settings/banks', () => HttpResponse.json([])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.put('/api/settings/org', async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...ORG, ...saved });
+      }),
+    );
+
+    renderSettings();
+    const zone = await screen.findByLabelText('Time zone');
+    expect(zone).toHaveValue('America/New_York');
+    expect(within(zone).getAllByRole('option').map((o) => [o.getAttribute('value'), o.textContent])).toEqual([
+      ['America/New_York', 'Eastern'],
+      ['America/Chicago', 'Central'],
+      ['America/Denver', 'Mountain'],
+      ['America/Phoenix', 'Arizona'],
+      ['America/Los_Angeles', 'Pacific'],
+      ['America/Anchorage', 'Alaska'],
+      ['Pacific/Honolulu', 'Hawaii'],
+    ]);
+
+    await userEvent.selectOptions(zone, 'America/Chicago');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(saved).toMatchObject({ timeZone: 'America/Chicago' });
+  });
+
+  it('leaves the stored time zone alone when the late-fee policy is saved', async () => {
+    let saved: Record<string, unknown> | null = null;
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json({ ...ORG, timeZone: 'Pacific/Honolulu' })),
+      http.get('/api/settings/banks', () => HttpResponse.json([])),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.put('/api/settings/org', async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...ORG, timeZone: 'Pacific/Honolulu', ...saved });
+      }),
+    );
+
+    renderSettings();
+    expect(await screen.findByLabelText('Time zone')).toHaveValue('Pacific/Honolulu');
+    await userEvent.click(screen.getByRole('button', { name: /save late-fee policy/i }));
+
+    expect(await screen.findAllByText('Saved')).not.toHaveLength(0);
+    // The server keeps a zone a save does not name; the late-fee card does not own it.
+    expect(saved).not.toHaveProperty('timeZone');
   });
 
   it('shows the server reason and reference when the org settings read fails', async () => {

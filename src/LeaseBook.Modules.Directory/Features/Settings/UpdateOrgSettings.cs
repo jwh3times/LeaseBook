@@ -4,7 +4,6 @@ using LeaseBook.Modules.Directory.Features.Shared;
 using LeaseBook.Modules.Directory.Persistence;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
-using LeaseBook.SharedKernel.Time;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Settings;
@@ -60,8 +59,8 @@ public sealed class UpdateOrgSettingsValidator : AbstractValidator<UpdateOrgSett
         RuleFor(x => x.LateFeeAmount).LateFeeAmountValue();
         RuleFor(x => x.LateFeeRateBps).LateFeeRateBpsValue();
         RuleFor(x => x.TimeZone)
-            .Must(v => v is null || OrgTimeZones.IsSupported(v))
-            .WithMessage($"Time zone must be one of: {string.Join(", ", OrgTimeZones.Supported.Select(zone => zone.Id))}.");
+            .Must(v => v is null || SupportedTimeZones.IsSupported(v))
+            .WithMessage($"Time zone must be one of: {string.Join(", ", SupportedTimeZones.All.Select(zone => zone.Id))}.");
     }
 }
 

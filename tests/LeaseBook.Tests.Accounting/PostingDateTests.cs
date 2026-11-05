@@ -164,7 +164,7 @@ public sealed class PostingDateTests(PostgresFixture fixture)
 
         PostResult receipt = null!;
         await scope.RunAsync(async () => receipt = await AccountingSender.Create(scope, Leases(), EasternEvening)
-            .Send(new RecordSettledReceipt(_tenant, 100m, Nov1, "ach", scope.TrustBankId, "Tenant payment", "settled:1"), ct), ct);
+            .Send(new RecordSettledReceipt(new RecordPayment(_tenant, 100m, Nov1, "ach", scope.TrustBankId, "Tenant payment", "settled:1")), ct), ct);
 
         await scope.RunAsync(async () => (await scope.Db.Set<JournalEntry>().AsNoTracking()
             .SingleAsync(e => e.Id == receipt.EntryId, ct)).EntryDate.ShouldBe(Nov1), ct);

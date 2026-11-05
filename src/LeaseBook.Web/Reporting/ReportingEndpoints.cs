@@ -193,11 +193,9 @@ public sealed class ReportingEndpoints : IEndpointModule
         // (the owner is valid, just quiet). The fiduciary panel's Balanced flag confirms correctness.
         group.MapGet("/statements/{ownerId:guid}",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
-                    StatementAssembler assembler, ISender sender, TimeProvider clock, CancellationToken ct) =>
+                    StatementAssembler assembler, HostOrgCalendar calendar, CancellationToken ct) =>
                 {
-                    var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
-                    var resolvedYear = year ?? now.Year;
-                    var resolvedMonth = month ?? now.Month;
+                    var (resolvedYear, resolvedMonth) = await calendar.PeriodAsync(year, month, ct); // #642
                     var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
 
                     var views = await assembler.BuildAsync(
@@ -211,11 +209,9 @@ public sealed class ReportingEndpoints : IEndpointModule
         // GET /api/statements/{ownerId}/pdf?propertyId=&year=&month=&basis=
         group.MapGet("/statements/{ownerId:guid}/pdf",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
-                    StatementAssembler assembler, ISender sender, TimeProvider clock, CancellationToken ct) =>
+                    StatementAssembler assembler, HostOrgCalendar calendar, CancellationToken ct) =>
                 {
-                    var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
-                    var resolvedYear = year ?? now.Year;
-                    var resolvedMonth = month ?? now.Month;
+                    var (resolvedYear, resolvedMonth) = await calendar.PeriodAsync(year, month, ct); // #642
                     var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
 
                     var views = await assembler.BuildAsync(
@@ -229,11 +225,9 @@ public sealed class ReportingEndpoints : IEndpointModule
         // GET /api/statements/{ownerId}/csv?propertyId=&year=&month=&basis=
         group.MapGet("/statements/{ownerId:guid}/csv",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
-                    StatementAssembler assembler, ISender sender, TimeProvider clock, CancellationToken ct) =>
+                    StatementAssembler assembler, HostOrgCalendar calendar, CancellationToken ct) =>
                 {
-                    var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
-                    var resolvedYear = year ?? now.Year;
-                    var resolvedMonth = month ?? now.Month;
+                    var (resolvedYear, resolvedMonth) = await calendar.PeriodAsync(year, month, ct); // #642
                     var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
 
                     var views = await assembler.BuildAsync(
@@ -249,13 +243,13 @@ public sealed class ReportingEndpoints : IEndpointModule
         // notes keyed by entry id. Kept off StatementView so nothing rendered or issued can carry one.
         group.MapGet("/statements/{ownerId:guid}/internal-notes",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
-                    StatementAssembler assembler, ISender sender, TimeProvider clock, CancellationToken ct) =>
+                    StatementAssembler assembler, ISender sender, HostOrgCalendar calendar, CancellationToken ct) =>
                 {
-                    var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
+                    var (resolvedYear, resolvedMonth) = await calendar.PeriodAsync(year, month, ct); // #642
                     var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
 
                     var views = await assembler.BuildAsync(
-                        [ownerId], propertyId, year ?? now.Year, month ?? now.Month, resolvedBasis, ct);
+                        [ownerId], propertyId, resolvedYear, resolvedMonth, resolvedBasis, ct);
 
                     return TypedResults.Ok(await StatementInternalNotes.ReadAsync(views[0], sender, ct));
                 })
@@ -306,7 +300,7 @@ public sealed class ReportingEndpoints : IEndpointModule
         // none, so an owner's statement cannot be redirected, and no address travels in a URL.
         group.MapPost("/statements/{ownerId:guid}/deliver",
                 async (Guid ownerId, Guid? propertyId, int? year, int? month, string? basis,
-                    StatementAssembler assembler, IStatementDelivery delivery, ISender sender, TimeProvider clock,
+                    StatementAssembler assembler, IStatementDelivery delivery, ISender sender, HostOrgCalendar calendar,
                     HttpContext httpContext, CancellationToken ct) =>
                 {
                     var addresses = await sender.Query(new GetOwnerDeliveryAddresses([ownerId]), ct);
@@ -319,9 +313,7 @@ public sealed class ReportingEndpoints : IEndpointModule
                             status: StatusCodes.Status409Conflict);
                     }
 
-                    var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
-                    var resolvedYear = year ?? now.Year;
-                    var resolvedMonth = month ?? now.Month;
+                    var (resolvedYear, resolvedMonth) = await calendar.PeriodAsync(year, month, ct); // #642
                     var resolvedBasis = basis?.ToLowerInvariant() is "accrual" ? "accrual" : "cash";
 
                     var views = await assembler.BuildAsync(

@@ -5,11 +5,11 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Tests.Common;
 using LeaseBook.Tests.Integration.Fixtures;
+using LeaseBook.Web.Calendar;
 using LeaseBook.Web.Dashboard;
 using LeaseBook.Web.Seeding;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
-
 using OrgEntity = LeaseBook.Web.Persistence.Org;
 
 namespace LeaseBook.Tests.Integration;
@@ -36,7 +36,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         var service = new DashboardService(
             sender,
-            new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            new HostOrgCalendar(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero))),
             scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;
@@ -88,7 +88,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         var service = new DashboardService(
             scope.ServiceProvider.GetRequiredService<ISender>(),
-            new FixedClock(new DateTimeOffset(2026, 7, 1, 1, 0, 0, TimeSpan.Zero)),
+            new HostOrgCalendar(scope.ServiceProvider.GetRequiredService<ISender>(), new FixedClock(new DateTimeOffset(2026, 7, 1, 1, 0, 0, TimeSpan.Zero))),
             scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;
@@ -119,7 +119,7 @@ public sealed class DashboardTests(PostgresFixture fixture)
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
         var service = new DashboardService(
             sender,
-            new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            new HostOrgCalendar(sender, new FixedClock(new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero))),
             scope.ServiceProvider.GetRequiredService<DashboardMetricsService>());
 
         DashboardResponse dash = null!;

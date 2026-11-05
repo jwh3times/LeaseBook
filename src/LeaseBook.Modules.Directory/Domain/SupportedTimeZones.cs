@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 
-namespace LeaseBook.SharedKernel.Time;
+namespace LeaseBook.Modules.Directory.Domain;
 
 /// <summary>One time zone an organization's books may keep: its stored IANA id and its US name.</summary>
-public sealed record OrgTimeZone(string Id, string Name);
+public sealed record SupportedTimeZone(string Id, string Name);
 
 /// <summary>
 /// The calendar an organization's books keep (#642, ADR-037). "Today" for a posting date, a default
@@ -18,13 +18,13 @@ public sealed record OrgTimeZone(string Id, string Name);
 /// rather than dating anything in UTC.
 /// </para>
 /// </summary>
-public static class OrgTimeZones
+public static class SupportedTimeZones
 {
     /// <summary>The zone every organization starts with: North Carolina's.</summary>
     public const string Default = "America/New_York";
 
     // The Windows id of each zone is used only where the IANA lookup fails on a Windows host.
-    private static readonly (OrgTimeZone Zone, string WindowsId)[] Catalogue =
+    private static readonly (SupportedTimeZone Zone, string WindowsId)[] Catalogue =
     [
         (new("America/New_York", "Eastern"), "Eastern Standard Time"),
         (new("America/Chicago", "Central"), "Central Standard Time"),
@@ -38,7 +38,7 @@ public static class OrgTimeZones
     private static readonly ConcurrentDictionary<string, TimeZoneInfo> Resolved = new(StringComparer.Ordinal);
 
     /// <summary>The zones an organization may choose, in the order a picker shows them.</summary>
-    public static IReadOnlyList<OrgTimeZone> Supported { get; } = [.. Catalogue.Select(entry => entry.Zone)];
+    public static IReadOnlyList<SupportedTimeZone> All { get; } = [.. Catalogue.Select(entry => entry.Zone)];
 
     /// <summary>Whether <paramref name="id"/> is exactly one of the listed IANA ids.</summary>
     public static bool IsSupported(string? id) => id is not null && Catalogue.Any(entry => entry.Zone.Id == id);
@@ -60,15 +60,11 @@ public static class OrgTimeZones
     /// <summary>Resolves every listed zone, so a host without the data fails at startup, loudly.</summary>
     public static void EnsureResolvable()
     {
-        foreach (var zone in Supported)
+        foreach (var zone in All)
         {
             Resolve(zone.Id);
         }
     }
-
-    /// <summary>Today's date in <paramref name="zone"/>, from this clock's current instant.</summary>
-    public static DateOnly TodayIn(this TimeProvider clock, TimeZoneInfo zone) =>
-        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.GetUtcNow(), zone).DateTime);
 
     private static TimeZoneInfo Lookup(string id)
     {

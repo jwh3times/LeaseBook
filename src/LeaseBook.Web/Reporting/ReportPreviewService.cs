@@ -17,7 +17,7 @@ namespace LeaseBook.Web.Reporting;
 /// (the composition-root pattern, same as <c>DashboardService</c>). The Reporting module supplies
 /// the catalog and statement assembler; the host supplies the cross-module dispatch.
 /// </summary>
-public sealed class ReportPreviewService(ISender sender, TimeProvider clock)
+public sealed class ReportPreviewService(ISender sender, HostOrgCalendar calendar)
 {
     /// <summary>
     /// Runs the named report with the provided filters and returns a generic preview result.
@@ -94,7 +94,7 @@ public sealed class ReportPreviewService(ISender sender, TimeProvider clock)
     private async Task<ReportPreviewResult> PreviewDelinquencyAsync(
         ReportDescriptor descriptor, ReportFilters filters, CancellationToken ct)
     {
-        var asOf = filters.AsOf ?? await OrgToday.ReadAsync(sender, clock, ct); // #642
+        var asOf = filters.AsOf ?? await calendar.TodayAsync(ct); // the organization's today (#642)
         var response = await sender.Query(new GetDelinquencyAging(asOf), ct);
         var table = ReportTable.Project(response.Rows,
             new ReportColumn<DelinquencyRow>("tenantId", row => row.TenantId),
@@ -113,9 +113,7 @@ public sealed class ReportPreviewService(ISender sender, TimeProvider clock)
     private async Task<ReportPreviewResult> PreviewMgmtFeeAsync(
         ReportDescriptor descriptor, ReportFilters filters, CancellationToken ct)
     {
-        var now = await OrgToday.ReadAsync(sender, clock, ct); // the organization's month (#642)
-        var year = filters.Year ?? now.Year;
-        var month = filters.Month ?? now.Month;
+        var (year, month) = await calendar.PeriodAsync(filters.Year, filters.Month, ct); // #642
 
         var response = await sender.Query(new GetManagementFeeIncome(year, month), ct);
         var table = ReportTable.Project(response.Rows,

@@ -1,13 +1,14 @@
+using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.SharedKernel.Time;
 using Shouldly;
 
-namespace LeaseBook.Tests.SharedKernel;
+namespace LeaseBook.Tests.Web;
 
 /// <summary>
 /// The books' calendar (#642). Every expected date below is worked out by hand from the zone's UTC
 /// offset on that day, never by converting the instant the way the code does.
 /// </summary>
-public sealed class OrgTimeZonesTests
+public sealed class SupportedTimeZonesTests
 {
     private sealed class StoppedClock(DateTimeOffset now) : TimeProvider
     {
@@ -16,18 +17,18 @@ public sealed class OrgTimeZonesTests
 
     private static DateOnly TodayAt(string utc, string zone) =>
         new StoppedClock(DateTimeOffset.Parse(utc, System.Globalization.CultureInfo.InvariantCulture))
-            .TodayIn(OrgTimeZones.Resolve(zone));
+            .TodayIn(SupportedTimeZones.Resolve(zone));
 
     [Fact]
     public void The_default_is_eastern_and_the_list_is_the_seven_us_zones_in_order()
     {
-        OrgTimeZones.Default.ShouldBe("America/New_York");
-        OrgTimeZones.Supported.Select(z => z.Id).ShouldBe(
+        SupportedTimeZones.Default.ShouldBe("America/New_York");
+        SupportedTimeZones.All.Select(z => z.Id).ShouldBe(
         [
             "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix",
             "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu",
         ]);
-        OrgTimeZones.Supported.Select(z => z.Name).ShouldBe(
+        SupportedTimeZones.All.Select(z => z.Name).ShouldBe(
             ["Eastern", "Central", "Mountain", "Arizona", "Pacific", "Alaska", "Hawaii"]);
     }
 
@@ -36,10 +37,10 @@ public sealed class OrgTimeZonesTests
     {
         // The startup check: on Windows under InvariantGlobalization and in a container with no tz
         // database the IANA lookup throws, and every one of these must still resolve.
-        Should.NotThrow(OrgTimeZones.EnsureResolvable);
-        foreach (var zone in OrgTimeZones.Supported)
+        Should.NotThrow(SupportedTimeZones.EnsureResolvable);
+        foreach (var zone in SupportedTimeZones.All)
         {
-            OrgTimeZones.Resolve(zone.Id).ShouldNotBeNull();
+            SupportedTimeZones.Resolve(zone.Id).ShouldNotBeNull();
         }
     }
 
@@ -74,9 +75,9 @@ public sealed class OrgTimeZonesTests
     [InlineData("", false)]
     [InlineData(null, false)]
     public void Only_the_listed_ids_are_supported(string? id, bool supported) =>
-        OrgTimeZones.IsSupported(id).ShouldBe(supported);
+        SupportedTimeZones.IsSupported(id).ShouldBe(supported);
 
     [Fact]
     public void An_unlisted_id_is_refused_rather_than_resolved() =>
-        Should.Throw<ArgumentException>(() => OrgTimeZones.Resolve("Europe/London"));
+        Should.Throw<ArgumentException>(() => SupportedTimeZones.Resolve("Europe/London"));
 }

@@ -44,7 +44,7 @@ public sealed class OperationsEndpoints : IEndpointModule
         // GET /api/operations/runs/{type}/preview?year=&month=
         // Returns the SPA-shaped preview: rows with label/amount/status + exceptions list.
         group.MapGet("/runs/{type}/preview",
-                async (string type, int? year, int? month, RunEngine engine, ISender sender, TimeProvider clock,
+                async (string type, int? year, int? month, RunEngine engine, HostOrgCalendar calendar,
                     HttpContext httpContext, CancellationToken ct) =>
                 {
                     if (!RunTypeRoute.TryParse(type, out var runType))
@@ -56,10 +56,8 @@ public sealed class OperationsEndpoints : IEndpointModule
                             status: StatusCodes.Status400BadRequest);
                     }
 
-                    // The organization's month, not the UTC one (#642).
-                    var now = await OrgToday.ReadAsync(sender, clock, ct);
-                    var actualYear = year ?? now.Year;
-                    var actualMonth = month ?? now.Month;
+                    // A missing part is the organization's month, not the UTC one (#642).
+                    var (actualYear, actualMonth) = await calendar.PeriodAsync(year, month, ct);
 
                     if (actualMonth < 1 || actualMonth > 12 || actualYear < 2000 || actualYear > 2100)
                     {

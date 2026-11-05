@@ -61,29 +61,51 @@ public sealed class OrgCalendarHostTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task An_ownership_transfer_may_be_dated_the_organizations_today_but_not_the_utc_date()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var host = WithEveningClock();
-        using var client = await SignedInAsync(host, ct);
-        var propertyId = UuidV7.NewId();
-
-        var refused = await client.PostAsJsonAsync($"/api/directory/properties/{propertyId}/ownership-transfers",
-            new { toOwnerId = UuidV7.NewId(), effectiveDate = UtcDate, sourceRef = "xfer:utc" }, ct);
-        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await refused.Content.ReadAsStringAsync(ct)).ShouldContain("future date");
-
-        var today = await client.PostAsJsonAsync($"/api/directory/properties/{propertyId}/ownership-transfers",
-            new { toOwnerId = UuidV7.NewId(), effectiveDate = OrgToday, sourceRef = "xfer:org" }, ct);
-        (await today.Content.ReadAsStringAsync(ct)).ShouldNotContain("future date");
-    }
-
-    [Fact]
-    public async Task A_lease_ending_on_the_organizations_today_is_still_current_and_one_starting_tomorrow_is_not()
+    public async Task An_ownership_transfer_dated_the_utc_date_is_refused_with_the_same_code_as_money()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var host = WithEveningClock();
         var (orgId, client) = await SignedInWithOrgAsync(host, ct);
+        using var _ = client;
+        Guid propertyId = default, buyerId = default;
+        await InOrgAsync(host, orgId, async sender =>
+        {
+            var sellerId = await sender.Send(new CreateOwner("Seller", null, null, null, 800, 0m), ct);
+            buyerId = await sender.Send(new CreateOwner("Buyer", null, null, null, 800, 0m), ct);
+            propertyId = await sender.Send(new CreateProperty(sellerId, "2 Sale Street", "Raleigh", "NC", null, null), ct);
+        }, ct);
+
+        var refused = await client.PostAsJsonAsync($"/api/directory/properties/{propertyId}/ownership-transfers",
+            new { toOwnerId = buyerId, effectiveDate = UtcDate, sourceRef = "xfer:utc" }, ct);
+        refused.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        var problem = await refused.Content.ReadFromJsonAsync<JsonElement>(ct);
+        problem.GetProperty("code").GetString().ShouldBe("posting_date_in_future");
+        problem.GetProperty("detail").GetString().ShouldBe(
+            $"The date {UtcDate:yyyy-MM-dd} is after today, {OrgToday:yyyy-MM-dd}, in the organization's time zone.");
+
+        (await client.PostAsJsonAsync($"/api/directory/properties/{propertyId}/ownership-transfers",
+            new { toOwnerId = buyerId, effectiveDate = OrgToday, sourceRef = "xfer:org" }, ct))
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// Each zone at an instant where it is still the last day of the month but UTC, and New York in the
+    /// Pacific case, have reached the first: Eastern at 01:00 UTC, Pacific at 06:30 UTC.
+    /// </summary>
+    public static TheoryData<string, int> Evenings() => new()
+    {
+        { "America/New_York", 0 },
+        { "America/Los_Angeles", 330 },
+    };
+
+    [Theory]
+    [MemberData(nameof(Evenings))]
+    public async Task A_lease_ending_on_the_organizations_today_is_still_current_and_one_starting_tomorrow_is_not(
+        string zone, int minutesAfterEvening)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var host = WithClock(Evening.AddMinutes(minutesAfterEvening));
+        var (orgId, client) = await SignedInInZoneAsync(host, zone, ct);
         using var _ = client;
 
         Guid ending = default, starting = default;
@@ -105,12 +127,14 @@ public sealed class OrgCalendarHostTests(PostgresFixture fixture)
         startingDetail.GetProperty("lease").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
-    [Fact]
-    public async Task Default_periods_and_as_of_dates_are_the_organizations_month_and_day()
+    [Theory]
+    [MemberData(nameof(Evenings))]
+    public async Task Default_periods_and_as_of_dates_are_the_organizations_month_and_day(
+        string zone, int minutesAfterEvening)
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var host = WithEveningClock();
-        var (orgId, client) = await SignedInWithOrgAsync(host, ct);
+        await using var host = WithClock(Evening.AddMinutes(minutesAfterEvening));
+        var (orgId, client) = await SignedInInZoneAsync(host, zone, ct);
         using var _ = client;
         Guid ownerId = default;
         await InOrgAsync(host, orgId, async sender =>
@@ -201,9 +225,22 @@ public sealed class OrgCalendarHostTests(PostgresFixture fixture)
         return (orgId, client);
     }
 
+    /// <summary>An administrator signed in to a new organization that keeps its books in <paramref name="zone"/>.</summary>
+    private async Task<(Guid OrgId, HttpClient Client)> SignedInInZoneAsync(
+        WebApplicationFactory<Program> host, string zone, CancellationToken ct)
+    {
+        var (orgId, client) = await SignedInWithOrgAsync(host, ct, Roles.PMAdmin);
+        if (zone != "America/New_York")
+        {
+            (await client.PutAsJsonAsync("/api/settings/org", new { timeZone = zone }, ct)).EnsureSuccessStatusCode();
+        }
+
+        return (orgId, client);
+    }
+
     private static Task InOrgAsync(
-        WebApplicationFactory<Program> host, Guid orgId, Func<ISender, Task> work, CancellationToken ct) =>
-        InOrgAsync(host, orgId, services => work(services.GetRequiredService<ISender>()), ct);
+    WebApplicationFactory<Program> host, Guid orgId, Func<ISender, Task> work, CancellationToken ct) =>
+    InOrgAsync(host, orgId, services => work(services.GetRequiredService<ISender>()), ct);
 
     private static async Task InOrgAsync(
         WebApplicationFactory<Program> host, Guid orgId, Func<IServiceProvider, Task> work, CancellationToken ct)
@@ -211,10 +248,5 @@ public sealed class OrgCalendarHostTests(PostgresFixture fixture)
         await using var scope = host.Services.CreateAsyncScope();
         var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
         await executor.RunAsSystemAsync(orgId, "test-harness", () => work(scope.ServiceProvider), ct);
-    }
-
-    private sealed class StoppedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 }

@@ -80,11 +80,11 @@ public sealed class OrgSettings : IOrgScoped
 
     /// <summary>
     /// The calendar the organization's books keep (#642, ADR-037): one of
-    /// <see cref="SharedKernel.Time.OrgTimeZones.Supported"/>, stored as its IANA id. "Today" for a
+    /// <see cref="SupportedTimeZones.All"/>, stored as its IANA id. "Today" for a
     /// posting date, a default as-of and the current month is the date in this zone. Changing it moves
     /// no date already posted.
     /// </summary>
-    public string TimeZone { get; set; } = SharedKernel.Time.OrgTimeZones.Default;
+    public string TimeZone { get; set; } = SupportedTimeZones.Default;
 
     public DateTime CreatedAt { get; set; }
 }

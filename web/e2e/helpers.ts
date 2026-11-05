@@ -197,3 +197,19 @@ export async function captureDownload(
   const path = await download.path();
   return readFile(path);
 }
+
+/**
+ * Which day it is for the seeded organizations' books: today in their zone, the default Eastern (#642).
+ * A spec runs in Node, whose clock is UTC in CI, so its own `new Date().toISOString()` names tomorrow
+ * from about 19:00 Eastern; the browser is pinned to Eastern (`timezoneId`) and agrees with this.
+ */
+export function orgToday(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}

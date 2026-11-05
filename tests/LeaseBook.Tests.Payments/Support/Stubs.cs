@@ -119,9 +119,9 @@ internal sealed class StubFeeRules : IPaymentFeeRules
 }
 
 /// <summary>The organization keeps its books in one listed zone (#642), for every module that asks.</summary>
-internal sealed class StubOrgTimeZone(string zone = LeaseBook.SharedKernel.Time.OrgTimeZones.Default)
+internal sealed class StubOrgTimeZone(string zone = LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Default)
     : LeaseBook.Modules.Payments.Contracts.IOrgTimeZone, LeaseBook.Modules.Accounting.Contracts.IOrgTimeZone
 {
     public Task<TimeZoneInfo> GetAsync(CancellationToken ct) =>
-        Task.FromResult(LeaseBook.SharedKernel.Time.OrgTimeZones.Resolve(zone));
+        Task.FromResult(LeaseBook.Modules.Directory.Domain.SupportedTimeZones.Resolve(zone));
 }

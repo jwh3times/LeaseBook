@@ -76,6 +76,9 @@ export default defineConfig({
   use: {
     baseURL: sandbox ? SANDBOX_SPA : 'http://localhost:5373',
     trace: 'on-first-retry',
+    // The browser keeps the seeded organizations' zone, the default one (#642), wherever the run is:
+    // a spec's "today" and the page's then agree, in CI (UTC) and on an Eastern evening alike.
+    timezoneId: 'America/New_York',
   },
   webServer: sandbox
     ? sandboxServers

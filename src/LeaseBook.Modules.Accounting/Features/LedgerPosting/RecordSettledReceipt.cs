@@ -14,28 +14,18 @@ namespace LeaseBook.Modules.Accounting.Features.LedgerPosting;
 /// this command: only the payment engine's ledger adapter sends it.
 /// </para>
 /// </summary>
-public sealed record RecordSettledReceipt(
-    Guid TenantId, decimal Amount, DateOnly Date, string Method, Guid BankAccountId,
-    string? Description, string SourceRef) : ICommand<PostResult>;
+public sealed record RecordSettledReceipt(RecordPayment Payment) : ICommand<PostResult>;
 
+/// <summary>The payment's own rules, so a processor's receipt is shaped exactly as a staff one is.</summary>
 public sealed class RecordSettledReceiptValidator : AbstractValidator<RecordSettledReceipt>
 {
-    public RecordSettledReceiptValidator()
-    {
-        RuleFor(x => x.TenantId).NotEmpty();
-        RuleFor(x => x.BankAccountId).NotEmpty();
-        RuleFor(x => x.SourceRef).NotEmpty();
-        RuleFor(x => x.Method).Must(LedgerPostingMaps.Methods.ContainsKey)
-            .WithMessage($"Method must be one of: {string.Join(", ", LedgerPostingMaps.Methods.Keys)}.");
-        LedgerPostingMaps.RuleForAmount(this, x => x.Amount);
-    }
+    public RecordSettledReceiptValidator() =>
+        RuleFor(x => x.Payment).NotNull().SetValidator(new RecordPaymentValidator());
 }
 
 internal sealed class RecordSettledReceiptHandler(ITenantPostingDimensions dimensions, IAccountingEvents events)
     : ICommandHandler<RecordSettledReceipt, PostResult>
 {
     public Task<PostResult> Handle(RecordSettledReceipt command, CancellationToken ct) =>
-        RecordPaymentHandler.PostAsync(dimensions, events, new RecordPayment(
-            command.TenantId, command.Amount, command.Date, command.Method, command.BankAccountId,
-            command.Description, command.SourceRef), ct);
+        RecordPaymentHandler.PostAsync(dimensions, events, command.Payment, ct);
 }

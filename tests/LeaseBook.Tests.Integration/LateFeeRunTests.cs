@@ -3,6 +3,7 @@ using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Periods;
+using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
@@ -471,5 +472,5 @@ public sealed class LateFeeRunTests(PostgresFixture fixture)
     }
 
     private static DateOnly OrgTodayNow() =>
-        TimeProvider.System.TodayIn(OrgTimeZones.Resolve(OrgTimeZones.Default));
+        TimeProvider.System.TodayIn(SupportedTimeZones.Resolve(SupportedTimeZones.Default));
 }

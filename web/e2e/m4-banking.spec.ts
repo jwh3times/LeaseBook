@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { runA11y, visualSnapshot } from './helpers';
+import { orgToday, runA11y, visualSnapshot } from './helpers';
 import { test } from './test';
 
 // The M4 banking budgeted flows (§D step 5), run against the seeded demo org. The seeded admin (Renée
@@ -271,10 +271,12 @@ test.describe.serial('M4 banking', () => {
     await page.getByRole('button', { name: 'Post payment' }).click();
     await expect(page.getByText(/reconciled and locked/)).toBeVisible();
 
-    // The same payment dated into the open month (next month) still posts — the lock is account-month-scoped.
-    const now = new Date();
-    const openMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 15));
-    await page.getByLabel('Date', { exact: true }).fill(openMonth.toISOString().slice(0, 10));
+    // The same payment dated into an open month still posts — the lock is account-month-scoped. The
+    // month before is open (only April 2026 is seeded reconciled); a later one would be refused as
+    // a date after the organization's today (#642).
+    const [year, month] = orgToday().split('-').map(Number) as [number, number];
+    const earlier = new Date(Date.UTC(year, month - 2, 15)).toISOString().slice(0, 10);
+    await page.getByLabel('Date', { exact: true }).fill(earlier);
     await page.getByRole('button', { name: 'Post payment' }).click();
     await expect(
       page.getByRole('row').filter({ hasText: '$123.45' }).filter({ hasText: 'Payment' }),
@@ -287,8 +289,9 @@ test.describe.serial('M4 banking', () => {
   test('an administrator unlocks the finalized month with a reason, posts into it, and finalizes it again @scenario:bank-reconciliation-unlock-and-refinalize', async ({
     page,
   }) => {
-    const now = new Date();
-    const month = `${now.toLocaleString('en-US', { month: 'short' })} ${now.getFullYear()}`;
+    // The organization's month (#642), not this Node process's, which is UTC in CI.
+    const [year, monthNumber] = orgToday().split('-').map(Number) as [number, number];
+    const month = `${new Date(Date.UTC(year, monthNumber - 1, 15)).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} ${year}`;
     await login(page);
     await gotoBanking(page);
 

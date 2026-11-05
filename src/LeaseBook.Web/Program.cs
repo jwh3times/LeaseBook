@@ -13,7 +13,6 @@ using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
 using LeaseBook.SharedKernel.Observability;
 using LeaseBook.SharedKernel.Tenancy;
-using LeaseBook.SharedKernel.Time;
 using LeaseBook.Web.Adapters;
 using LeaseBook.Web.Auth;
 using LeaseBook.Web.Cli;
@@ -41,7 +40,7 @@ QuestPdfSetup.Ensure();
 // Every organization's books keep a time zone from a fixed list (#642). Resolve them all now, so a
 // host without the tz data (a runtime image that lost it, a Windows host whose fallback broke) fails
 // to start instead of dating anything in UTC or failing on the first evening posting.
-OrgTimeZones.EnsureResolvable();
+LeaseBook.Modules.Directory.Domain.SupportedTimeZones.EnsureResolvable();
 
 // Select exactly one process lifecycle before composing the host (ADR-042). Parsing is pure, so a
 // CLI usage error or an invalid CLI/OpenAPI hybrid fails before configuration or the database can.
@@ -244,10 +243,10 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IBankClearanceS
 // from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
 // The organization's time zone (#642): one adapter, one Directory read, behind each module's own port.
-builder.Services.AddScoped<OrgTimeZoneAdapter>();
-builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<OrgTimeZoneAdapter>());
-builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<OrgTimeZoneAdapter>());
-builder.Services.AddScoped<LeaseBook.Modules.Payments.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<OrgTimeZoneAdapter>());
+builder.Services.AddScoped<LeaseBook.Web.Calendar.HostOrgCalendar>();
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<LeaseBook.Web.Calendar.HostOrgCalendar>());
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<LeaseBook.Web.Calendar.HostOrgCalendar>());
+builder.Services.AddScoped<LeaseBook.Modules.Payments.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<LeaseBook.Web.Calendar.HostOrgCalendar>());
 
 // M5 WP-01 (ADR-016): Accounting owns the statement engine; the Reporting module consumes it via this port.
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IOwnerStatementData, OwnerStatementDataAdapter>();

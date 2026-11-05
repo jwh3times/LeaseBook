@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Accounting;
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Directory.Domain;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.SharedKernel.Time;
@@ -19,7 +20,7 @@ internal static class AccountingSender
 {
     public static ISender Create(
         DbContext db, IOrgContext org, IActorContext actor, ITenantPostingDimensions dimensions, TimeProvider? clock = null,
-        string zone = OrgTimeZones.Default)
+        string zone = SupportedTimeZones.Default)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -35,7 +36,7 @@ internal static class AccountingSender
     }
 
     public static ISender Create(
-        OrgScope scope, ITenantPostingDimensions dimensions, TimeProvider? clock = null, string zone = OrgTimeZones.Default) =>
+        OrgScope scope, ITenantPostingDimensions dimensions, TimeProvider? clock = null, string zone = SupportedTimeZones.Default) =>
         Create(scope.Db, scope.Tenant, scope.Actor, dimensions, clock, zone);
 }
 
@@ -46,14 +47,8 @@ internal sealed class Leases(IReadOnlyDictionary<Guid, TenantPostingDimensions> 
         Task.FromResult(leases.GetValueOrDefault(tenantId));
 }
 
-/// <summary>A clock stopped at one instant.</summary>
-internal sealed class StoppedClock(DateTimeOffset now) : TimeProvider
-{
-    public override DateTimeOffset GetUtcNow() => now;
-}
-
 /// <summary>The organization keeps its books in one listed zone.</summary>
-internal sealed class FixedOrgTimeZone(string zone = OrgTimeZones.Default) : IOrgTimeZone
+internal sealed class FixedOrgTimeZone(string zone = SupportedTimeZones.Default) : IOrgTimeZone
 {
-    public Task<TimeZoneInfo> GetAsync(CancellationToken ct) => Task.FromResult(OrgTimeZones.Resolve(zone));
+    public Task<TimeZoneInfo> GetAsync(CancellationToken ct) => Task.FromResult(SupportedTimeZones.Resolve(zone));
 }

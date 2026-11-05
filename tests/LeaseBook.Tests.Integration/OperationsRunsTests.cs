@@ -114,6 +114,35 @@ public sealed class OperationsRunsTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task A_rent_run_billed_ahead_for_next_month_still_posts()
+    {
+        // Rent charges are dated the period's first day, after the organization's today when the
+        // run bills ahead. A bulk run is billing, not money moving, so nothing refuses it (#642).
+        var ct = TestContext.Current.CancellationToken;
+        var ctx = await SetupAsync(ct);
+        var nextMonth = DateTime.UtcNow.AddMonths(1);
+        var ahead = new RunPeriod(nextMonth.Year, nextMonth.Month);
+
+        RunResult? result = null;
+        List<DateOnly> dates = [];
+        await RunAsync(ctx.OrgId, async (engine, services) =>
+        {
+            var preview = await engine.PreviewAsync(RunType.Rent, ahead, ct);
+            result = await engine.ConfirmAsync(
+                RunType.Rent, ahead, [.. preview.Rows.Select(r => r.TargetId)], preview.CapabilitiesVersion,
+                acknowledgeCapabilityChange: false, ct);
+            dates = await services.GetRequiredService<AppDbContext>().Set<JournalEntry>()
+                .Where(entry => entry.EventType == "RentCharged")
+                .Select(entry => entry.EntryDate)
+                .ToListAsync(ct);
+        }, ct);
+
+        // The two full-term leases (the short March lease has ended), each a whole month.
+        (result!.Posted, result.Excluded, result.Total).ShouldBe((2, 0, GoldenLease1Amount + GoldenLease2Amount));
+        dates.ShouldAllBe(date => date == new DateOnly(ahead.Year, ahead.Month, 1));
+    }
+
+    [Fact]
     public async Task Confirm_is_idempotent_second_run_produces_zero_new_entries()
     {
         var ct = TestContext.Current.CancellationToken;

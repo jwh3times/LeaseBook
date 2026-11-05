@@ -53,8 +53,17 @@ deposit or prepayment collected or applied, held deposits moved with a sale, a v
 check and its void, and a bank fee, interest or transfer. The refusal is `posting_date_in_future`
 (422). Charges and credits may still be billed ahead, and so may every period-dated bulk run. A
 processor's receipt is dated by its bank evidence, which the processor's own rules bound against the
-UTC date, so it posts through `RecordSettledReceipt`, which carries no such refusal. The
-ownership-transfer refusal stays a validation error on the effective date, as it was.
+UTC date, so it posts through `RecordSettledReceipt`, which carries no such refusal. A returned
+payment (`ReturnTenantPayment`) is not refused either: an administrator posts it from the payment's
+review, but its date is always the bank's return evidence, never one typed in. An ownership transfer
+is refused the same way as money, with `posting_date_in_future`, because every transfer moves the
+property's held deposits through Accounting.
+
+The SPA takes the same day from the zone the settings read returns, and sends it: a posting
+date defaults to it, a void carries it as its as-of, and a surface that posts blocks the write while
+the settings are unread rather than guess from the viewer's zone. The Settings select offers the
+same seven zones, and an architecture test fails the build if the SPA's list drifts from the
+server's.
 
 The seven zones must resolve on every host. The chiseled runtime image ships no tz database, and on
 Windows `InvariantGlobalization` removes the ICU that maps an IANA id to a Windows one. So the

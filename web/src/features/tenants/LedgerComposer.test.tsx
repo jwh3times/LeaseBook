@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ORG_SETTINGS } from '@/test/mocks/handlers';
 import { server } from '@/test/mocks/server';
 import { trackInteraction } from '@/lib/telemetry';
 import { LedgerComposer } from './LedgerComposer';
@@ -296,6 +297,76 @@ describe('LedgerComposer', () => {
     expect(await screen.findByText('Operating Trust')).toBeInTheDocument();
     // The inactive bank must not appear in the picker
     expect(screen.queryByText('Inactive Trust')).not.toBeInTheDocument();
+  });
+});
+
+// #642: the suite runs at 22:00 in New York, when the UTC date is already tomorrow's.
+describe('LedgerComposer posting date', () => {
+  const localToday = () => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  };
+
+  it('defaults to the organization’s today, not the UTC date', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      ...baseHandlers(),
+      http.post('/api/accounting/tenants/:tenantId/payments', async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ entryId: 'pay1' });
+      }),
+    );
+    const { onPosted } = renderComposer({ initialMode: 'payment' });
+
+    await screen.findByText('Operating Trust');
+    await vi.waitFor(() => expect(screen.getByLabelText('Date')).toHaveValue(localToday()));
+    expect(localToday()).not.toBe(new Date().toISOString().slice(0, 10));
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await userEvent.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledWith('pay1'));
+    expect(body?.date).toBe(localToday());
+  });
+
+  it('follows the organization’s zone, not the viewer’s', async () => {
+    // 06:30 UTC on 1 Nov 2026 is 23:30 PDT on 31 Oct in Los Angeles but 02:30 EDT on 1 Nov in New York,
+    // where the viewer is.
+    vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));
+    server.use(
+      ...baseHandlers(),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' }),
+      ),
+    );
+    renderComposer({ initialMode: 'payment' });
+
+    await vi.waitFor(() => expect(screen.getByLabelText('Date')).toHaveValue('2026-10-31'));
+  });
+
+  it('holds the post while the organization’s settings cannot be read', async () => {
+    let posted = false;
+    server.use(
+      ...baseHandlers(),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { code: 'boom', detail: 'Settings are down.', correlationId: 'corr-1' },
+          { status: 503, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      ),
+      http.post('/api/accounting/tenants/:tenantId/payments', () => {
+        posted = true;
+        return HttpResponse.json({ entryId: 'e1' });
+      }),
+    );
+    renderComposer({ initialMode: 'payment' });
+
+    await screen.findByText('Operating Trust');
+    await userEvent.type(screen.getByLabelText('Amount'), '100');
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByText(/today’s date isn’t known/)).toBeInTheDocument();
+    expect(posted).toBe(false);
   });
 });
 

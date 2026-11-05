@@ -1,6 +1,7 @@
 using LeaseBook.Modules.Operations.Contracts;
 using LeaseBook.Modules.Operations.Domain;
 using LeaseBook.Modules.Operations.Runs;
+using LeaseBook.Tests.Common;
 using Shouldly;
 
 namespace LeaseBook.Tests.Operations;
@@ -303,11 +304,6 @@ public sealed class LateFeeRunStrategyTests
     {
         public override DateTimeOffset GetUtcNow() =>
             new(date.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
-    }
-
-    private sealed class StoppedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class RecordingDelinquencyData(IReadOnlyList<DelinquentLedgerRow> rows)

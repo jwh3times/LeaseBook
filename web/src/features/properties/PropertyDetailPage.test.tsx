@@ -3,9 +3,10 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecordNavProvider } from '@/components/recordNav';
 import { localDate } from '@/lib/dates';
+import { ORG_SETTINGS } from '@/test/mocks/handlers';
 import { server } from '@/test/mocks/server';
 import { PropertyDetailPage } from './PropertyDetailPage';
 
@@ -190,6 +191,67 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     expect(posted).toHaveLength(0);
   });
 
+  // #642: the server refuses a date after the organization's today the way it refuses money dated so.
+  it('shows the server’s refusal of a date after the organization’s today inline', async () => {
+    const message = 'The date 2026-11-01 is after today, 2026-10-31, in the organization’s time zone.';
+    serve({
+      refuse: {
+        status: 422,
+        body: { code: 'posting_date_in_future', detail: message, correlationId: 'corr-642' },
+      },
+    });
+    renderProperty();
+    const dialog = await openTransfer();
+
+    await userEvent.selectOptions(await within(dialog).findByLabelText('New owner'), BUYER.id);
+    await userEvent.click(confirmButton(dialog));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('dialog')).toBe(dialog);
+  });
+
+  it('blocks the transfer and says why while the organization’s settings cannot be read', async () => {
+    const posted = serve();
+    server.use(
+      http.get('/api/settings/org', () =>
+        HttpResponse.json(
+          { code: 'boom', detail: 'Settings are down for maintenance.', correlationId: 'corr-settings' },
+          { status: 503, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      ),
+    );
+    renderProperty();
+    const dialog = await openTransfer();
+
+    expect(await within(dialog).findByText(/Settings are down for maintenance\./)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Reference: corr-settings/)).toBeInTheDocument();
+    expect(confirmButton(dialog)).toBeDisabled();
+    expect(posted).toHaveLength(0);
+  });
+
+  // At 06:30 UTC on 1 Nov 2026 it is 23:30 on 31 Oct in Los Angeles, where the books are kept, and
+  // already 1 Nov in New York, where the viewer is.
+  it('defaults to, and allows no later than, the organization’s today in its own zone', async () => {
+    vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));
+    const posted = serve();
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' })),
+    );
+    renderProperty();
+    const dialog = await openTransfer();
+
+    const date = within(dialog).getByLabelText('Effective date');
+    await vi.waitFor(() => expect(date).toHaveValue('2026-10-31'));
+    expect(date).toHaveAttribute('max', '2026-10-31');
+
+    await userEvent.selectOptions(await within(dialog).findByLabelText('New owner'), BUYER.id);
+    await userEvent.clear(date);
+    await userEvent.type(date, '2026-11-01');
+    await userEvent.click(confirmButton(dialog));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('The effective date can’t be in the future.');
+    expect(posted).toHaveLength(0);
+  });
+
   it('refuses a future date before posting anything', async () => {
     const posted = serve();
     renderProperty();
@@ -222,11 +284,6 @@ describe('Transfer ownership (#555, ADR-036)', () => {
       'a transfer to the current owner',
       'toOwnerId',
       'The succeeding owner must differ from the current owner.',
-    ],
-    [
-      'a future date by the server’s clock',
-      'EffectiveDate',
-      'A property ownership transfer cannot be scheduled for a future date.',
     ],
   ])('shows the refusal of %s inline and keeps the dialog open', async (_, field, message) => {
     serve({

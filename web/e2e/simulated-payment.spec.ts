@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { type APIRequestContext, type Page, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { runA11y, signIn } from './helpers';
+import { orgToday, runA11y, signIn } from './helpers';
 import { test } from './test';
 
 interface Manifest {
@@ -53,7 +53,7 @@ test('a quoted fee, a payout with a shortfall, and a payout with a return an adm
   );
   const { manifest, binding } = fixture();
   const generationN = binding.Generation.replaceAll('-', '');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   const run = Date.now().toString(36);
 
   // An administrator sets the card rule on the settings screen: 2.9% plus $0.30, no cap.
@@ -230,7 +230,7 @@ test('simulation survives reload and posts only after separate bank evidence @sc
       Net: 125.5,
       Currency: 'USD',
       BankId: binding.BankId,
-      BankDate: new Date().toISOString().slice(0, 10),
+      BankDate: orgToday(),
       EvidenceId: `bank-${operationN}`,
       PayoutId: `payout-${operationN}`,
       Complete: true,
@@ -289,7 +289,7 @@ function reviewFixture() {
   const { manifest, binding } = fixture(1);
   const generationN = binding.Generation.replaceAll('-', '');
   const providerId = (paymentId: string) => `sim_${generationN}_${paymentId.replaceAll('-', '')}`;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = orgToday();
   return { manifest, binding, providerId, today };
 }
 
