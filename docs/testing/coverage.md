@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-01
+- **Last reviewed:** 2026-11-04
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
