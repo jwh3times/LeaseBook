@@ -18,6 +18,17 @@ next section.
 
 No unreleased changes.
 
+## [0.28.11] - 2026-11-04
+
+### Fixed
+
+- A screen reader now hears which row each action in the staff payment list and the portal
+  invitation list belongs to. "Retry operation", "Post return" and "Close review…" read the same on
+  every payment, and "Replace invitation", "Cancel invitation" and "Retry test delivery" the same on
+  every invitation, so a list of buttons gave no way to tell them apart. Each is now named for its
+  row: the payment's reference, or the invitation's address and expiry, which tells apart two open
+  invitations to one address. The visible labels are unchanged (#571).
+
 ## [0.28.10] - 2026-11-04
 
 ### Fixed
@@ -1741,7 +1752,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.10...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.28.11...HEAD
+[0.28.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.11
 [0.28.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.10
 [0.28.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.9
 [0.28.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.8
