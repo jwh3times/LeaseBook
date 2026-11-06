@@ -28,8 +28,9 @@ blocks; remove a conflicting `ready-for-agent` while blocked (`triage-labels.md`
 
 same as Board — `Track` and `Gate` from the action: operator work `B - operator` / `Operator`;
 customer, legal and other external decisions `C - external` / `External`; an action that waits on
-a trigger `Deferred trigger` / `Trigger-fired`, with the `deferred-trigger` label. `Status` is the
-board's own.
+a trigger `Deferred trigger` / `Trigger-fired`, with the `deferred-trigger` label. `Priority` and
+`Rank` are set too (`issue-tracker.md`, "Board fields"), and a follow-up that waits on another
+issue or an outside party also carries `blocked` (`triage-labels.md`). `Status` is the board's own.
 
 ## Follow-up wiki
 
