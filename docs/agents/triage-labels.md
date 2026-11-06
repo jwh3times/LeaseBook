@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-31
+- **Last reviewed:** 2026-11-06
 
 The labels and what they mean are in `.agents/skills/ship/settings/triage-labels.md`. A skill's role name is the GitHub label to apply.
 
@@ -13,6 +13,11 @@ The labels and what they mean are in `.agents/skills/ship/settings/triage-labels
   action, decision, access, or external evidence is supplied. Apply it to human-owned actions and
   dependent engineering work; `ready-for-human` identifies who performs the action. Remove
   `ready-for-agent` while blocked, and reassess labels when the required evidence arrives.
+- `blocked`: the issue cannot move today, sitting beside the five. Its next step waits on another
+  open issue or an outside party, such as a customer, an attorney or a bank, and the issue names
+  what it waits on in a comment or a native `blocked_by` link. Unlike `blocked-by-human`, it is not
+  applied to a human-owned action that its owner can take now. It never sits with
+  `deferred-trigger`, whose trigger is already the wait. Remove it when the blocker clears.
 - `operator`: work requiring operator access, sitting beside the five.
 
 Follow the [human-action handoff](issue-tracker.md#required-human-action-handoff) for agent-completed
