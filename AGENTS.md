@@ -59,8 +59,8 @@ this one, for current progress.
     every existing session out once, by design.
 
   Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in the
-  open issues and the shared project board's `Track` and `Gate` fields
-  (`docs/agents/issue-tracker.md`).
+  open issues and the shared project board's `Track` and `Gate` fields, and priority order in its
+  `Priority` and `Rank` fields (`docs/agents/issue-tracker.md`).
 
 - Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC federation,
   ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
@@ -375,7 +375,7 @@ See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md) and `gh` CLI 
 
 Before reporting agent work complete, execute the required human-action handoff
 ([`docs/agents/human-follow-up.md`](docs/agents/human-follow-up.md)): create
-or update private follow-up issues, add them to project 3 with labels and Track/Gate, and publish
+or update private follow-up issues, add them to project 3 with labels, Track/Gate and Priority/Rank, and publish
 linked step-by-step private wiki procedures indexed by `human-todo`. Verify publication and report
 both links. If access prevents publication, report the handoff as incomplete with its blocker.
 
