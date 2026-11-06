@@ -18,6 +18,20 @@ next section.
 
 No unreleased changes.
 
+## [0.30.1] - 2026-11-06
+
+### Changed
+
+- The issue-tracker guidance describes the project board's two new fields. `Priority` (`P0 - now`
+  to `P3 - parked`) ranks how important an item is, whether or not it is blocked. `Rank` gives one
+  strict order across both trackers. Sort the board by `Rank` for the priority order. New issues
+  and human follow-ups get both fields when they are added to the board, as they already get
+  `Track` and `Gate`.
+- The triage-label guidance adds a `blocked` label. It marks an issue that cannot move today
+  because it waits on another open issue or an outside party, and the issue names what it waits
+  on. It never goes on a `deferred-trigger` issue. Work that can be picked up now is open, carries
+  neither `blocked` nor `deferred-trigger`, and is `ready-for-agent` or `ready-for-human`.
+
 ## [0.30.0] - 2026-11-05
 
 ### Added
