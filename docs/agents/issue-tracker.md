@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-01
+- **Last reviewed:** 2026-11-06
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
@@ -132,14 +132,24 @@ jwh3times 3
   `Trigger-fired`). An item is tracked only once both are set.
 - `Status`: `Todo` / `Done`, set by the board's own workflows (added → `Todo`, closed → `Done`);
   `In Progress` is unused. Never set it by hand.
-- Blocked work has no field: the `blocked-by-human` label, or a native `blocked_by` dependency on
-  the blocking issue, records it (`triage-labels.md`).
+- `Priority`: `P0 - now` / `P1 - next` / `P2 - later` / `P3 - parked`. It ranks importance,
+  whether or not the item is blocked. `P0` is the critical path and the next pick; `P1` is beta
+  readiness and fiduciary correctness; `P2` is real but not urgent; `P3` is deferred triggers,
+  future phases and low-impact work. Set it when an issue is added to the board.
+- `Rank`: a number giving the strict order across both trackers, lowest first, spaced by tens so a
+  new item slots in between without renumbering. Sort the board by `Rank` for the priority order.
+- Blocked work has no field: the `blocked` label marks an item that cannot move today
+  (`triage-labels.md`). A native `blocked_by` dependency names the blocking issue when it is in the
+  same tracker, and `blocked-by-human` marks one that waits on a person. Work that can be picked
+  up now is open, not `blocked`, not `deferred-trigger`, and `ready-for-agent` or
+  `ready-for-human`.
 
 ## New work
 
 issue — open work lives only in GitHub issues on the board; there are no draft items. Public by
 default, in the private tracker when the text is confidential; labelled from `triage-labels.md`
-(`needs-triage` unless it is fully specified), added to the board with `Track` and `Gate` set.
+(`needs-triage` unless it is fully specified), added to the board with `Track`, `Gate`, `Priority`
+and `Rank` set.
 
 ## Security findings
 
