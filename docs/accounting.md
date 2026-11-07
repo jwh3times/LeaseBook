@@ -163,7 +163,8 @@ deposit is owner-tagged, no _owner's_ held-deposit position can go negative eith
 what catches a release booked against a different owner than the collection: the tenant's own total
 would still come to zero while the owner's column silently stayed high. Prepayments get the same check
 per **bank**: no bank's held prepayment for a tenant can go negative, which catches credit applied from
-a bank that never received it.
+a bank that never received it. So do the PM's held management fees: no bank's can go negative, which
+catches a bank fee or a transfer paid from fees that bank did not hold.
 
 The sweep also checks one thing that is not about balances at all: that every kind of event crediting
 an owner is one the statement knows how to present. If a new kind of transaction reaches an owner's
