@@ -199,8 +199,18 @@ public sealed class DomainExceptionMessageTests
             "This tenant's prepaid credit sits in more than one account. Choose which one to apply from.");
         yield return (new RefundCheckClearedException(SampleId), "refund_check_cleared",
             "This check has cleared the bank, so it can no longer be voided.");
-        yield return (new PmFeesInsufficientException(30m, 10m, SampleId), "pm_fees_insufficient",
+        yield return (new PmFeesInsufficientException(30m, 10m, SampleId, HeldFeesCharge.ProcessorFeeShortfall), "pm_fees_insufficient",
             "The management fees held in this account do not cover the processor fee shortfall.");
+        yield return (new PmFeesInsufficientException(30m, 10m, SampleId, HeldFeesCharge.BankFee), "pm_fees_insufficient",
+            "This account holds only 10.00 in management fees on or after the fee's date, less than the 30.00 fee, so nothing was posted.");
+        yield return (new PmFeesInsufficientException(30m, -4m, SampleId, HeldFeesCharge.Transfer), "pm_fees_insufficient",
+            "The account this transfer comes from holds only 0.00 in management fees on or after its date, less than the 30.00 transfer, so nothing was posted.");
+        yield return (new PmFeesInsufficientException(30m, 10m, SampleId, (HeldFeesCharge)99), "pm_fees_insufficient",
+            "The management fees held in this account do not cover the processor fee shortfall.");
+        yield return (new TransferBankNotTrustException(SampleId, TransferEnd.Source), "transfer_bank_not_trust",
+            "A transfer moves money between trust accounts, and the account it comes from is not a trust account.");
+        yield return (new TransferBankNotTrustException(SampleId, TransferEnd.Destination), "transfer_bank_not_trust",
+            "A transfer moves money between trust accounts, and the account it goes to is not a trust account.");
 
         yield return (new PaymentReturnBlockedException(SampleId, PaymentReturnBlock.PrepaymentConsumed),
             "return_prepayment_consumed",

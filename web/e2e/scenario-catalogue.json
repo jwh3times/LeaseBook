@@ -10,7 +10,7 @@
     },
     {
       "id": "accessibility-staff-pages",
-      "workflow": "Every routed staff page, the record details and the refund-check dialogs have no WCAG 2 AA violations, light and dark",
+      "workflow": "Every routed staff page, the record details, the refund-check dialogs and the bank fee or transfer dialog have no WCAG 2 AA violations, light and dark",
       "area": "Accessibility",
       "spec": "a11y.spec.ts",
       "events": [],
@@ -400,6 +400,24 @@
       "org": "demo",
       "events": ["PaymentReceived", "EntryVoided"],
       "routes": ["POST /api/accounting/reconciliations/{id}/unlock"]
+    },
+    {
+      "id": "bank-fee-from-register",
+      "workflow": "Record a bank fee from the register by keyboard, and see a fee larger than the PM's held fees refused in place",
+      "area": "Banking",
+      "spec": "bank-adjustments.spec.ts",
+      "org": "scenario",
+      "events": ["BankFeeCharged"],
+      "routes": ["POST /api/accounting/banks/{bankAccountId}/adjustments"]
+    },
+    {
+      "id": "trust-transfer-from-register",
+      "workflow": "Transfer the PM's held fees to the other trust account from the register and back, and see both registers show it",
+      "area": "Banking",
+      "spec": "bank-adjustments.spec.ts",
+      "org": "scenario",
+      "events": ["TrustTransfer"],
+      "routes": []
     },
     {
       "id": "owner-statement-view-export-deliver",
@@ -822,16 +840,10 @@
         "issue": 556
       },
       {
-        "event": "BankFeeCharged",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 553
-      },
-      {
         "event": "InterestEarned",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 553
+        "reason": "No screen offers interest until #307 settles who interest in a trust account belongs to.",
+        "date": "2026-11-06",
+        "issue": 307
       },
       {
         "event": "OwnerContribution",
@@ -844,12 +856,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 556
-      },
-      {
-        "event": "TrustTransfer",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 553
       },
       {
         "event": "VendorPaid",
@@ -878,12 +884,6 @@
         "route": "GET /api/accounting/trust-equation",
         "reason": "No screen requests it; the screens that show these figures get them from other routes.",
         "date": "2026-10-12"
-      },
-      {
-        "route": "POST /api/accounting/banks/{bankAccountId}/adjustments",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 553
       },
       {
         "route": "PUT /api/directory/owners/{id}",

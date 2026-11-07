@@ -87,3 +87,36 @@ When trust-account interest handling or trust-fee coverage becomes a compliance 
 review, M8), replace the deferred defaults with explicit policy and record the change. If transfers of
 _owner_ or _deposit_ funds between accounts ever become a real workflow, they need their own template —
 `TrustTransfer` deliberately moves only PM-held funds.
+
+## Addendum — the engine enforces the held-fees floor, and a transfer is trust to trust (invariant I11) (2026-11-06)
+
+Decision 5(b) left the rule that a bank fee must be covered by the PM's held fees to procedure. Nothing
+enforced it, and nothing reported a breach: a fee, or a transfer out of a bank, larger than the fees
+held there still balanced and still left the trust equation holding, with a negative held-fees term
+standing for money owed to the owners and tenants whose funds the bank also holds. While no screen
+recorded either event that stayed theoretical. A screen on the bank register now records both (#553),
+so the rule moves into the engine.
+
+**The held-fees floor.** `BankFeeCharged`, and `TrustTransfer` against its source bank, are refused
+with `pm_fees_insufficient` (409) when the amount exceeds the lowest PM fees held in that bank on or
+after the entry's date, under the posting lock. That is the floor the processor fee shortfall already
+reads ([ADR-053](ADR-053-processor-fees-and-batched-settlement.md)): a backdated charge lowers every
+day after it, so a balance that has since recovered can still have been too low then. A transfer's
+destination only gains, so it is not read. The code is unchanged, so Payments still sends a payout to
+staff review on it; the message now names the charge it refused, and for a bank fee or a transfer says
+how much was held. A posting into a closed period or a reconciled month is refused as that first,
+before the floor is read, because no amount of held fees makes it postable.
+
+**A transfer is trust to trust.** `TrustTransfer` is refused with `transfer_bank_not_trust` (422) when
+either end is the PM operating bank. Into the operating bank it posted exactly the lines of
+`PMFeesSwept` without the sweep's guard; out of it, it was the PM funding trust with its own money,
+which needs its own event (#720), not a transfer. The check is in the template, so a direct API call
+meets it too.
+
+**Invariant I11 sweeps it:** held PM fees are ≥ 0 in every bank, trust or operating, as they stand
+now. It runs in the core set, so the nightly sweep and `check-invariants` both report a journal that
+went negative before this change. None of the seeded organizations does.
+
+Interest is unchanged: the template and the `interest` kind stay, and no screen offers it until #307
+settles entitlement, which remains deferred under 5(a). This records an engine rule, not a compliance
+finding: whether it is what 21 NCAC 58A .0116-.0117 requires is for the compliance review.

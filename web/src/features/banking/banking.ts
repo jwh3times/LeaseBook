@@ -187,21 +187,39 @@ export async function unlockReconciliation(
   );
 }
 
+/**
+ * The adjustments the register offers (#553). The server also takes `interest`, which no screen offers
+ * until #307 settles who interest belongs to.
+ */
+export type BankAdjustmentKind = 'fee' | 'transfer';
+
+/** Records a bank fee or a transfer between trust accounts; the one caller path for the route. */
 export async function recordBankAdjustment(
   bankAccountId: string,
   input: {
-    kind: string;
+    kind: BankAdjustmentKind;
     amount: number;
     date: string;
     description: string | null;
     toBankAccountId?: string | null;
     sourceRef: string;
+    /** Staff-only (#468); never on a statement. */
+    internalNote?: string | null;
   },
 ): Promise<{ entryId: string }> {
   return unwrap(
     postApiAccountingBanksByBankAccountIdAdjustments({
       path: { bankAccountId },
-      body: { bankAccountId, toBankAccountId: input.toBankAccountId ?? null, ...input },
+      body: {
+        bankAccountId,
+        kind: input.kind,
+        amount: input.amount,
+        date: input.date,
+        description: input.description,
+        toBankAccountId: input.toBankAccountId ?? null,
+        sourceRef: input.sourceRef,
+        internalNote: input.internalNote ?? null,
+      },
     }),
     'Failed to record the adjustment',
   );

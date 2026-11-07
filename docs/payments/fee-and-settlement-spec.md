@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of processor fees and payouts (issues #498, #500 and #513)
 - **Status:** Accepted for the payment simulation and built there. The Stripe sandbox mode (ADR-054, proposed) holds and posts payouts through the same model. Its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-26
+- **Last reviewed:** 2026-11-06
 
 ## Evidence and boundary
 
@@ -89,9 +89,10 @@ difference in a payout, and nothing else does.
 **Shortfall guard.** A shortfall posts only if the PM's held fees in that bank, after it, are at or
 above zero on the bank date and on every day since. The entry is dated on the bank date, so fees
 earned later cannot cover it. Read under the posting lock. If not, the batch does not post
-(`pm_fees_insufficient`). The existing bank-fee entry has no such guard; the evidence test
-`A_shortfall_beyond_held_fees_posts_today…` shows the result — held fees at −$7.50, the bank $7.50
-short of what the owner is owed, and every invariant green.
+(`pm_fees_insufficient`). The bank-fee entry had no such guard until #553 gave it this one; the
+evidence test `A_shortfall_beyond_held_fees_is_refused_and_I11_reports…` shows what an unguarded
+entry did — held fees at −$7.50 and the bank $7.50 short of what the owner is owed, with the trust
+equation still balancing — and that invariant I11 now reports it.
 
 A processor's own return or dispute fee is a shortfall with no payment beside it: the same entry, the
 same guard.

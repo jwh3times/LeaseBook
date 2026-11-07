@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -54,13 +56,34 @@ public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBank
     }
 }
 
-internal sealed class RecordBankAdjustmentHandler(IAccountingEvents events, PostingCalendar calendar)
+internal sealed class RecordBankAdjustmentHandler(
+    IAccountingEvents events,
+    PostingCalendar calendar,
+    IAccountingPeriods periods,
+    IReconciliationLock reconciliationLock)
     : ICommandHandler<RecordBankAdjustment, PostResult>
 {
     public async Task<PostResult> Handle(RecordBankAdjustment command, CancellationToken ct)
     {
         // A bank fee, interest or transfer appears on the bank's statement by the day it is recorded (#642).
         await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
+
+        // A closed period or a reconciled month refuses the posting whatever the PM's held fees are, so
+        // say that first: the held-fees floor a fee or a transfer reads (#553) would otherwise answer a
+        // posting into a locked month with a shortfall nobody can fix there. The posting service checks
+        // both again; this only orders the refusals, the same way TransferPropertyDeposits does.
+        var period = await periods.GetOpenPeriodAsync(command.Date, ct);
+        if (period.Status == PeriodStatus.Closed)
+        {
+            throw new PeriodClosedException(period.Year, period.Month);
+        }
+
+        await reconciliationLock.EnsureOpenAsync(command.BankAccountId, command.Date, ct);
+        if (command.ToBankAccountId is { } destination)
+        {
+            await reconciliationLock.EnsureOpenAsync(destination, command.Date, ct);
+        }
+
         var money = new Money(command.Amount);
         var id = command.Kind.ToLowerInvariant() switch
         {

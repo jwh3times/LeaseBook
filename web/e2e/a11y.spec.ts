@@ -125,6 +125,26 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
+    // #553: the bank fee and transfer dialog over the register, on the transfer form so the destination
+    // select is scanned too. Opening it posts nothing.
+    test('no WCAG AA violations with the bank fee or transfer dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/banking', { waitUntil: 'networkidle' });
+      await page.getByRole('button', { name: 'Fee or transfer' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Record a bank fee' });
+      await expect(dialog.getByLabel('Date')).not.toHaveValue('');
+      await dialog.getByRole('radio', { name: 'Transfer to another trust account' }).check();
+      await expect(
+        page
+          .getByRole('dialog', { name: 'Transfer to another trust account' })
+          .getByLabel('To account'),
+      ).toBeVisible();
+      await runA11y(page);
+    });
+
     test('no WCAG AA violations on an owner detail @scenario:accessibility-staff-pages', async ({
       page,
     }) => {

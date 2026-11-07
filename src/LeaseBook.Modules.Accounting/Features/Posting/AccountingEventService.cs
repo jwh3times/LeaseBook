@@ -12,7 +12,7 @@ namespace LeaseBook.Modules.Accounting.Features.Posting;
 /// entry and posts it through the single write path. Guarded events (P31) take the per-org advisory
 /// lock and read a balance before posting — the <c>PaymentReceived</c> auto-split, the deposit/
 /// prepayment over-application checks, the PM-fee over-sweep check, the disbursement reserve floor,
-/// and the processor fee shortfall check.
+/// and the held-fees floor under a processor fee shortfall, a bank fee and a transfer out of a bank.
 /// Every entry balances per basis <i>by construction</i> (proven by the catalog property test).
 /// </summary>
 internal sealed class AccountingEventService(DbContext db, IPostingService posting, IPostingLock postingLock)
@@ -406,9 +406,12 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
 
     private async Task<Guid> PostBankFeeChargedAsync(BankFeeCharged e, CancellationToken ct)
     {
-        // The PM covers the fee from its own held funds in that bank: held PM fees ↓ and the bank ↓, so
-        // owners/tenants are untouched and the trust equation stays balanced.
+        // The PM covers the fee from its own held funds in that bank, and only from them: held PM fees ↓
+        // and the bank ↓, so owners/tenants are untouched and the trust equation stays balanced. Past
+        // zero it would still balance, with a negative held-fees term standing for money owed to owners
+        // and tenants, so the engine refuses it (ADR-014 addendum, #553).
         var bank = await BankCodeAsync(e.BankAccountId, ct);
+        await GuardHeldFeesFloorAsync(e.BankAccountId, e.Date, e.Amount, HeldFeesCharge.BankFee, ct);
         return await posting.PostAsync(new PostEntryRequest(e.Date, "BankFeeCharged", null, e.Description, e.SourceRef,
             [
                 new(AccountCodes.PmIncome, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
@@ -442,12 +445,8 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             //
             // The entry is dated on the bank date, which may be in the past, so the read is the lowest
             // balance on or after that date: fees earned since must not cover a day they were not there.
-            await postingLock.AcquireAsync(ct);
-            var held = await _balances.HeldFeesFloorAsync(e.BankAccountId, e.Date, ct);
-            if (e.Amount.Amount > held)
-            {
-                throw new PmFeesInsufficientException(e.Amount.Amount, held, e.BankAccountId);
-            }
+            await GuardHeldFeesFloorAsync(
+                e.BankAccountId, e.Date, e.Amount, HeldFeesCharge.ProcessorFeeShortfall, ct);
         }
 
         // A payout lands in a trust bank. Naming the trust account outright, rather than resolving
@@ -475,9 +474,12 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     {
         // Moves the PM's own held funds between accounts: cash from→to, and the held-PM-fee attribution
         // moves with it, so each account's trust equation stays balanced. Owner/deposit funds are never
-        // moved by this template (ADR-014).
-        var fromBank = await BankCodeAsync(e.FromBankId, ct);
-        var toBank = await BankCodeAsync(e.ToBankId, ct);
+        // moved by this template (ADR-014). Both ends are trust banks: into the PM operating bank this
+        // would be a fee sweep without the sweep's guard, and out of it the PM funding trust with its
+        // own money (#720). Only the source is checked against its held fees; the destination only gains.
+        var fromBank = await TrustBankCodeAsync(e.FromBankId, TransferEnd.Source, ct);
+        var toBank = await TrustBankCodeAsync(e.ToBankId, TransferEnd.Destination, ct);
+        await GuardHeldFeesFloorAsync(e.FromBankId, e.Date, e.Amount, HeldFeesCharge.Transfer, ct);
         return await posting.PostAsync(new PostEntryRequest(e.Date, "TrustTransfer", null, e.Description, e.SourceRef,
             [
                 new(toBank, e.Amount, null, EntryBasis.Both, BankAccountId: e.ToBankId),
@@ -496,6 +498,40 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             .Select(a => a.Code)
             .SingleOrDefaultAsync(ct);
         return code ?? throw new UnknownAccountException(AccountCodes.TrustBank(bankId));
+    }
+
+    /// <summary>
+    /// The chart code of a transfer's bank at <paramref name="end"/>, which must be a trust bank. A PM
+    /// operating bank is refused by name; an id that is no bank account at all stays an unknown account.
+    /// </summary>
+    private async Task<string> TrustBankCodeAsync(Guid bankId, TransferEnd end, CancellationToken ct)
+    {
+        var account = await db.Set<Account>()
+            .Where(a => a.BankAccountId == bankId
+                && (a.Class == AccountClass.TrustBank || a.Class == AccountClass.PmOperatingBank))
+            .Select(a => new { a.Code, a.Class })
+            .SingleOrDefaultAsync(ct)
+            ?? throw new UnknownAccountException(AccountCodes.TrustBank(bankId));
+        return account.Class == AccountClass.TrustBank
+            ? account.Code
+            : throw new TransferBankNotTrustException(bankId, end);
+    }
+
+    /// <summary>
+    /// Refuses a charge paid from the PM fees held in <paramref name="bankId"/> when it exceeds the lowest
+    /// held balance on or after <paramref name="date"/>, under the posting lock so two charges cannot
+    /// both pass on the same balance. A backdated charge lowers every day after it, so a balance that has
+    /// since recovered can still have been too low then.
+    /// </summary>
+    private async Task GuardHeldFeesFloorAsync(
+        Guid bankId, DateOnly date, Money amount, HeldFeesCharge charge, CancellationToken ct)
+    {
+        await postingLock.AcquireAsync(ct);
+        var held = await _balances.HeldFeesFloorAsync(bankId, date, ct);
+        if (amount.Amount > held)
+        {
+            throw new PmFeesInsufficientException(amount.Amount, held, bankId, charge);
+        }
     }
 
     private async Task GuardReserveFloorAsync(Guid ownerId, Money amount, Money reserve, CancellationToken ct)
