@@ -1,13 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Button, Card, EmptyState, formatMoneyK, Icon, Money, Select } from '@/design';
+import { Button, Card, EmptyState, formatMoney, formatMoneyK, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { num, useProperties } from '@/lib/directory';
 import { trackInteraction } from '@/lib/telemetry';
 import { RefundChecksPanel } from '@/features/refundChecks/RefundChecksPanel';
+import { BankAdjustmentDialog } from './BankAdjustmentDialog';
 import { ImportWizard } from './ImportWizard';
 import { ReconcileBar } from './ReconcileBar';
 import { ReconciliationHistory } from './ReconciliationHistory';
@@ -37,6 +38,9 @@ export function BankingPage() {
   const [statementBalance, setStatementBalance] = useState('');
   const [reconcileError, setReconcileError] = useState<BankingError | null>(null);
   const [importing, setImporting] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
+  // What the last fee or transfer recorded, announced until the account changes (#553).
+  const [adjustmentNotice, setAdjustmentNotice] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [propFilter, setPropFilter] = useState('all');
@@ -72,6 +76,7 @@ export function BankingPage() {
     setReconciling(false);
     setSelected({});
     setReconcileError(null);
+    setAdjustmentNotice(null);
   }, [acctId]);
 
   const register = useBankRegister(acctId);
@@ -209,6 +214,9 @@ export function BankingPage() {
     );
   }
 
+  const findBank = (id: string) => balances.data?.find((bank) => bank.bankAccountId === id);
+  const openBank = findBank(acctId);
+
   return (
     <div className="pf-fade">
       <div className="pf-pagehd">
@@ -220,6 +228,9 @@ export function BankingPage() {
           </p>
         </div>
         <div className="row gap10">
+          <Button icon="plus" variant="default" onClick={() => setAdjusting(true)}>
+            {openBank?.isTrust ? 'Fee or transfer' : 'Bank fee'}
+          </Button>
           <Button icon="download" variant="default" onClick={() => setImporting(true)}>
             Import statement
           </Button>
@@ -318,6 +329,13 @@ export function BankingPage() {
           />
           <ApiErrorNotice error={reconcileError} style={{ marginBottom: 'var(--gap)' }} />
         </>
+      )}
+
+      {adjustmentNotice && (
+        <p className="row gap6 fs13 pf-adjust-notice" role="status">
+          <Icon name="check" size={16} />
+          <span>{adjustmentNotice}</span>
+        </p>
       )}
 
       {/* Filters */}
@@ -432,15 +450,32 @@ export function BankingPage() {
         <RefundChecksPanel
           key={acctId}
           bankAccountId={acctId}
-          bankName={
-            balances.data.find((bank) => bank.bankAccountId === acctId)?.name ?? 'this account'
-          }
+          bankName={openBank?.name ?? 'this account'}
         />
       </div>
 
       <div style={{ marginTop: 'var(--gap)' }}>
         <ReconciliationHistory bankAccountId={acctId} />
       </div>
+
+      {adjusting && (
+        <BankAdjustmentDialog
+          bankAccountId={acctId}
+          bankName={openBank?.name ?? 'this account'}
+          isTrust={openBank?.isTrust ?? false}
+          onClose={() => setAdjusting(false)}
+          onPosted={({ amount, toBankAccountId }) => {
+            setAdjusting(false);
+            refreshAccount(acctId);
+            if (toBankAccountId) refreshAccount(toBankAccountId);
+            setAdjustmentNotice(
+              toBankAccountId
+                ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
+                : `Bank fee of ${formatMoney(amount)} recorded.`,
+            );
+          }}
+        />
+      )}
 
       {importing && (
         <ImportWizard

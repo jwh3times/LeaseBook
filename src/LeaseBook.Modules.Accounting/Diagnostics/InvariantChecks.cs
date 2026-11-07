@@ -20,6 +20,7 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
         violations.AddRange(await CheckDepositLiabilitiesNonNegativeAsync(ct));
         violations.AddRange(await CheckDepositAttributionSymmetricAsync(ct));
         violations.AddRange(await CheckPrepaymentBankAttributionAsync(ct));
+        violations.AddRange(await CheckHeldFeesNonNegativeAsync(ct));
         violations.AddRange(await CheckMigrationClearingBalancedAsync(ct));
         violations.AddRange(await CheckStatementSectionCoverageAsync(ct));
         return violations;
@@ -186,6 +187,28 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
             .ToList();
     }
 
+    // I11: held PM fees are ≥ 0 per bank — trust or PM operating — as they stand now. A charge paid from
+    // the PM's held fees past zero still balances and leaves the trust equation holding (I2 clean), with
+    // a negative held-fees term standing for money the PM owes the owners and tenants whose funds the
+    // bank also holds. The posting guards refuse that (#553); this reports a journal that got there anyway.
+    public async Task<IReadOnlyList<InvariantViolation>> CheckHeldFeesNonNegativeAsync(CancellationToken ct)
+    {
+        var rows = await db.Database.SqlQuery<HeldFeesBucket>(
+            $"""
+            SELECT bank_account_id, SUM(COALESCE(credit, 0) - COALESCE(debit, 0)) AS held
+            FROM journal_lines
+            WHERE account_class = 'pm_income' AND basis IN ('cash', 'both')
+            GROUP BY bank_account_id
+            HAVING SUM(COALESCE(credit, 0) - COALESCE(debit, 0)) < 0
+            """).ToListAsync(ct);
+
+        return rows
+            .Select(r => new InvariantViolation("I11",
+                $"held PM fees in bank {(r.BankAccountId is null ? "(none)" : r.BankAccountId.ToString())} "
+                + $"are negative ({r.Held:0.00}) — more was charged against the PM's fees in this bank than it held"))
+            .ToList();
+    }
+
     // I8: every event_type carrying an owner-attributed owner_equity line has a statement section.
     // Unlike I1-I7 this asserts over the *shape* of the journal rather than its balances, because the
     // defect it catches is a reachability one: StatementSectionMap.Section throws
@@ -239,6 +262,8 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
     private sealed record AttributionBucket(Guid? TenantId, Guid? OwnerId, decimal Held);
 
     private sealed record PrepaymentBankBucket(Guid? TenantId, Guid? BankAccountId, decimal Held);
+
+    private sealed record HeldFeesBucket(Guid? BankAccountId, decimal Held);
 
     private sealed record ClearingVariance(string BasisName, decimal Net);
 

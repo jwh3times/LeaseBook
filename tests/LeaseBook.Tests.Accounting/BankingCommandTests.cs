@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
@@ -82,7 +83,9 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     {
         // Unreachable past the validator; the handler still refuses rather than posting nothing.
         var refused = await Should.ThrowAsync<ValidationException>(() =>
-            new RecordBankAdjustmentHandler(new NoEvents(), new PostingCalendar(new FixedOrgTimeZone(), TimeProvider.System)).Handle(Fee with { Kind = "wire" }, TestContext.Current.CancellationToken));
+            new RecordBankAdjustmentHandler(
+                new NoEvents(), new PostingCalendar(new FixedOrgTimeZone(), TimeProvider.System), new OpenPeriods(), new NoLocks())
+                .Handle(Fee with { Kind = "wire" }, TestContext.Current.CancellationToken));
 
         refused.Message.ShouldBe("Unknown bank-adjustment kind.");
     }
@@ -108,7 +111,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
             new InterestEarned(new Money(500m), Feb5, scope.TrustBankId, "seed", "seed:1"), ct), ct);
 
         // Only a transfer names a destination; the validator refuses one on the other kinds.
-        Guid? to = eventType == "TrustTransfer" ? scope.OperatingBankId : null;
+        Guid? to = eventType == "TrustTransfer" ? scope.DepositBankId : null;
         var plain = await SendAsync(scope, new RecordBankAdjustment(
             kind, 25m, Feb5, scope.TrustBankId, to, null, $"adj:{kind}", "staff only"), ct);
         var named = await SendAsync(scope, new RecordBankAdjustment(
@@ -120,7 +123,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         (await EntryAsync(scope, named.EntryId, ct)).Description.ShouldBe("Statement line text");
 
         var trust = AccountCodes.TrustBank(scope.TrustBankId);
-        var operating = AccountCodes.PmOperatingBank(scope.OperatingBankId);
+        var deposit = AccountCodes.TrustBank(scope.DepositBankId);
         (await ReadLinesAsync(scope, plain.EntryId, ct)).ShouldBe(eventType switch
         {
             "BankFeeCharged" =>
@@ -135,10 +138,10 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
             ],
             _ =>
             [
-                new(operating, 25m, null, EntryBasis.Both, null, null, null, null, scope.OperatingBankId),
+                new(deposit, 25m, null, EntryBasis.Both, null, null, null, null, scope.DepositBankId),
                 new(trust, null, 25m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
                 new(AccountCodes.PmIncome, 25m, null, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
-                new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.OperatingBankId),
+                new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.DepositBankId),
             ],
         }, ignoreOrder: true);
     }
@@ -198,6 +201,20 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     {
         public Task<Guid> PostAsync(AccountingEvent businessEvent, CancellationToken ct) =>
             throw new InvalidOperationException($"Nothing should post, but {businessEvent.GetType().Name} did.");
+    }
+
+    private sealed class OpenPeriods : IAccountingPeriods
+    {
+        public Task<AccountingPeriod> GetOpenPeriodAsync(DateOnly date, CancellationToken ct) =>
+            Task.FromResult(AccountingPeriod.Open(date.Year, date.Month));
+
+        public Task<AccountingPeriod> CloseAsync(int year, int month, CancellationToken ct) =>
+            throw new InvalidOperationException("Nothing should close a period.");
+    }
+
+    private sealed class NoLocks : IReconciliationLock
+    {
+        public Task EnsureOpenAsync(Guid bankAccountId, DateOnly date, CancellationToken ct) => Task.CompletedTask;
     }
 
     /// <summary>A context already disposed: a request that got past its validator would fail on its first read.</summary>

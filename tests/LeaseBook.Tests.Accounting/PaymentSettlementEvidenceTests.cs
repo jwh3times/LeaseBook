@@ -20,7 +20,7 @@ namespace LeaseBook.Tests.Accounting;
 /// engine. Nothing here is a payment processor or a new posting path: each test posts the lines the
 /// specification names, through the templates and services that already exist, and shows what the
 /// books then say. One example is deliberately negative — it shows the shortfall the specified guard
-/// has to stop, which today nothing does.
+/// has to stop, which the bank-fee template now refuses (#553) and I11 reports if a journal holds one.
 /// </summary>
 [Collection(nameof(DatabaseCollection))]
 public sealed class PaymentSettlementEvidenceTests(PostgresFixture fixture)
@@ -71,22 +71,34 @@ public sealed class PaymentSettlementEvidenceTests(PostgresFixture fixture)
     }
 
     [Fact]
-    public async Task A_shortfall_beyond_held_fees_posts_today_and_leaves_the_bank_short_with_every_invariant_green()
+    public async Task A_shortfall_beyond_held_fees_is_refused_and_I11_reports_one_that_was_posted_anyway()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var scope = await NewScope(ct);
         await Charge(scope, _tenantB, 500m, ct);
         await Post(scope, Receipt(scope, _tenantB, 500m, "payout:po_1:1"), ct);
 
-        // No fees are held. The existing bank-fee template has no balance guard, so it posts.
-        await Post(scope, new BankFeeCharged(new Money(7.50m), BankDate, scope.TrustBankId,
-            "Processor fee shortfall", "payout:po_1:1:fee"), ct);
+        // No fees are held. Until #553 the bank-fee template had no balance guard and posted this; it
+        // now refuses it, as the processor fee shortfall template always has (ADR-053).
+        await Should.ThrowAsync<PmFeesInsufficientException>(() => Post(scope, new BankFeeCharged(
+            new Money(7.50m), BankDate, scope.TrustBankId, "Processor fee shortfall", "payout:po_1:1:fee"), ct));
+        await AssertBooks(scope, bank: 500m, tenantA: 0m, tenantB: 0m, ownerEquity: 500m, heldFees: 0m, ct);
 
+        // The same lines written below the templates, as a journal from before the guard holds them.
         // The owner is owed 500.00 and the bank holds 492.50. The trust equation still balances, because
-        // "held PM fees" has gone to -7.50: the PM now owes the trust account, and nothing reports it.
+        // "held PM fees" has gone to -7.50: the PM owes the trust account, and I11 now reports it.
+        await scope.RunAsync(() => Posting(scope).PostAsync(new PostEntryRequest(
+            BankDate, "BankFeeCharged", null, "Processor fee shortfall", "payout:po_1:1:fee",
+            [
+                new(AccountCodes.PmIncome, new Money(7.50m), null, EntryBasis.Both, BankAccountId: scope.TrustBankId),
+                new(AccountCodes.TrustBank(scope.TrustBankId), null, new Money(7.50m), EntryBasis.Both,
+                    BankAccountId: scope.TrustBankId),
+            ]), ct), ct);
+
         await AssertBooks(scope, bank: 492.50m, tenantA: 0m, tenantB: 0m, ownerEquity: 500m, heldFees: -7.50m, ct);
-        await AssertClean(scope, ct);
-        // This is why ADR-053 requires the guard: a shortfall posts only while held fees stay at or above zero.
+        IReadOnlyList<InvariantViolation> violations = [];
+        await scope.RunAsync(async () => violations = await new InvariantChecks(scope.Db).CheckCoreAsync(ct), ct);
+        violations.Select(v => v.Invariant).ShouldBe(["I11"]);
     }
 
     [Fact]

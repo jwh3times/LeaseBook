@@ -108,8 +108,9 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
             refundDepTenant, amount, D(7), scope.DepositBankId, RefundSource.Deposits, "deposit refund",
             PropertyId: property, OwnerId: owner), ct);
 
-        // Bank adjustments (ADR-014) — fee, interest, and the trust→trust transfer variant
-        // (BankAdjustmentTemplatesTests covers trust→PM-operating only).
+        // Bank adjustments (ADR-014) — fee, interest, and the trust→trust transfer. The fee and the
+        // transfer draw on the PM's held fees in the trust bank (#553), so fund them first.
+        await PostAsync(scope, new InterestEarned(big, D(1), scope.TrustBankId, "held fees"), ct);
         await AssertBalancesAsync(scope, new BankFeeCharged(amount, D(8), scope.TrustBankId, "bank fee"), ct);
         await AssertBalancesAsync(scope, new InterestEarned(amount, D(9), scope.TrustBankId, "interest"), ct);
         await AssertBalancesAsync(scope, new TrustTransfer(
