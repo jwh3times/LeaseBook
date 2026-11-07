@@ -901,7 +901,9 @@ public sealed partial class SimulatedPaymentTests(PostgresFixture fixture)
     {
         public async Task<Guid> RecordSettledReceiptAsync(Guid tenantId, Guid bankId, decimal amount, DateOnly date, string method, string memo, string sourceRef, CancellationToken ct)
         {
-            var result = await sender.Send(new Modules.Accounting.Features.LedgerPosting.RecordPayment(tenantId, amount, date, method, bankId, "Simulation", sourceRef), ct);
+            // The command the real adapter sends (PaymentAdapters): a processor's receipt is dated by the
+            // bank's evidence, so it is not held to staff's today (#642), which an evening run would trip.
+            var result = await sender.Send(new Modules.Accounting.Features.LedgerPosting.RecordSettledReceipt(new Modules.Accounting.Features.LedgerPosting.RecordPayment(tenantId, amount, date, method, bankId, "Simulation", sourceRef)), ct);
             if (fault.Fail) { fault.Fail = false; throw new IOException("Injected crash after ledger SaveChanges"); }
             return result.EntryId;
         }
