@@ -18,6 +18,44 @@ next section.
 
 No unreleased changes.
 
+## [0.30.6] - 2026-11-07
+
+### Fixed
+
+- Two payment tests no longer fail on a CI run between midnight UTC and midnight in the
+  organization's time zone, when the UTC date is already the organization's tomorrow. The simulated
+  payment test's failing ledger now posts a processor's receipt with the same command the app uses,
+  which takes the bank's date as given rather than holding it to staff's today. The held-payout test
+  now builds "tomorrow" the way the settlement engine does, from the UTC date. Nothing the app does
+  changes.
+
+## [0.30.5] - 2026-11-06
+
+### Changed
+
+- Bumped the web dependencies `@tanstack/react-query` and `@tanstack/react-query-devtools` from
+  5.105.0 to 5.105.3, `@tanstack/react-virtual` from 3.14.24 to 3.14.25, `@vitejs/plugin-react` from
+  6.1.2 to 6.2.1, and `vitest` and `@vitest/coverage-v8` from 5.0.5 to 5.1.0.
+
+## [0.30.4] - 2026-11-06
+
+### Changed
+
+- Updated the `dotnet/aspnet` 10.0 base images, the migrator's and the chiseled runtime's, to their
+  latest digests.
+
+## [0.30.3] - 2026-11-06
+
+### Changed
+
+- Updated the `dotnet/sdk` 10.0 build image to its latest digest.
+
+## [0.30.2] - 2026-11-06
+
+### Changed
+
+- Bumped the CI action `actions/setup-dotnet` from 6.0.0 to 6.1.0 in every workflow that uses it.
+
 ## [0.30.1] - 2026-11-06
 
 ### Changed
@@ -1825,7 +1863,15 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.30.6...HEAD
+[0.30.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.6
+[0.30.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.5
+[0.30.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.4
+[0.30.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.3
+[0.30.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.2
+[0.30.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.1
+[0.30.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.0
+[0.29.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.29.1
 [0.29.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.29.0
 [0.28.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.11
 [0.28.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.28.10
