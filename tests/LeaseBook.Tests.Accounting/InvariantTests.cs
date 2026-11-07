@@ -284,6 +284,36 @@ public sealed class InvariantTests(PostgresFixture fixture)
         violations.ShouldHaveSingleItem().Invariant.ShouldBe("I10");
     }
 
+    [Fact]
+    public async Task The_I11_sweep_catches_a_bank_whose_held_pm_fees_went_negative()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+
+        await scope.RunAsync(async () =>
+        {
+            await Events(scope).PostAsync(new InterestEarned(
+                new Money(5m), D(1), scope.TrustBankId, "held fees"), ct);
+
+            // The pre-#553 bank-fee shape, which had no floor: written through the lower-level posting
+            // seam, because the template now refuses it. The entry balances and the trust equation still
+            // holds — held fees are simply -3.00, money the PM owes the trust account.
+            await Posting(scope).PostAsync(new PostEntryRequest(
+                D(2), "BankFeeCharged", null, "Historical unguarded bank fee", "bad-fee",
+                [
+                    new PostLineRequest(AccountCodes.PmIncome, new Money(8m), null, EntryBasis.Both,
+                        BankAccountId: scope.TrustBankId),
+                    new PostLineRequest(AccountCodes.TrustBank(scope.TrustBankId), null, new Money(8m),
+                        EntryBasis.Both, BankAccountId: scope.TrustBankId),
+                ]), ct);
+        }, ct);
+
+        var violation = (await CheckCoreAsync(scope, ct)).ShouldHaveSingleItem();
+        (violation.Invariant, violation.Detail).ShouldBe(("I11",
+            $"held PM fees in bank {scope.TrustBankId} are negative (-3.00) "
+            + "— more was charged against the PM's fees in this bank than it held"));
+    }
+
     /// <summary>
     /// The sweep reports every breach it exists to find, each under its own id and with its own detail,
     /// in the order the sweep runs its checks. Each violation is planted in isolation, so it trips its
@@ -354,6 +384,12 @@ public sealed class InvariantTests(PostgresFixture fixture)
             new(AccountCodes.MigrationClearing, 7m, null, "accrual"),
             new(AccountCodes.TenantReceivable, null, 7m, "accrual", Tenant: t6));
 
+        // I11: a charge against held fees in the deposit bank, which holds none. Bank and fees fall
+        // together, so the deposit bank's trust equation still holds.
+        await plant.EntryAsync("BankFeeCharged", ct,
+            new(AccountCodes.PmIncome, 6m, null, "both", Bank: scope.DepositBankId),
+            new(deposit, null, 6m, "both", Bank: scope.DepositBankId));
+
         // I8: an owner credit under an event type no statement section covers, balanced in the trust bank.
         var (uncovered, _) = await plant.EntryAsync("UnmappedOwnerCredit", ct,
             new(trust, 12m, null, "both", Bank: scope.TrustBankId),
@@ -362,7 +398,7 @@ public sealed class InvariantTests(PostgresFixture fixture)
         var violations = await plant.SweepAsync(ct);
 
         violations.Select(v => v.Invariant).ShouldBe(
-            ["I1", "I1", "I2", "I3", "I4", "I4", "I4", "I7", "I7", "I10", "I10", "I9", "I9", "I8"]);
+            ["I1", "I1", "I2", "I3", "I4", "I4", "I4", "I7", "I7", "I10", "I10", "I11", "I9", "I9", "I8"]);
         violations.Select(v => $"{v.Invariant} {v.Detail}").ShouldBe(
             [
                 $"I1 entry {unbalanced} does not balance in cash: debits 0.00 != credits 60.00",
@@ -380,6 +416,8 @@ public sealed class InvariantTests(PostgresFixture fixture)
                     + "— more prepaid credit was released from this bank than it ever held",
                 $"I10 held prepayment for tenant {t5} in bank (none) is negative (-10.00) "
                     + "— more prepaid credit was released from this bank than it ever held",
+                $"I11 held PM fees in bank {scope.DepositBankId} are negative (-6.00) "
+                    + "— more was charged against the PM's fees in this bank than it held",
                 "I9 migration_clearing does not net to $0 in cash: residual 5.00",
                 "I9 migration_clearing does not net to $0 in accrual: residual 7.00",
                 "I8 event_type 'UnmappedOwnerCredit' posts owner-attributed owner_equity lines but has no "

@@ -18,7 +18,7 @@ next section.
 
 No unreleased changes.
 
-## [0.30.6] - 2026-11-07
+## [0.31.1] - 2026-11-07
 
 ### Fixed
 
@@ -28,6 +28,31 @@ No unreleased changes.
   which takes the bank's date as given rather than holding it to staff's today. The held-payout test
   now builds "tomorrow" the way the settlement engine does, from the UTC date. Nothing the app does
   changes.
+
+## [0.31.0] - 2026-11-06
+
+### Added
+
+- **Record a bank fee or a transfer between trust accounts from the bank register.** On a trust
+  account, **Fee or transfer** opens a dialog for the amount, the date (the organization's today by
+  default), a description and an internal note. A transfer goes only to another trust account. On
+  the PM's operating account the button is **Bank fee**. Saving refreshes every register and balance
+  the entry touched. Enter never records it, and the button checks the fields before anything is
+  sent. Interest is still not offered until #307 settles whom it belongs to (#553).
+- The nightly trust-invariant sweep and `check-invariants` gain **I11**: the management fees held
+  in each bank are never negative (#553).
+
+### Changed
+
+- **A bank fee or a transfer is paid only from the management fees the PM holds in that account.**
+  One larger than the fees held there on or after its date is refused with `pm_fees_insufficient`,
+  and nothing is posted. The message says how much the account holds and no longer calls a bank fee
+  or a transfer a "processor fee". Owner and tenant money is never used to pay either (#553).
+- **A transfer moves money between trust accounts only.** A transfer to or from the PM's operating
+  account is refused with `transfer_bank_not_trust` (422), through the API as well as the screen.
+  Moving the PM's fees out of trust stays the fee sweep's job (#553).
+- A bank adjustment dated into a reconciled or closed month is refused as locked before its fees are
+  checked, so the refusal names the month rather than the fees (#553).
 
 ## [0.30.5] - 2026-11-06
 
@@ -1863,8 +1888,9 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.30.6...HEAD
-[0.30.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.6
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.1...HEAD
+[0.31.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.1
+[0.31.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.0
 [0.30.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.5
 [0.30.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.4
 [0.30.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.3

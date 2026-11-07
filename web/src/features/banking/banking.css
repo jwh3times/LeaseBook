@@ -213,3 +213,35 @@ html[data-theme='dark'] .pf-acct-tab {
     grid-template-columns: 1fr;
   }
 }
+
+/* Bank fee / trust transfer dialog (#553) */
+.pf-adjust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 520px) {
+  .pf-adjust-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.pf-adjust-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.pf-adjust-kinds legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+.pf-adjust-kinds label {
+  font-size: 13px;
+  cursor: pointer;
+}
+.pf-adjust-notice {
+  margin: 0 0 var(--gap);
+  color: var(--text-2);
+}

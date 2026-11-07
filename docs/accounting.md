@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-05
+- **Last reviewed:** 2026-11-06
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -163,7 +163,8 @@ deposit is owner-tagged, no _owner's_ held-deposit position can go negative eith
 what catches a release booked against a different owner than the collection: the tenant's own total
 would still come to zero while the owner's column silently stayed high. Prepayments get the same check
 per **bank**: no bank's held prepayment for a tenant can go negative, which catches credit applied from
-a bank that never received it.
+a bank that never received it. So do the PM's held management fees: no bank's can go negative, which
+catches a bank fee or a transfer paid from fees that bank did not hold.
 
 The sweep also checks one thing that is not about balances at all: that every kind of event crediting
 an owner is one the statement knows how to present. If a new kind of transaction reaches an owner's
@@ -385,17 +386,22 @@ is no bulk un-reconcile.
 
 **Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`
-(interest credited to the trust), and `TrustTransfer` (moving funds between two of the org's own bank
-accounts). Each balances per basis and posts through the single journal write path; none implies an
-owner/vendor/fee-sweep workflow (those are M6).
+(interest credited to the trust), and `TrustTransfer` (moving the PM's held fees between two of the
+org's trust accounts). Each balances per basis and posts through the single journal write path; none
+implies an owner/vendor/fee-sweep workflow (those are M6). A fee, and a transfer out of a bank, are paid
+from the PM's held fees there and only from them: each is refused (`pm_fees_insufficient`) when it
+exceeds the lowest fees held in that bank on or after its date, and invariant I11 reports any bank whose
+held fees are below zero. A transfer is refused (`transfer_bank_not_trust`) when either end is the PM
+operating bank ([ADR-014 addendum](adr/ADR-014-reconciliation-engine-and-lock.md)). Staff record a fee
+or a transfer from the bank register; interest has no screen until #307 settles who it belongs to.
 
 **Processor fee differences.** `ProcessorFeeDifference` records the amount by which a payment
 processor's fee differed from the fee quoted to the tenant
 ([ADR-053](adr/ADR-053-processor-fees-and-batched-settlement.md)). Like the bank-only adjustments it
 moves only the PM's held fees in one bank and carries no owner, property or tenant dimension. A
 surplus raises the bank and held fees. A shortfall lowers both and is guarded: it is refused
-(`pm_fees_insufficient`) when it exceeds the lowest fees held in that bank on or after its date, where `BankFeeCharged` leaves the
-same rule to procedure.
+(`pm_fees_insufficient`) when it exceeds the lowest fees held in that bank on or after its date, the
+same rule as a bank fee.
 
 **Payout batches.** `PostPaymentSettlement` posts one processor payout as a batch, on the bank date and
 in the trust bank that received it: a `PaymentReceived` receipt per payment, the guarded return of an

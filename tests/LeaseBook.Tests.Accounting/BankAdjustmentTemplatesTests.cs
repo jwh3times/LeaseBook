@@ -22,6 +22,8 @@ public sealed class BankAdjustmentTemplatesTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        // The fee is paid from the PM's held fees in the bank, and refused past them (#553).
+        await PostAsync(scope, new InterestEarned(new Money(50m), D(1), scope.TrustBankId, "held fees"), ct);
 
         var id = await PostAsync(scope, new BankFeeCharged(new Money(50m), D(1), scope.TrustBankId, "wire fee"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
@@ -54,20 +56,21 @@ public sealed class BankAdjustmentTemplatesTests(PostgresFixture fixture)
     {
         var ct = TestContext.Current.CancellationToken;
         await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await PostAsync(scope, new InterestEarned(new Money(500m), D(1), scope.TrustBankId, "held fees"), ct);
 
         var id = await PostAsync(scope, new TrustTransfer(
-            new Money(500m), D(3), scope.TrustBankId, scope.OperatingBankId, "fund operating"), ct);
+            new Money(500m), D(3), scope.TrustBankId, scope.DepositBankId, "move held fees"), ct);
         var lines = await ReadLinesAsync(scope, id, ct);
 
         lines.Count.ShouldBe(4);
-        Debit(lines, AccountCodes.PmOperatingBank(scope.OperatingBankId)).Debit.ShouldBe(500m); // to-bank cash ↑
+        Debit(lines, AccountCodes.TrustBank(scope.DepositBankId)).Debit.ShouldBe(500m);           // to-bank cash ↑
         Credit(lines, AccountCodes.TrustBank(scope.TrustBankId)).Credit.ShouldBe(500m);          // from-bank cash ↓
 
         // The held-fee attribution moves with the cash: debit (↓) on the source bank, credit (↑) on the dest.
         var pmDebit = lines.Single(l => l.Code == AccountCodes.PmIncome && l.Debit is not null);
         pmDebit.BankAccountId.ShouldBe(scope.TrustBankId);
         var pmCredit = lines.Single(l => l.Code == AccountCodes.PmIncome && l.Credit is not null);
-        pmCredit.BankAccountId.ShouldBe(scope.OperatingBankId);
+        pmCredit.BankAccountId.ShouldBe(scope.DepositBankId);
 
         lines.ShouldAllBe(l => l.OwnerId == null);
         await AssertBalancedAndCleanAsync(scope, lines, ct);

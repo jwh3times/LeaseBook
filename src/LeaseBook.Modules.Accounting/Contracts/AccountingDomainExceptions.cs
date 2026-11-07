@@ -335,20 +335,69 @@ public sealed class RefundCheckClearedException(Guid entryId)
     public Guid EntryId { get; } = entryId;
 }
 
+/// <summary>What a charge against the PM's held fees was, so a refusal can name it.</summary>
+public enum HeldFeesCharge
+{
+    ProcessorFeeShortfall,
+    BankFee,
+    Transfer,
+}
+
 /// <summary>
-/// A processor fee shortfall is larger than the PM fees held in that bank (409, ADR-053). Posting it
-/// would leave the bank holding less than owners and tenants are owed, so nothing is posted.
+/// A charge paid from the PM fees held in one bank is larger than they are, read as the lowest held
+/// balance on or after its date (409): a processor fee shortfall (ADR-053), a bank fee, or a transfer
+/// out of that bank (ADR-014 addendum, #553). Posting it would leave the bank holding less than owners
+/// and tenants are owed, so nothing is posted. The code is the same whichever charge it was; Payments
+/// keys its review on the code alone.
 /// </summary>
-public sealed class PmFeesInsufficientException(decimal shortfall, decimal held, Guid bankAccountId)
-    : AccountingDomainException(
-        "pm_fees_insufficient",
-        "The management fees held in this account do not cover the processor fee shortfall.")
+public sealed class PmFeesInsufficientException(
+    decimal shortfall, decimal held, Guid bankAccountId, HeldFeesCharge charge)
+    : AccountingDomainException("pm_fees_insufficient", Describe(charge, shortfall, held))
 {
     public decimal Shortfall { get; } = shortfall;
 
     public decimal Held { get; } = held;
 
     public Guid BankAccountId { get; } = bankAccountId;
+
+    public HeldFeesCharge Charge { get; } = charge;
+
+    // A floor already below zero is a breach I11 reports; to the person posting, it covers nothing.
+    private static string Describe(HeldFeesCharge charge, decimal amount, decimal held) => charge switch
+    {
+        HeldFeesCharge.BankFee =>
+            $"This account holds only {Math.Max(held, 0m):0.00} in management fees on or after the fee's date, "
+            + $"less than the {amount:0.00} fee, so nothing was posted.",
+        HeldFeesCharge.Transfer =>
+            $"The account this transfer comes from holds only {Math.Max(held, 0m):0.00} in management fees on "
+            + $"or after its date, less than the {amount:0.00} transfer, so nothing was posted.",
+        _ => "The management fees held in this account do not cover the processor fee shortfall.",
+    };
+}
+
+/// <summary>Which end of a transfer between bank accounts a refusal is about.</summary>
+public enum TransferEnd
+{
+    Source,
+    Destination,
+}
+
+/// <summary>
+/// A transfer between bank accounts names a bank that is not a trust bank at one end (422, #553). A
+/// transfer moves the PM's held fees between trust accounts and nothing else: into the PM operating
+/// bank it would be a fee sweep without the sweep's guard, and out of it the PM funding trust with its
+/// own money, which is not a transfer (ADR-014 addendum). Nothing is posted.
+/// </summary>
+public sealed class TransferBankNotTrustException(Guid bankAccountId, TransferEnd end)
+    : AccountingDomainException(
+        "transfer_bank_not_trust",
+        end == TransferEnd.Source
+            ? "A transfer moves money between trust accounts, and the account it comes from is not a trust account."
+            : "A transfer moves money between trust accounts, and the account it goes to is not a trust account.")
+{
+    public Guid BankAccountId { get; } = bankAccountId;
+
+    public TransferEnd End { get; } = end;
 }
 
 public enum PaymentReturnBlock
