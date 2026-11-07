@@ -175,7 +175,9 @@ public sealed class SettlementHeldPayoutTests(PostgresFixture fixture)
         var evidence = h.Bank("po_1", 100m);
         evidence = scenario switch
         {
-            "tomorrow" => evidence with { BankDate = h.Today.AddDays(1) },
+            // The engine's tomorrow, by the UTC date (#719). The organization's tomorrow is still today in
+            // UTC through its evening, so it would be kept then.
+            "tomorrow" => evidence with { BankDate = DateOnly.FromDateTime(h.Clock.GetUtcNow().UtcDateTime).AddDays(1) },
             "no date" => evidence with { BankDate = default },
             "a fraction of a cent" => evidence with { BankAmount = 100.001m },
             "too large" => evidence with { BankAmount = 1_000_000_000_000m },

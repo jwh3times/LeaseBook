@@ -18,6 +18,17 @@ next section.
 
 No unreleased changes.
 
+## [0.31.1] - 2026-11-07
+
+### Fixed
+
+- Two payment tests no longer fail on a CI run between midnight UTC and midnight in the
+  organization's time zone, when the UTC date is already the organization's tomorrow. The simulated
+  payment test's failing ledger now posts a processor's receipt with the same command the app uses,
+  which takes the bank's date as given rather than holding it to staff's today. The held-payout test
+  now builds "tomorrow" the way the settlement engine does, from the UTC date. Nothing the app does
+  changes.
+
 ## [0.31.0] - 2026-11-06
 
 ### Added
@@ -1877,7 +1888,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.1...HEAD
+[0.31.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.1
 [0.31.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.0
 [0.30.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.5
 [0.30.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.4
