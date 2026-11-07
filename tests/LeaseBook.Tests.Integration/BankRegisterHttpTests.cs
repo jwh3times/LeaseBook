@@ -72,7 +72,52 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
         bad.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    private sealed record Setup(Guid OrgId, string Email, Guid TrustBankId);
+    /// <summary>
+    /// The refusals a direct API call meets, not only the screen (#553): a fee past the PM's held fees,
+    /// and a transfer with the PM operating bank at either end, each with its own stable code.
+    /// </summary>
+    [Fact]
+    public async Task A_fee_past_the_held_fees_and_a_transfer_with_an_operating_bank_are_refused_with_their_codes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var url = $"/api/accounting/banks/{setup.TrustBankId}/adjustments";
+        await PostOkAsync<PostResult>(client, url,
+            new { kind = "interest", amount = 40m, date = Feb1, sourceRef = Key() }, ct);
+
+        var fee = await client.PostAsJsonAsync(url,
+            new { kind = "fee", amount = 40.01m, date = Feb1, sourceRef = Key() }, ct);
+        await ShouldBeProblemAsync(fee, HttpStatusCode.Conflict, "pm_fees_insufficient",
+            "This account holds only 40.00 in management fees on or after the fee's date, less than the 40.01 fee, so nothing was posted.", ct);
+
+        var toOperating = await client.PostAsJsonAsync(url,
+            new { kind = "transfer", amount = 10m, date = Feb1, toBankAccountId = setup.OperatingBankId, sourceRef = Key() },
+            ct);
+        await ShouldBeProblemAsync(toOperating, HttpStatusCode.UnprocessableEntity, "transfer_bank_not_trust",
+            "A transfer moves money between trust accounts, and the account it goes to is not a trust account.", ct);
+
+        var fromOperating = await client.PostAsJsonAsync(
+            $"/api/accounting/banks/{setup.OperatingBankId}/adjustments",
+            new { kind = "transfer", amount = 10m, date = Feb1, toBankAccountId = setup.TrustBankId, sourceRef = Key() }, ct);
+        await ShouldBeProblemAsync(fromOperating, HttpStatusCode.UnprocessableEntity, "transfer_bank_not_trust",
+            "A transfer moves money between trust accounts, and the account it comes from is not a trust account.", ct);
+
+        var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        register.Totals.Book.ShouldBe(40m); // only the interest posted
+    }
+
+    private static async Task ShouldBeProblemAsync(
+        HttpResponseMessage response, HttpStatusCode status, string code, string detail, CancellationToken ct)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        response.StatusCode.ShouldBe(status, body);
+        using var problem = System.Text.Json.JsonDocument.Parse(body);
+        (problem.RootElement.GetProperty("code").GetString(), problem.RootElement.GetProperty("detail").GetString())
+            .ShouldBe((code, detail));
+    }
+
+    private sealed record Setup(Guid OrgId, string Email, Guid TrustBankId, Guid OperatingBankId);
 
     private static string Key() => UuidV7.NewId().ToString();
 
@@ -103,15 +148,20 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
         }
 
         Guid trustBankId = default;
+        Guid operatingBankId = default;
         await using (var scope = fixture.Api.Services.CreateAsyncScope())
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
             await executor.RunAsSystemAsync(orgId, "test-harness", async () =>
-                trustBankId = (await sender.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct)).Id, ct);
+            {
+                trustBankId = (await sender.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct)).Id;
+                operatingBankId = (await sender.Send(
+                    new CreateBankAccount("Management Operating", null, null, "operating"), ct)).Id;
+            }, ct);
         }
 
-        return new Setup(orgId, email, trustBankId);
+        return new Setup(orgId, email, trustBankId, operatingBankId);
     }
 
     private async Task<HttpClient> LoggedInClientAsync(Setup setup, CancellationToken ct)

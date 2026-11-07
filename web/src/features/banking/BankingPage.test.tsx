@@ -581,3 +581,95 @@ describe('BankingPage refund checks', () => {
     expect(screen.getByRole('button', { name: 'Print settings' })).toBeInTheDocument();
   });
 });
+
+describe('BankingPage bank fee or transfer (#553)', () => {
+  const TRUSTS = {
+    rows: [
+      { ...BALANCES.rows[0], isTrust: true },
+      {
+        bankAccountId: 'acct2',
+        name: 'Security Deposits',
+        book: 900,
+        cleared: 900,
+        uncleared: 0,
+        isTrust: true,
+      },
+      {
+        bankAccountId: 'acct3',
+        name: 'Management Operating',
+        book: 50,
+        cleared: 50,
+        uncleared: 0,
+        isTrust: false,
+      },
+    ],
+  };
+
+  it('records a transfer by keyboard and refreshes both registers and the balances', async () => {
+    const reads = { balances: 0, register: [] as string[] };
+    server.use(
+      http.get('/api/accounting/banks/balances', () => {
+        reads.balances += 1;
+        return HttpResponse.json(TRUSTS);
+      }),
+      http.get('/api/accounting/banks/:id/register', ({ params }) => {
+        reads.register.push(String(params.id));
+        return HttpResponse.json(REGISTER);
+      }),
+      http.post('/api/accounting/banks/:id/adjustments', () =>
+        HttpResponse.json({ entryId: 'e1' }),
+      ),
+      ...baseHandlers(),
+    );
+    const queryClient = renderPage();
+    // The other account's register was opened earlier, so it is cached.
+    queryClient.setQueryData(bankRegisterKey('acct2'), REGISTER);
+    const user = userEvent.setup();
+    await screen.findByText('Rent deposit');
+    const balanceReads = reads.balances;
+
+    screen.getByRole('button', { name: 'Fee or transfer' }).focus();
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByDisplayValue(/^\d{4}-\d{2}-\d{2}$/);
+    within(dialog).getByRole('radio', { name: 'Bank fee' }).focus();
+    await user.keyboard('{ArrowDown}');
+    expect(within(dialog).getByRole('radio', { name: /^Transfer/ })).toBeChecked();
+    await user.tab(); // the radio group is one stop; the amount is next
+    expect(within(dialog).getByLabelText('Amount')).toHaveFocus();
+    await user.keyboard('120');
+    // Only the other trust account is offered, so it is already chosen.
+    expect(await within(dialog).findByLabelText('To account')).toHaveValue('acct2');
+    within(dialog).getByRole('button', { name: 'Record transfer' }).focus();
+    await user.keyboard('{Enter}');
+
+    expect(
+      await screen.findByText('Transfer of $120.00 to Security Deposits recorded.'),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByText('Transfer of $120.00 to Security Deposits recorded.')
+        .closest('[role="status"]'),
+    ).not.toBeNull();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(reads.balances).toBeGreaterThan(balanceReads));
+    // The other account's register is not on screen, so it is marked stale and reads again when opened.
+    expect(queryClient.getQueryState(bankRegisterKey('acct2'))?.isInvalidated).toBe(true);
+    expect(reads.register.filter((id) => id === 'acct1').length).toBeGreaterThan(1);
+  });
+
+  it('offers only a bank fee on an account that is not a trust account', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TRUSTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    renderPage('/banking?account=acct3');
+    await screen.findByText('Rent deposit');
+
+    expect(screen.queryByRole('button', { name: 'Fee or transfer' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Bank fee' }));
+    expect(await screen.findByRole('dialog', { name: 'Record a bank fee' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+});

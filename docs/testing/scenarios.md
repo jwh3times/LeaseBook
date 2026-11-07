@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-04
+- **Last reviewed:** 2026-11-06
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -69,9 +69,9 @@ are two kinds:
 - The reason `baseline gap` marks a gap that existed when the check was introduced. It carries the
   `issue` that closes it. #544 closed the gaps a browser test could close; each one left has its own
   issue, for a screen that does not exist yet.
-- Any other reason is written out in the entry, and the entry has no `issue`. It is permanent:
-  nothing is planned to close it. The four accounting reads that no screen requests are of this
-  kind.
+- Any other reason is written out in the entry. With no `issue` it is permanent: nothing is planned
+  to close it. The four accounting reads that no screen requests are of this kind. With an `issue`,
+  the reason names a decision the screen waits on, as interest waits on #307.
 
 ### Journal event types
 
@@ -228,14 +228,14 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-76 scenarios, 1 of them an expected failure that shows a known limit. 7 journal event types and 19 routes are exempt.
+78 scenarios, 1 of them an expected failure that shows a known limit. 5 journal event types and 18 routes are exempt.
 
 ### Scenarios
 
 | Scenario | Workflow | Area | Spec | Organization | Journal events | Routes |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
 | `accessibility-portals` | The tenant and owner portals have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  |  |
-| `accessibility-staff-pages` | Every routed staff page, the record details and the refund-check dialogs have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  | `GET /api/refund-checks/micr/{bankAccountId}`<br>`GET /api/refund-checks/print-settings/{bankAccountId}` |
+| `accessibility-staff-pages` | Every routed staff page, the record details, the refund-check dialogs and the bank fee or transfer dialog have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  | `GET /api/refund-checks/micr/{bankAccountId}`<br>`GET /api/refund-checks/print-settings/{bankAccountId}` |
 | `accessibility-command-palette` | The command palette open on results has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `accessibility-onboarding` | The onboarding wizard has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `mfa-enrollment-by-keyboard` | Be held on required MFA enrollment and complete it by keyboard, with the session and the enrollment routes answered by the test | Account security | `account-security.spec.ts` |  |  |  |
@@ -272,6 +272,8 @@ not edit between the markers.
 | `bank-statement-mapping-saved` | Save the columns mapped for a bank CSV under a name, and apply them to the next import | Banking | `m4-banking.spec.ts` |  |  | `POST /api/banking/banks/{bankAccountId}/mappings`<br>`GET /api/banking/banks/{bankAccountId}/mappings` |
 | `bank-reconcile-finalize-and-lock` | Reconcile a trust account to $0.00, finalize, and see the locked month refuse a posting | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived` | `GET /api/accounting/banks/balances`<br>`GET /api/accounting/reconciliations`<br>`POST /api/accounting/banks/clearances`<br>`POST /api/accounting/reconciliations`<br>`POST /api/accounting/reconciliations/{id}/finalize`<br>`POST /api/accounting/tenants/{tenantId}/payments` |
 | `bank-reconciliation-unlock-and-refinalize` | As an administrator, unlock a finalized month with a reason, post into it, and finalize it again | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/reconciliations/{id}/unlock` |
+| `bank-fee-from-register` | Record a bank fee from the register by keyboard, and see a fee larger than the PM's held fees refused in place | Banking | `bank-adjustments.spec.ts` | scenario | `BankFeeCharged` | `POST /api/accounting/banks/{bankAccountId}/adjustments` |
+| `trust-transfer-from-register` | Transfer the PM's held fees to the other trust account from the register and back, and see both registers show it | Banking | `bank-adjustments.spec.ts` | scenario | `TrustTransfer` |  |
 | `owner-statement-view-export-deliver` | View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes`<br>`GET /api/statements/{ownerId}/pdf`<br>`GET /api/statements/{ownerId}/csv`<br>`POST /api/statements/{ownerId}/deliver` |
 | `report-catalog-preview-and-export` | Open the report catalog, preview a report with filters, and export it as CSV | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/reports`<br>`GET /api/reports/{id}/preview`<br>`GET /api/reports/{id}/csv` |
 | `month-cycle-rent-run` | Preview and confirm the monthly rent run | Operations | `m6-bulk-operations.spec.ts` | demo | `RentCharged` | `GET /api/operations/runs/{type}/preview`<br>`GET /api/operations/runs/{type}/preview/issued-coverage`<br>`POST /api/operations/runs/{type}/confirm` |
@@ -315,6 +317,7 @@ not edit between the markers.
 
 | Reason | Count |
 | :-- | --: |
+| No screen offers interest until #307 settles who interest in a trust account belongs to. | 1 |
 | No screen requests it; container probes and the test runner poll it to see that the host is up. | 1 |
 | No screen requests it; the portal reads the tenant's whole list of payments. | 1 |
 | No screen requests it; the screens read the whole list of bank accounts. | 1 |
@@ -322,18 +325,16 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 16 |
+| baseline gap | 12 |
 
 #### Journal event types with no scenario
 
 | Event type | Reason | Date | Issue |
 | :-- | :-- | :-- | :-- |
 | `BalanceForward` | baseline gap | 2026-10-12 | #556 |
-| `BankFeeCharged` | baseline gap | 2026-10-12 | #553 |
-| `InterestEarned` | baseline gap | 2026-10-12 | #553 |
+| `InterestEarned` | No screen offers interest until #307 settles who interest in a trust account belongs to. | 2026-11-06 | #307 |
 | `OwnerContribution` | baseline gap | 2026-10-12 | #556 |
 | `PMFeesSwept` | baseline gap | 2026-10-12 | #556 |
-| `TrustTransfer` | baseline gap | 2026-10-12 | #553 |
 | `VendorPaid` | baseline gap | 2026-10-12 | #556 |
 
 #### Routes with no scenario
@@ -344,7 +345,6 @@ not edit between the markers.
 | `GET /api/accounting/owners/{ownerId}/ledger` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `GET /api/accounting/deposits` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `GET /api/accounting/trust-equation` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
-| `POST /api/accounting/banks/{bankAccountId}/adjustments` | baseline gap | 2026-10-12 | #553 |
 | `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #558 |
 | `GET /api/directory/units` | baseline gap | 2026-10-12 | #558 |
