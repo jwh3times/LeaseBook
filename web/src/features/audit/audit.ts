@@ -50,23 +50,31 @@ function params(query: AuditQuery) {
 /**
  * Entity types, actions, and this org's people — the vocabularies the selects are built from.
  * `enabled` is how the page avoids asking for a trail it already knows the caller cannot read; the
- * endpoint is what refuses them.
+ * endpoint is what refuses them. Read again each time the audit log opens, like the trail, so a
+ * person who joined recently is in the actor list (#712).
  */
 export function useAuditFilterOptions(enabled = true): UseQueryResult<AuditFilterOptions> {
   return useQuery({
     queryKey: auditFilterOptionsKey,
     queryFn: () => unwrap(getApiAuditFilters(), 'Failed to load the audit filters'),
-    staleTime: 5 * 60_000,
+    refetchOnMount: 'always',
     enabled,
   });
 }
 
+/**
+ * One page of the trail. Every audited write (a directory create, a posting, a settings change, a
+ * sign-in) happens on another screen, so the audit log asks the server again each time it opens
+ * rather than serving a page cached inside the stale time; cached rows show meanwhile. Paging and
+ * filtering inside an open log follow the stale time as before (#712).
+ */
 export function useAuditEvents(
   query: AuditQuery,
   enabled = true,
 ): UseQueryResult<AuditLogResponse> {
   return useQuery({
     queryKey: auditEventsKey(query),
+    refetchOnMount: 'always',
     enabled,
     queryFn: () =>
       unwrap(

@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { queryDefaults } from '@/app/queryDefaults';
+import { useCreateOwner } from '@/lib/directory';
 import { server } from '@/test/mocks/server';
 import { AuditPage } from './AuditPage';
 
@@ -229,5 +231,105 @@ describe('AuditPage', () => {
 
     expect(await screen.findByText('Admin access required')).toBeInTheDocument();
     expect(asked).toBe(false);
+  });
+});
+
+/**
+ * The app's own query defaults: a 30-second stale time and no refetch on focus. With them, a remount
+ * inside the stale time serves the cache unless the page asks again (#712), which the plain clients
+ * the other tests use cannot show. Retries stay off so a failure surfaces at once.
+ */
+function appQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { ...queryDefaults.queries, retry: false } },
+  });
+}
+
+function renderPageWith(queryClient: QueryClient) {
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AuditPage />
+    </QueryClientProvider>,
+  );
+}
+
+// #712: every audited write happens on another screen, so the audit log asks the server again each
+// time it opens instead of serving a trail cached inside the stale time.
+describe('AuditPage on opening', () => {
+  it('asks the server for the trail and the filters again each time it opens', async () => {
+    let eventReads = 0;
+    let filterReads = 0;
+    server.use(
+      adminSession(),
+      http.get('/api/audit/filters', () => {
+        filterReads += 1;
+        return HttpResponse.json(FILTER_OPTIONS);
+      }),
+      http.get('/api/audit/events', () => {
+        eventReads += 1;
+        return HttpResponse.json(EVENTS);
+      }),
+    );
+    const queryClient = appQueryClient();
+
+    const first = renderPageWith(queryClient);
+    expect(await screen.findByText('1 total')).toBeInTheDocument();
+    await waitFor(() => expect(filterReads).toBe(1));
+    expect(eventReads).toBe(1);
+    first.unmount();
+
+    renderPageWith(queryClient);
+    await waitFor(() => expect(eventReads).toBe(2));
+    await waitFor(() => expect(filterReads).toBe(2));
+  });
+
+  it('shows an event written on another screen without waiting out the stale time', async () => {
+    const written = {
+      id: 'event-2',
+      occurredAt: '2026-09-11T14:05:00Z',
+      entityType: 'owners',
+      entityId: 'owner-9',
+      action: 'insert',
+      actorName: 'Renée Calloway',
+      actorEmail: 'renee@example.com',
+    };
+    let trail = EVENTS.rows;
+    server.use(
+      adminSession(),
+      http.get('/api/audit/filters', () => HttpResponse.json(FILTER_OPTIONS)),
+      http.get('/api/audit/events', () =>
+        HttpResponse.json({ ...EVENTS, rows: trail, total: trail.length }),
+      ),
+      http.post('/api/directory/owners', () => {
+        // The server writes the audit row in the same transaction as the owner.
+        trail = [written, ...trail];
+        return HttpResponse.json({ id: 'owner-9' }, { status: 201 });
+      }),
+    );
+    const queryClient = appQueryClient();
+
+    const first = renderPageWith(queryClient);
+    expect(await screen.findByText('1 total')).toBeInTheDocument();
+    first.unmount();
+
+    const { result } = renderHook(() => useCreateOwner(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    });
+    await act(() =>
+      result.current.mutateAsync({
+        name: 'Juniper Holdings',
+        initials: null,
+        contactEmail: null,
+        contactPhone: null,
+        defaultMgmtFeeBps: null,
+        reserveAmount: 0,
+      }),
+    );
+
+    renderPageWith(queryClient);
+    expect(await screen.findByText('2 total')).toBeInTheDocument();
+    expect(within(eventsTable()).getByText('owners')).toBeInTheDocument();
   });
 });

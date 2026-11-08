@@ -18,6 +18,22 @@ next section.
 
 No unreleased changes.
 
+## [0.31.4] - 2026-11-08
+
+### Fixed
+
+- The audit log now asks the server for its events and its filter choices each time it opens.
+  Before, an event written moments earlier on another screen (a new owner, a posted payment) stayed
+  missing for up to 30 seconds, and a person who had just acted for the first time was missing from
+  the actor filter for up to five minutes. While the fresh read loads, the rows already on screen
+  stay put; paging and filtering within the open page behave as before (#712).
+
+### Changed
+
+- The `react-frontend` guidance now covers a read that nearly every write changes: it is fetched again when
+  its page opens instead of relying on each mutation to refresh it. The audit trail is the example
+  (#712).
+
 ## [0.31.3] - 2026-11-07
 
 ### Fixed
@@ -1920,7 +1936,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.3...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.4...HEAD
+[0.31.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.4
 [0.31.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.3
 [0.31.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.2
 [0.31.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.1
