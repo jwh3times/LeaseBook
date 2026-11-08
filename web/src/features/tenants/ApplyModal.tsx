@@ -152,7 +152,8 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       setError({ message: orgTodayUnavailableMessage(orgToday) });
       return;
     }
-    if (holdingBanksUnavailable) return; // Apply is disabled.
+    // Apply is disabled meanwhile; this keeps submit from moving money if it is ever reached anyway.
+    if (holdingBanksUnavailable) return;
     if (kind === 'prepayment' && prepaymentBanks && prepaymentBanks.length > 0 && !prepaymentBank) {
       setError({ message: 'Choose which account to apply from.' });
       return;

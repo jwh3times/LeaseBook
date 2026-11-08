@@ -185,10 +185,19 @@ describe('LeaseLateFeeModal save', () => {
 
   it('never saves from Enter in a field', async () => {
     const saved = serveSaves();
-    renderModal(detailWith({ lateFeeRentDueDayOverride: 5, lateFeeAmountOverride: 40 }));
+    // Every value field overridden, so each number field is on screen.
+    renderModal(
+      detailWith({
+        lateFeeRentDueDayOverride: 5,
+        lateFeeGraceDaysOverride: 3,
+        lateFeeAmountOverride: 40,
+        lateFeeRateBpsOverride: 750,
+      }),
+    );
     await screen.findByDisplayValue('5');
+    const values = ['5', '3', '40', '7.5'].map((v) => screen.getByDisplayValue(v));
 
-    for (const field of [screen.getByDisplayValue('5'), screen.getByDisplayValue('40')]) {
+    for (const field of values) {
       await userEvent.click(field);
       await userEvent.keyboard('{Enter}');
     }
