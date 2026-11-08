@@ -57,7 +57,6 @@ export function useAuditFilterOptions(enabled = true): UseQueryResult<AuditFilte
   return useQuery({
     queryKey: auditFilterOptionsKey,
     queryFn: () => unwrap(getApiAuditFilters(), 'Failed to load the audit filters'),
-    staleTime: 5 * 60_000,
     refetchOnMount: 'always',
     enabled,
   });

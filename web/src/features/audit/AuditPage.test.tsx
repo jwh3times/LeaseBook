@@ -3,6 +3,7 @@ import { act, render, renderHook, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { queryDefaults } from '@/app/queryDefaults';
 import { useCreateOwner } from '@/lib/directory';
 import { server } from '@/test/mocks/server';
 import { AuditPage } from './AuditPage';
@@ -234,13 +235,13 @@ describe('AuditPage', () => {
 });
 
 /**
- * The app's own query defaults (`src/app/providers.tsx`): a 30-second stale time and no refetch on
- * focus. With them, a remount inside the stale time serves the cache unless the page asks again
- * (#712), which the plain clients the other tests use cannot show.
+ * The app's own query defaults: a 30-second stale time and no refetch on focus. With them, a remount
+ * inside the stale time serves the cache unless the page asks again (#712), which the plain clients
+ * the other tests use cannot show. Retries stay off so a failure surfaces at once.
  */
 function appQueryClient() {
   return new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: 30_000, refetchOnWindowFocus: false } },
+    defaultOptions: { queries: { ...queryDefaults.queries, retry: false } },
   });
 }
 

@@ -3,12 +3,9 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import type { ReactNode } from 'react';
 import { ThemeProvider } from '@/design';
 import { RecordNavProvider } from '@/components/recordNav';
+import { queryDefaults } from './queryDefaults';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
-  },
-});
+const queryClient = new QueryClient({ defaultOptions: queryDefaults });
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
