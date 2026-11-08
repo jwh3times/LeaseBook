@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import type { TenantDetail } from '@/lib/directory';
 import { LeaseLateFeeModal } from './LeaseLateFeeModal';
@@ -163,6 +163,71 @@ describe('LeaseLateFeeModal', () => {
       depositRequired: 1450,
       status: 'active',
     });
+  });
+});
+
+// #711: the overrides change what a late fee posts, so they save only from the button, never from
+// Enter, and the button runs the fields' own min/max/step before anything is sent.
+describe('LeaseLateFeeModal save', () => {
+  function serveSaves() {
+    const saved: Record<string, unknown>[] = [];
+    server.use(
+      http.get('/api/settings/org', () => HttpResponse.json(ORG)),
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.put('/api/directory/leases/:id', async ({ request }) => {
+        saved.push((await request.json()) as Record<string, unknown>);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    return saved;
+  }
+  const save = () => screen.getByRole('button', { name: /save overrides/i });
+
+  it('never saves from Enter in a field', async () => {
+    const saved = serveSaves();
+    // Every value field overridden, so each number field is on screen.
+    renderModal(
+      detailWith({
+        lateFeeRentDueDayOverride: 5,
+        lateFeeGraceDaysOverride: 3,
+        lateFeeAmountOverride: 40,
+        lateFeeRateBpsOverride: 750,
+      }),
+    );
+    await screen.findByDisplayValue('5');
+    const values = ['5', '3', '40', '7.5'].map((v) => screen.getByDisplayValue(v));
+
+    for (const field of values) {
+      await userEvent.click(field);
+      await userEvent.keyboard('{Enter}');
+    }
+    await userEvent.click(screen.getByLabelText('Fee type'));
+    await userEvent.keyboard('{Enter}');
+    expect(saved).toHaveLength(0);
+
+    // The same values save from the button, so the Enters above had something to send.
+    await userEvent.click(save());
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+  });
+
+  it('refuses an out-of-range value in the field, before sending anything', async () => {
+    const saved = serveSaves();
+    renderModal(detailWith({ lateFeeRentDueDayOverride: 5 }));
+    const dueDay = await screen.findByDisplayValue('5');
+
+    // Rent is due on day 1 to 28: day 30 is refused by the field's own max.
+    await userEvent.clear(dueDay);
+    await userEvent.type(dueDay, '30');
+    await userEvent.click(save());
+    expect(dueDay).toHaveFocus();
+    expect(dueDay).toBeInvalid();
+    expect(saved).toHaveLength(0);
+
+    await userEvent.clear(dueDay);
+    await userEvent.type(dueDay, '28');
+    await userEvent.click(save());
+    await vi.waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0]).toMatchObject({ lateFeeRentDueDayOverride: 28 });
   });
 });
 

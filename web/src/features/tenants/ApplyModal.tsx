@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Button, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
@@ -8,6 +8,7 @@ import { Modal } from '@/components/Modal';
 import { type RefundCheckFund, useRefundCheckOptions } from '@/features/refundChecks/refundChecks';
 import '@/features/refundChecks/refundChecks.css';
 import { num } from '@/lib/directory';
+import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { useBankAccounts } from '@/lib/settings';
 import {
@@ -35,6 +36,9 @@ interface ApplyModalProps {
  * chosen one. Applies through the WP-01 commands and surfaces the engine guards in place (P51): an
  * over-receivable application (`insufficient_receivable`) or an over-held one (`insufficient_liability`)
  * renders an inline warning and keeps the modal open so the user lowers the amount.
+ *
+ * It moves money, so it has no form and applies only from its button, never from Enter, and the button
+ * runs the fields' own constraints before anything is sent (#711).
  */
 export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyModalProps) {
   const lockedMessage = useLockedPeriodMessage();
@@ -48,6 +52,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   const fieldId = useId();
   const [error, setError] = useState<LedgerPostError | null>(null);
   const sourceRef = useRef(newSourceRef());
+  const bodyRef = useRef<HTMLDivElement>(null);
   // Set once the server reports the prepaid credit spans banks (#475); until then the server picks the
   // bank. From then on the user must pick one — like the server, the dialog never guesses.
   const [bankAmbiguous, setBankAmbiguous] = useState(false);
@@ -123,6 +128,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
   });
 
   const submit = () => {
+    if (!reportFirstInvalidField(bodyRef.current)) return;
     const value = Number.parseFloat(amount);
     if (!(value > 0)) {
       setError({ message: 'Enter an amount greater than zero.' });
@@ -146,20 +152,14 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
       setError({ message: orgTodayUnavailableMessage(orgToday) });
       return;
     }
-    if (holdingBanksUnavailable) return; // Apply is disabled; Enter must not slip past it.
+    // Apply is disabled meanwhile; this keeps submit from moving money if it is ever reached anyway.
+    if (holdingBanksUnavailable) return;
     if (kind === 'prepayment' && prepaymentBanks && prepaymentBanks.length > 0 && !prepaymentBank) {
       setError({ message: 'Choose which account to apply from.' });
       return;
     }
     setError(null);
     mutation.mutate();
-  };
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      submit();
-    }
   };
 
   return (
@@ -187,7 +187,7 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
         </>
       }
     >
-      <div className="pf-modal-body col gap12">
+      <div ref={bodyRef} className="pf-modal-body col gap12">
         {banks.isError && (
           <div className="col gap6">
             <ApiErrorNotice
@@ -199,6 +199,20 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
               error={banks.error}
               onRetry={() => void banks.refetch()}
               retrying={banks.isFetching}
+            />
+          </div>
+        )}
+        {orgToday.status === 'error' && (
+          <div className="col gap6">
+            <ApiErrorNotice
+              error={orgToday.error}
+              fallback="Couldn’t load the organization’s settings, so today’s date isn’t known."
+              kind="read"
+            />
+            <ErrorAction
+              error={orgToday.error}
+              onRetry={orgToday.retry}
+              retrying={orgToday.retrying}
             />
           </div>
         )}
@@ -239,7 +253,6 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
             aria-label="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-            onKeyDown={onKeyDown}
           />
         </label>
 
@@ -269,7 +282,6 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
             aria-describedby={`${fieldId}-desc-hint`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            onKeyDown={onKeyDown}
             placeholder="e.g. Move-out settlement"
           />
         </div>
@@ -286,7 +298,6 @@ export function ApplyModal({ tenantId, initialKind, onClose, onApplied }: ApplyM
             aria-describedby={`${fieldId}-note-hint`}
             value={internalNote}
             onChange={(e) => setInternalNote(e.target.value)}
-            onKeyDown={onKeyDown}
             placeholder="Optional"
           />
         </div>

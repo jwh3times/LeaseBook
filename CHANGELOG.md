@@ -18,6 +18,24 @@ next section.
 
 No unreleased changes.
 
+## [0.31.2] - 2026-11-07
+
+### Fixed
+
+- **Enter in a field no longer issues a refund check, applies held funds or transfers a property.**
+  These dialogs, and the per-lease late-fee override, now save only from their button. The button
+  checks the fields first, as the bank fee or transfer dialog already did: a value outside a field's
+  limits, such as a rent due day after the 28th or an effective date after today, is refused in the
+  field. Focus moves to that field and nothing is sent. Enter on the focused button still saves, so
+  the keyboard path is unchanged (#711).
+- The apply held funds dialog now says when the organization's settings can't be loaded, with a
+  retry. Apply was already disabled then, and the reason only appeared after pressing Enter (#711).
+
+### Changed
+
+- An ownership transfer dated after the organization's today is now refused by the date field's
+  own limit. The dialog's separate "can't be in the future" message is gone (#711).
+
 ## [0.31.1] - 2026-11-07
 
 ### Fixed
@@ -1888,7 +1906,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.1...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.2...HEAD
+[0.31.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.2
 [0.31.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.1
 [0.31.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.0
 [0.30.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.30.5

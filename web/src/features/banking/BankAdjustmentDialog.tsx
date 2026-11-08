@@ -7,6 +7,7 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import { num } from '@/lib/directory';
+import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { useLockedPeriodMessage } from '@/features/tenants/ledgerMutations';
 import { centsToAmount, newIssueKey, parseAmountCents } from '@/features/refundChecks/refundChecks';
@@ -137,16 +138,7 @@ export function BankAdjustmentDialog({
   const save = () => {
     if (mutation.isPending) return;
     // Each field's own constraints first, in order: the browser names the first that fails.
-    const fields = bodyRef.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
-      'input, select',
-    );
-    const invalid = Array.from(fields ?? []).find((field) => !field.checkValidity());
-    if (invalid) {
-      invalid.reportValidity();
-      // Browsers focus it already; saying so keeps the field focused wherever reportValidity doesn't.
-      invalid.focus();
-      return;
-    }
+    if (!reportFirstInvalidField(bodyRef.current)) return;
     if (orgToday.status !== 'ready') return fail('date', orgTodayUnavailableMessage(orgToday));
     const cents = parseAmountCents(amount);
     if (cents === null || cents <= 0) {

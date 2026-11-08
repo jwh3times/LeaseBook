@@ -167,13 +167,18 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     );
   });
 
-  it('confirms from the keyboard with Enter in the date field', async () => {
+  // Enter in a field transfers nothing (#711); the keyboard path is Tab past Cancel to the button.
+  it('confirms from the keyboard on the transfer button', async () => {
     const posted = serve();
     renderProperty();
     const dialog = await openTransfer();
 
     await userEvent.selectOptions(await within(dialog).findByLabelText('New owner'), BUYER.id);
-    await userEvent.type(within(dialog).getByLabelText('Effective date'), '{Enter}');
+    await userEvent.click(within(dialog).getByLabelText('Effective date'));
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(confirmButton(dialog)).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
 
     expect(await screen.findByText(/Owner: Meridian Estates/)).toBeInTheDocument();
     expect(posted).toHaveLength(1);
@@ -257,9 +262,9 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     await userEvent.clear(date);
     await userEvent.type(date, '2026-11-01');
     await userEvent.click(confirmButton(dialog));
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      'The effective date can’t be in the future.',
-    );
+    // The field's own max refuses it before anything is sent (#711).
+    expect(date).toHaveFocus();
+    expect(date).toBeInvalid();
     expect(posted).toHaveLength(0);
   });
 
@@ -274,10 +279,31 @@ describe('Transfer ownership (#555, ADR-036)', () => {
     await userEvent.type(date, tomorrow());
     await userEvent.click(confirmButton(dialog));
 
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      'The effective date can’t be in the future. Record the transfer on or after the day it takes effect.',
-    );
+    // The field's own max refuses it, and focus goes to it, before anything is sent (#711).
+    expect(date).toHaveFocus();
+    expect(date).toBeInvalid();
     expect(posted).toHaveLength(0);
+
+    await userEvent.clear(date);
+    await userEvent.type(date, today());
+    await userEvent.click(confirmButton(dialog));
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+  });
+
+  it('never transfers from Enter in a field', async () => {
+    const posted = serve();
+    renderProperty();
+    const dialog = await openTransfer();
+
+    await userEvent.selectOptions(await within(dialog).findByLabelText('New owner'), BUYER.id);
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(within(dialog).getByLabelText('Effective date'));
+    await userEvent.keyboard('{Enter}');
+    expect(posted).toHaveLength(0);
+
+    // The same choice transfers from the button, so the Enters above had something to send.
+    await userEvent.click(confirmButton(dialog));
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
   });
 
   it.each([

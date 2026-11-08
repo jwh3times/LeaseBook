@@ -384,11 +384,16 @@ actually goes red with the branch reverted.
   `type="email"` and `min`/`max`/`step` checks, so invalid values reach the server (#561). A dialog
   with fields passes its handler to `Modal`'s `onSubmit`, which makes the body and the footer one
   form; its body is then a `div`, never a second `<form>`. A `step` must admit every value the field
-  stores: a percentage kept in basis points takes `step="0.01"`. The dialogs that post or move money
-  still save from a click, with no form (refund check, apply, late-fee override, transfer of
-  ownership, bank fee or transfer). Enter must not post money in them (#711), so they keep saving
-  from a click, and #711 makes that click run the fields' own checks before anything is sent; the bank
-  fee or transfer dialog already does
+  stores: a percentage kept in basis points takes `step="0.01"`.
+- A dialog that posts or moves money is the one exception to that rule (#711): it has no form and
+  saves only from its button, never from Enter in a field, because a stray Enter must never post or
+  move money. Its button runs `reportFirstInvalidField(body)` from `@/lib/fieldConstraints` before
+  sending anything, so the fields' own constraints still run: the first failing field shows the
+  browser's message, takes focus, and nothing is sent. Enter on the focused button is the keyboard
+  path. The money dialogs are refund check, apply, late-fee override, transfer of ownership, and bank
+  fee or transfer; a new one follows the same rule and adds no `onKeyDown` handler that saves. The
+  rule is for dialogs, not the ledger composer: recording a payment there submits on Enter in the
+  amount by design, because that Enter is the third interaction of the record-payment budget
 
 ---
 
@@ -480,6 +485,7 @@ test("records a payment", async () => {
 | Ad-hoc `font-variant-numeric`                | `<td className="num">` / `<Money>` / `className="pf-num"`    |
 | New CSS custom properties in feature CSS     | Add to `web/src/design/tokens.css` only                      |
 | `onClick={submit}` on a form's save button   | `type="submit"`; a dialog passes `onSubmit` to `Modal`       |
+| An `onKeyDown` Enter that posts money        | Button-only save; `reportFirstInvalidField` first (#711)     |
 | `toISOString().slice(0, 10)` as "today"      | `useOrgToday()` from `@/lib/orgCalendar` (#642)              |
 | Direct `fetch` for XSRF-protected endpoints  | Generated write functions (XSRF is configured automatically) |
 | Bare header `div` inside a `role="listbox"`  | Wrap the run in `<div role="group" aria-label>`              |
