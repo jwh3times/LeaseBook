@@ -146,7 +146,7 @@ Rules:
   left its owner's property count at 0 because only `['properties']` was invalidated (#559). Name
   the related records too (the owner list and `['owner', ownerId]` for a new property), and
   `['search']` for anything the palette can find
-- A read that nearly every write changes refetches on mount instead (`refetchOnMount: 'always'`):
+- A read that nearly every write changes is fetched again on mount instead (`refetchOnMount: 'always'`):
   invalidating it from every mutation would mean a hand-kept list of writes. The audit trail and its
   filter options are the case (#712); every audited write happens on another screen, so the log asks
   again each time it opens, and cached rows show meanwhile
