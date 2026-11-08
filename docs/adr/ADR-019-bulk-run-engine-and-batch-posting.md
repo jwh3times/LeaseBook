@@ -4,10 +4,12 @@
 - **Date:** 2026-06-23
 - **Milestone:** M6 (plan-local WP-1 — not a `docs/ROADMAP.md` WP id)
 - **Amended by:** [ADR-028](ADR-028-platform-capability-model.md),
-  [ADR-033](ADR-033-late-fee-eligibility-and-rent-obligation-link.md). ADR-028 adds the capability
+  [ADR-033](ADR-033-late-fee-eligibility-and-rent-obligation-link.md),
+  [ADR-037](ADR-037-effective-dated-lease-attribution.md). ADR-028 adds the capability
   snapshot the run engine freezes at confirm entry (§4a below) and the chunked-confirm constraint in
   the revisit trigger; ADR-033 replaces the late-fee source-ref row with a rent-obligation key and
-  structural one-fee constraint.
+  structural one-fee constraint; ADR-037's amendment of 2026-11-05 makes the late-fee assessment
+  date the organization's today (the addendum under §4c).
 - **Amended 2026-08-09 (self):** strategies plan and the engine executes (§4b); §4a revised so no
   capability set reaches a strategy; §2 corrected — source-ref keys must not be derived from
   `RunType`
@@ -204,6 +206,12 @@ date once, and confirmation evaluates and posts on its own current date. Freezin
 would contradict the domain definition of assessment as a present-tense act and could deliberately
 post a stale date after midnight. The capability token is different: it freezes reachability state so
 money paths cannot change underneath an operator; it is not a general snapshot token for domain data.
+
+**Addendum (2026-11-07, #721): the current date is the organization's.** Since ADR-037's amendment
+of 2026-11-05 (#642), the current calendar date above is the organization's today: the injected
+`TimeProvider`'s instant read in the time zone its settings keep, not the UTC date. The rest of the
+rule stands: each operation still captures that date once, and confirmation still evaluates and posts
+on its own current date.
 
 **Two things deliberately kept out of the decision.** The _amount_ was already canonical everywhere
 (`Proration.Charge`, `LateFeeCalculator.Compute`, `DisbursementAmounts.Compute`). The _source ref_

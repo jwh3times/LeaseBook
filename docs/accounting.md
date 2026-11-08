@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-07
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -595,8 +595,9 @@ computed from each lease's own rent when the run values the fee, so a configured
 charged at the cap. Operators review the preview and pick which delinquent ledgers to charge before
 confirming; the run is never silent. Eligibility is calculated from the contractual rent due date,
 not the rent journal date: the next calendar day is late day one, and charging begins on late day
-five or the later configured threshold. Preview and run confirmation both use the real server date,
-and the confirmation posts on that assessment date, and no operator-supplied future assessment date exists. The fee entry's
+five or the later configured threshold. Preview and run confirmation each use the organization's
+today when they run ([Which day it is](#which-day-it-is)), the confirmation posts on that assessment
+date, and no operator-supplied future assessment date exists. The fee entry's
 `assesses_entry_id` points to the exact `RentCharged` entry, with a unique org-scoped constraint that
 permits only one fee for that rent obligation. Receivable reductions apply oldest-charge-first when
 the run decides whether that rent remains open, so an unrelated open charge cannot revive settled

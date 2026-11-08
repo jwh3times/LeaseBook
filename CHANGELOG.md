@@ -18,6 +18,20 @@ next section.
 
 No unreleased changes.
 
+## [0.31.3] - 2026-11-07
+
+### Fixed
+
+- ADR-033 and ADR-019 no longer say the late-fee run assesses on the UTC date. Each carries a dated
+  addendum pointing to ADR-037's amendment: since 0.30.0 the assessment date is the organization's
+  today, the date in its time zone. Their decision text is unchanged, and the ADR index lists ADR-037
+  as amending both. The accounting guide's late-fee section, which still said "the real server
+  date", now says the same. Nothing the app does changes (#721).
+- The `dotnet-api` guidance now says where a server-side "today" comes from:
+  `TimeProvider.TodayIn` in the organization's zone, through the module's `IOrgTimeZone` port, or
+  `HostOrgCalendar` in the host. It is never the UTC date. Until now only the `trust-accounting`
+  guidance said so (#721).
+
 ## [0.31.2] - 2026-11-07
 
 ### Fixed
@@ -1906,7 +1920,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.2...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.3...HEAD
+[0.31.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.3
 [0.31.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.2
 [0.31.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.1
 [0.31.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.0

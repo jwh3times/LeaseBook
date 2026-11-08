@@ -1,6 +1,6 @@
 # ADR-033: Late-fee eligibility and rent-obligation linkage
 
-- **Status:** Accepted (amended by ADR-034)
+- **Status:** Accepted (amended by ADR-034, ADR-037)
 - **Date:** 2026-08-13
 - **Deciders:** Jerry Holland
 - **Amends:** [ADR-006](ADR-006-posting-template-catalog.md) and
@@ -9,6 +9,9 @@
 [ADR-034](ADR-034-computed-fifo-receivable-allocation.md) extends oldest-charge-first allocation to
 delinquency aging and persists charge due dates. The eligibility and rent-obligation linkage
 decision here remains in force.
+
+[ADR-037](ADR-037-effective-dated-lease-attribution.md)'s amendment of 2026-11-05 replaces the UTC
+date as the assessment date with the organization's today; see the addendum below the decision.
 
 ## Context
 
@@ -37,6 +40,13 @@ stores it as `assesses_entry_id`, enforced by an org-safe composite foreign key 
 index on `(org_id, assesses_entry_id)`. Its idempotency key is
 `latefee:rent-entry={rentEntryId}`. The relation, not tenant plus month, enforces one assessment per
 rental payment even when a caller supplies a different source reference.
+
+## Addendum (2026-11-07, #721): the assessment date is the organization's today
+
+Since ADR-037's amendment of 2026-11-05 (#642), the assessment date is the organization's today, the
+injected `TimeProvider`'s instant read in the time zone its settings keep, not the server's UTC date,
+which a US evening has already left. Preview and confirm each still take that date when they run, an
+operator still cannot select a future assessment date, and confirm still posts on its own date.
 
 ## Consequences
 
