@@ -1,9 +1,10 @@
-import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useId, useRef, useState } from 'react';
 import { asApiError, type ApiError } from '@/api';
 import { Button, Input, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
+import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { useOrgToday } from '@/lib/orgCalendar';
 import {
   useOwners,
@@ -53,6 +54,10 @@ interface TransferOwnershipDialogProps {
  * earlier, and the security deposits held for its tenants move to the buyer in the same entry. Seller
  * equity is not settled here, and the dialog says so before anything posts. A refusal — a backdated
  * date that would strand later deposit activity, a locked month — stays inline with the dialog open.
+ *
+ * It moves deposits, so it has no form and transfers only from its button, never from Enter, and the
+ * button runs the fields' own constraints first (#711): the date's `max` refuses a date after the
+ * organization's today in the field, before anything is sent.
  */
 export function TransferOwnershipDialog({
   property,
@@ -65,6 +70,7 @@ export function TransferOwnershipDialog({
   const isAdmin = useSession().data?.role === 'PMAdmin';
   // One key per dialog open, so a retried request records the transfer once.
   const sourceRef = useRef(newSourceRef());
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [toOwnerId, setToOwnerId] = useState('');
   // The latest date a transfer can carry is the organization's today, in its own zone, not the
   // viewer's (ADR-036, #642). null until the operator types a date: the field shows that today.
@@ -80,18 +86,13 @@ export function TransferOwnershipDialog({
 
   async function confirm() {
     if (!ready || transfer.isPending) return;
+    if (!reportFirstInvalidField(bodyRef.current)) return;
     if (!toOwnerId) {
       setError('Choose the new owner.');
       return;
     }
     if (!effectiveDate) {
       setError('Enter the date the transfer takes effect.');
-      return;
-    }
-    if (effectiveDate > today) {
-      setError(
-        'The effective date can’t be in the future. Record the transfer on or after the day it takes effect.',
-      );
       return;
     }
     setError(null);
@@ -107,13 +108,6 @@ export function TransferOwnershipDialog({
       setError(refusal(asApiError(e, 'Could not transfer the property.'), isAdmin));
     }
   }
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      void confirm();
-    }
-  };
 
   return (
     <Modal
@@ -136,7 +130,7 @@ export function TransferOwnershipDialog({
         </>
       }
     >
-      <div className="pf-modal-body col gap12">
+      <div ref={bodyRef} className="pf-modal-body col gap12">
         <p className="t3 fs13">
           {property.address} passes from {property.ownerName} to the new owner on the effective
           date. Security deposits held for this property's tenants move to the new owner on that
@@ -188,7 +182,6 @@ export function TransferOwnershipDialog({
             value={effectiveDate}
             max={today || undefined}
             onChange={(e) => setEffectiveDate(e.target.value)}
-            onKeyDown={onKeyDown}
           />
           {orgToday.status === 'error' && (
             <div className="col gap6">

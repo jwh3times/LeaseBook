@@ -333,6 +333,34 @@ describe('RefundCheckModal server rejections', () => {
   });
 });
 
+// #711: issuing a check moves money, so it issues only from its button, never from Enter.
+describe('RefundCheckModal Enter', () => {
+  it('never issues a check from Enter in a field', async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      ...readsFor([DEPOSIT]),
+      http.post('/api/refund-checks', async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json(ISSUED);
+      }),
+    );
+    const { onIssued } = renderModal();
+    await screen.findByText('Security Deposit Trust');
+    await completeAddress();
+
+    for (const label of ['Amount', 'Check number', 'Check date', 'Pay to the order of', 'ZIP']) {
+      await userEvent.click(screen.getByLabelText(label));
+      await userEvent.keyboard('{Enter}');
+    }
+    expect(bodies).toHaveLength(0);
+
+    // The same values issue from the button, so the Enters above had something to send.
+    await userEvent.click(screen.getByRole('button', { name: 'Issue check' }));
+    await vi.waitFor(() => expect(onIssued).toHaveBeenCalledWith(ISSUED));
+    expect(bodies).toHaveLength(1);
+  });
+});
+
 describe('RefundCheckModal issue → print', () => {
   it('issues once with the chosen bucket, then offers Print and Done but never Issue again', async () => {
     const bodies: Record<string, unknown>[] = [];

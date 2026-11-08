@@ -80,18 +80,21 @@ test('a staff member transfers a property to another owner and its held deposits
   await expect(dialog.getByLabel('New owner')).toBeVisible();
   await runA11y(page);
 
-  // A future date is refused in the dialog before anything posts.
+  // A future date is refused by the field's own max, with focus on it, before anything posts (#711).
   const date = dialog.getByLabel('Effective date');
+  const confirm = dialog.getByRole('button', { name: 'Transfer ownership' });
   await dialog.getByLabel('New owner').selectOption({ label: to });
   await date.fill(localDaysAgo(-1));
-  await date.press('Enter');
-  await expect(dialog.getByRole('alert')).toContainText('can’t be in the future');
+  await confirm.click();
+  await expect(date).toBeFocused();
+  expect(await date.evaluate((el: HTMLInputElement) => el.validity.rangeOverflow)).toBe(true);
+  await expect(dialog).toBeVisible();
 
-  // Confirmed from the keyboard: Enter in the date field.
+  // Confirmed from the keyboard on the button: Enter in a field moves no money (#711).
   const retries = testInfo.project.retries;
   const effective = localDaysAgo(retries - Math.min(testInfo.retry, retries));
   await date.fill(effective);
-  await date.press('Enter');
+  await confirm.press('Enter');
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('status').filter({ hasText: 'Transferred to' })).toHaveText(
     `Transferred to ${to}, effective ${effective}. The held security deposits moved with it.`,

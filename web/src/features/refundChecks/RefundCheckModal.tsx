@@ -1,13 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ApiError, TenantDetail } from '@/api';
 import { Button, EmptyState, Icon, Input, Money } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
@@ -15,6 +7,7 @@ import { ErrorAction } from '@/components/ErrorAction';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
 import { num, useOwners, useProperties } from '@/lib/directory';
+import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { useBankAccounts } from '@/lib/settings';
 import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { trackInteraction, type BudgetTask } from '@/lib/telemetry';
@@ -80,11 +73,15 @@ const fundKey = (fund: RefundCheckFund) =>
  * One idempotency key is minted per open: a retried Issue returns the same check rather than writing a
  * second one. Once a check is issued the dialog only offers to print it or finish, never to issue again
  * under that key.
+ *
+ * Issuing moves money, so the dialog has no form and issues only from its button, never from Enter, and
+ * the button runs the fields' own constraints before anything is sent (#711).
  */
 export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: RefundCheckModalProps) {
   const lockedMessage = useLockedPeriodMessage();
   const fieldId = useId();
   const issueKey = useRef(newIssueKey());
+  const bodyRef = useRef<HTMLDivElement>(null);
   // The open is the first interaction; a fund choice is a committing choice (P59).
   const interactions = useRef(1);
   const budgetReported = useRef(false);
@@ -243,6 +240,7 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
 
   const submit = () => {
     if (mutation.isPending || issued) return;
+    if (!reportFirstInvalidField(bodyRef.current)) return;
     if (readsUnavailable) {
       setError({
         message:
@@ -299,13 +297,6 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
     }
   };
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      submit();
-    }
-  };
-
   const describedBy = (field: FieldName, ...more: (string | false)[]) =>
     [error?.field === field && `${fieldId}-error`, ...more].filter(Boolean).join(' ') || undefined;
 
@@ -342,7 +333,6 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
         aria-invalid={error?.field === name || undefined}
         aria-describedby={describedBy(name, input.hint?.id ?? false)}
         onChange={(e) => input.onChange(e.target.value)}
-        onKeyDown={onKeyDown}
       />
     </div>
   );
@@ -457,7 +447,7 @@ export function RefundCheckModal({ tenantId, tenant, onClose, onIssued }: Refund
         )
       }
     >
-      <div className="pf-modal-body col gap12">
+      <div ref={bodyRef} className="pf-modal-body col gap12">
         {/* Error before loading: a failed read must never sit behind a skeleton. */}
         {options.isError ? (
           <div className="col gap6">

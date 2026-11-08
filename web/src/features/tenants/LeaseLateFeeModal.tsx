@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Badge, Button, formatMoney, Input, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { Modal } from '@/components/Modal';
 import { type TenantDetail, useUpdateLease } from '@/lib/directory';
+import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { useOrgSettings } from '@/lib/settings';
 
 /**
@@ -26,6 +27,10 @@ function numOrNull(value: number | string | null | undefined): number | null {
  *
  * The org default is shown next to the inherit option so the operator can see what they are
  * inheriting without leaving the dialog.
+ *
+ * The overrides change what a late fee posts, so like the other money dialogs it has no form and saves
+ * only from its button, never from Enter, and the button runs the fields' own `min`/`max`/`step`
+ * before anything is sent (#711).
  */
 export function LeaseLateFeeModal({
   tenantId,
@@ -39,6 +44,7 @@ export function LeaseLateFeeModal({
   const lease = detail.lease;
   const settings = useOrgSettings();
   const update = useUpdateLease(tenantId);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const [dueDay, setDueDay] = useState(numOrNull(lease?.lateFeeRentDueDayOverride));
   const [grace, setGrace] = useState(numOrNull(lease?.lateFeeGraceDaysOverride));
@@ -52,6 +58,7 @@ export function LeaseLateFeeModal({
 
   async function save() {
     if (!lease) return;
+    if (!reportFirstInvalidField(bodyRef.current)) return;
     try {
       await update.mutateAsync({
         id: lease.id,
@@ -80,7 +87,7 @@ export function LeaseLateFeeModal({
 
   return (
     <Modal title="Late fee policy for this lease" onClose={onClose}>
-      <div className="col gap14 pf-pad">
+      <div ref={bodyRef} className="col gap14 pf-pad">
         <p className="t3 fs13">
           Each field either inherits the organization default or overrides it for this lease alone.
           The NC §42-46 cap still applies to whatever is configured here.

@@ -201,16 +201,18 @@ test('collects a deposit and a prepayment, then applies both against a charge: e
   await page.getByRole('button', { name: 'Apply…' }).click();
   apply = page.getByRole('dialog', { name: 'Apply held funds' });
   await apply.getByLabel('Source').selectOption('prepayment');
+  const applyButton = apply.getByRole('button', { name: 'Apply', exact: true });
   await apply.getByLabel('Amount').fill('999999');
-  await apply.getByLabel('Amount').press('Enter');
+  await applyButton.click();
   await expect(apply.getByRole('alert')).toContainText('exceeds');
   await expect(apply).toBeVisible();
 
-  // Keyboard path: correct the amount and apply with Enter. The prepaid credit becomes a payment
-  // against the charge, so the row carries the amount on both sides and the balance does not move.
+  // Keyboard path: correct the amount and apply with Enter on the button, since Enter in a field moves
+  // no money (#711). The prepaid credit becomes a payment against the charge, so the row carries the
+  // amount on both sides and the balance does not move.
   await apply.getByLabel('Amount').fill(dollars(prepayment));
   await apply.getByLabel('Statement description').fill(prepaymentApplied);
-  await apply.getByLabel('Statement description').press('Enter');
+  await applyButton.press('Enter');
   await expect(apply).toBeHidden();
   const appliedRow = ledgerRow(page, prepaymentApplied);
   await expect(appliedRow.getByRole('gridcell').nth(CHARGE)).toHaveText(shown(prepayment));

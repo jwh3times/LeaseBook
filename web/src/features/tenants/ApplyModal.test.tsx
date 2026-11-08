@@ -161,7 +161,7 @@ describe('ApplyModal when the trust banks cannot be read', () => {
     renderModal();
 
     await userEvent.type(await screen.findByLabelText(/amount/i), '100');
-    await userEvent.keyboard('{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: /^apply$/i }));
 
     expect(await screen.findByText(/no trust bank is configured/i)).toBeInTheDocument();
   });
@@ -180,6 +180,34 @@ describe('ApplyModal when the trust banks cannot be read', () => {
     await userEvent.click(await screen.findByRole('button', { name: /retry/i }));
 
     expect(await screen.findByRole('button', { name: /^apply$/i })).toBeEnabled();
+  });
+});
+
+// #711: applying held funds moves money, so it saves only from its button, never from Enter.
+describe('ApplyModal Enter', () => {
+  it('never applies from Enter in a field', async () => {
+    const posted: unknown[] = [];
+    server.use(
+      http.get('/api/auth/csrf', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/settings/banks', () => HttpResponse.json(BANKS)),
+      http.post('/api/accounting/tenants/:tenantId/deposit-applications', async ({ request }) => {
+        posted.push(await request.json());
+        return HttpResponse.json({ entryId: 'a1' });
+      }),
+    );
+    const { onApplied } = renderModal();
+    await screen.findByText(/Operating Trust/);
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled());
+
+    await userEvent.type(screen.getByLabelText('Amount'), '100{Enter}');
+    await userEvent.type(screen.getByLabelText('Statement description'), 'Move-out{Enter}');
+    await userEvent.type(screen.getByLabelText('Internal note'), 'Keys back{Enter}');
+    expect(posted).toHaveLength(0);
+
+    // The same values apply from the button, so the Enters above had something to send.
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledWith('a1'));
+    expect(posted).toHaveLength(1);
   });
 });
 
@@ -234,11 +262,12 @@ describe('ApplyModal date', () => {
     renderModal();
 
     await screen.findByText(/Operating Trust/);
-    await userEvent.type(screen.getByLabelText('Amount'), '100');
-    await userEvent.keyboard('{Enter}');
 
-    expect(await screen.findByText(/today’s date isn’t known/)).toBeInTheDocument();
+    // The dialog says why Apply is disabled without waiting for an attempt to apply (#711).
+    expect(await screen.findByText(/Settings are down\./)).toBeInTheDocument();
+    expect(screen.getByText(/Reference: corr-1/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Amount'), '100{Enter}');
     expect(posted).toBe(false);
   });
 });
