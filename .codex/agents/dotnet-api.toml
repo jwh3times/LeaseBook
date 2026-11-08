@@ -272,6 +272,25 @@ internal sealed class BankClearingAdapter(ISender sender) : IBankClearing
 
 ---
 
+## Which day it is (#642, ADR-037)
+
+A server-side "today" or "current month" is the organization's, never the UTC date, which a US
+evening has already left. Take the instant from the injected `TimeProvider` and read it in the
+organization's zone with `TimeProvider.TodayIn(zone)` (`SharedKernel/Time/CalendarDate.cs`):
+
+- Accounting, Operations and Payments get the zone from their own `IOrgTimeZone` port in
+  `Contracts/`; the host's `HostOrgCalendar` adapts all three to Directory's setting. Accounting's
+  postings ask `PostingCalendar`.
+- Directory reads its own setting through `OrgCalendar`.
+- The host's own defaults (a statement, run preview or report with no period or as-of) use
+  `HostOrgCalendar.TodayAsync` and `PeriodAsync`.
+
+Never `DateOnly.FromDateTime(clock.GetUtcNow()...)` or `DateTime.UtcNow` for a calendar date. A
+timestamp, such as a row's creation time, stays a UTC instant. `trust-accounting` guidance carries
+the money side: what may not be dated after that today.
+
+---
+
 ## Business events and posting templates
 
 All accounting mutations go through business events → posting templates → journal entries. Never write to `journal_entries`/`journal_lines` directly.
@@ -360,4 +379,5 @@ public sealed class MyFeatureTests(PostgresFixture fixture)
 | `float`/`double` for money                         | `decimal` in C#, `NUMERIC(14,2)` in Postgres                                                            |
 | UPDATE/DELETE on `journal_entries`/`journal_lines` | Linked reversal entry (`reverses_entry_id`)                                                             |
 | Global query filter as the only tenancy guard      | RLS policy is the real boundary; EF filter is ergonomics                                                |
-| `new Guid()` for IDs                               | `UuidV7.NewId()` from SharedKernel                                                                      |'''
+| `new Guid()` for IDs                               | `UuidV7.NewId()` from SharedKernel                                                                      |
+| `DateOnly.FromDateTime(…UtcNow)` as "today"        | `TimeProvider.TodayIn(zone)`, the zone from the module's `IOrgTimeZone`; `HostOrgCalendar` in the host  |'''
