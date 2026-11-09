@@ -55,7 +55,7 @@
     <!-- Telemetry baseline (WP-05): OpenTelemetry tracing + Azure Monitor exporter. The exporter
          is a no-op locally — it only ships spans when APPLICATIONINSIGHTS_CONNECTION_STRING is set. -->
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.2" />
     <PackageVersion Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.10.0" />
   </ItemGroup>
 
@@ -90,7 +90,7 @@
   <ItemGroup>
     <!-- Test stack (P7 / ADR-032): executable projects explicitly target Microsoft Testing
          Platform v2; global.json selects the .NET 10 MTP implementation of dotnet test. -->
-    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.3" />
     <!-- Coverage collection for the test projects (ADR-055): adds the `coverage` options to each
          MTP test executable and is inert unless one is passed. Peer-locked to the platform: each
          release names an exact Microsoft.Testing.Platform, and 18.11.2 names 2.4.0, the version
@@ -103,7 +103,7 @@
          Peer-locked to xunit.v3.mtp-v2: the metapackage's transitives pin
          xunit.v3.extensibility.core / xunit.v3.common to an exact version, so these two
          PackageVersions must move together or restore fails NU1608. -->
-    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.3" />
     <PackageVersion Include="Shouldly" Version="4.3.0" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
     <!-- Direct architecture-test use; already resolved transitively by NetArchTest at this version. -->
