@@ -16,14 +16,21 @@ import { type BankAdjustmentKind, recordBankAdjustment, useBankBalances } from '
 export interface BankAdjustmentDialogProps {
   bankAccountId: string;
   bankName: string;
-  /** Whether the open account is a trust bank: only a trust bank offers a transfer (#553). */
+  /**
+   * Whether the open account is a trust bank: only a trust bank offers a transfer (#553) or a PM
+   * contribution (#720).
+   */
   isTrust: boolean;
   onClose: () => void;
   /**
    * Posted: the page refreshes the open account, and a transfer's destination, and says what was
-   * recorded. `toBankAccountId` is null for a fee.
+   * recorded. `toBankAccountId` is null for anything but a transfer.
    */
-  onPosted: (posted: { amount: number; toBankAccountId: string | null }) => void;
+  onPosted: (posted: {
+    kind: BankAdjustmentKind;
+    amount: number;
+    toBankAccountId: string | null;
+  }) => void;
 }
 
 type FieldName = 'amount' | 'date' | 'to';
@@ -34,11 +41,38 @@ interface FormError extends ApiError {
 
 const AMOUNT_PATTERN = '\\d{1,7}(\\.\\d{0,2})?';
 
+/** What each kind is called on its choice, its dialog, its save button and its default description. */
+const KINDS: Record<
+  BankAdjustmentKind,
+  { label: string; title: string; action: string; placeholder: string }
+> = {
+  fee: {
+    label: 'Bank fee',
+    title: 'Record a bank fee',
+    action: 'Record fee',
+    placeholder: 'Bank fee',
+  },
+  transfer: {
+    label: 'Transfer to another trust account',
+    title: 'Transfer to another trust account',
+    action: 'Record transfer',
+    placeholder: 'Transfer',
+  },
+  contribution: {
+    label: 'PM contribution',
+    title: 'Record a PM contribution',
+    action: 'Record contribution',
+    placeholder: 'PM contribution',
+  },
+};
+
 /**
  * Records a bank fee, or a transfer to another trust account, from the bank register (#553). Both are
  * paid from the PM's management fees held in the account, and the server refuses one that would take
  * them below zero (`pm_fees_insufficient`), so that refusal is shown beside the amount in the server's
- * own words, which say how much is held. Interest is not offered until #307 settles who it belongs to.
+ * own words, which say how much is held and that a PM contribution covers it. A PM contribution (#720)
+ * is the property manager's own money paid into a trust account to join those held fees. Interest is
+ * not offered until #307 settles who it belongs to.
  * <para>
  * It moves money, so like the other money dialogs it has no form and saves only from its button, never
  * from Enter, and the button runs each field's own constraints before anything is sent (#711). One
@@ -128,7 +162,8 @@ export function BankAdjustmentDialog({
     },
   });
 
-  const posted = () => onPosted({ amount: amountValue, toBankAccountId: transfer ? to : null });
+  const posted = () =>
+    onPosted({ kind, amount: amountValue, toBankAccountId: transfer ? to : null });
 
   const fail = (field: FieldName, message: string) => {
     setError({ field, message });
@@ -157,7 +192,7 @@ export function BankAdjustmentDialog({
 
   return (
     <Modal
-      title={transfer ? 'Transfer to another trust account' : 'Record a bank fee'}
+      title={KINDS[kind].title}
       onClose={onClose}
       footer={
         <>
@@ -171,46 +206,43 @@ export function BankAdjustmentDialog({
             aria-busy={mutation.isPending || undefined}
             onClick={save}
           >
-            {mutation.isPending ? 'Recording…' : transfer ? 'Record transfer' : 'Record fee'}
+            {mutation.isPending ? 'Recording…' : KINDS[kind].action}
           </Button>
         </>
       }
     >
       <div ref={bodyRef} className="pf-modal-body col gap12">
-        <p className="t3 fs13">
-          Paid from the management fees held in <b>{bankName}</b>. Owner and tenant funds are never
-          used, so the amount can be no more than the fees held there from its date on.
-        </p>
+        {kind === 'contribution' ? (
+          <p className="t3 fs13">
+            The property manager’s own money paid into <b>{bankName}</b>. It joins the management
+            fees held there, so a bank fee or a transfer dated on or after it can be paid from it.
+            It is never counted as fee income.
+          </p>
+        ) : (
+          <p className="t3 fs13">
+            Paid from the management fees held in <b>{bankName}</b>. Owner and tenant funds are
+            never used, so the amount can be no more than the fees held there from its date on.
+          </p>
+        )}
 
         {isTrust && (
           <fieldset className="pf-adjust-kinds">
             <legend className="pf-eyebrow">What to record</legend>
-            <label className="row gap6">
-              <input
-                type="radio"
-                name={`${fieldId}-kind`}
-                value="fee"
-                checked={kind === 'fee'}
-                onChange={() => {
-                  setKind('fee');
-                  setError(null);
-                }}
-              />
-              Bank fee
-            </label>
-            <label className="row gap6">
-              <input
-                type="radio"
-                name={`${fieldId}-kind`}
-                value="transfer"
-                checked={kind === 'transfer'}
-                onChange={() => {
-                  setKind('transfer');
-                  setError(null);
-                }}
-              />
-              Transfer to another trust account
-            </label>
+            {(Object.keys(KINDS) as BankAdjustmentKind[]).map((choice) => (
+              <label key={choice} className="row gap6">
+                <input
+                  type="radio"
+                  name={`${fieldId}-kind`}
+                  value={choice}
+                  checked={kind === choice}
+                  onChange={() => {
+                    setKind(choice);
+                    setError(null);
+                  }}
+                />
+                {KINDS[choice].label}
+              </label>
+            ))}
           </fieldset>
         )}
 
@@ -327,7 +359,7 @@ export function BankAdjustmentDialog({
           <Input
             id={`${fieldId}-description`}
             maxLength={200}
-            placeholder={transfer ? 'Transfer' : 'Bank fee'}
+            placeholder={KINDS[kind].placeholder}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />

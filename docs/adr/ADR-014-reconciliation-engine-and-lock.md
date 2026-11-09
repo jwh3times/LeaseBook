@@ -120,3 +120,47 @@ went negative before this change. None of the seeded organizations does.
 Interest is unchanged: the template and the `interest` kind stay, and no screen offers it until #307
 settles entitlement, which remains deferred under 5(a). This records an engine rule, not a compliance
 finding: whether it is what 21 NCAC 58A .0116-.0117 requires is for the compliance review.
+
+## Addendum — a PM contribution funds the held fees, and a staff void keeps to the floor (2026-11-09)
+
+The floor above left a charge larger than the PM's held fees with nowhere to go: in practice the
+property manager covers it by depositing its own money into the trust account, and no event recorded
+that (#720).
+
+**The model.** `PMContribution` is `DR bank / CR pm_income@bank`, both bases, with the bank dimension
+only. The PM's own money joins its held fees in that bank, so the bank and the held fees rise together
+and the trust equation holds. It is not a separate balance: held PM fees stay one figure per bank, and a
+later sweep moves PM money out whichever way it came in. It posts no owner equity, so it has no owner
+statement section. It is a trust-bank event only (`contribution_bank_not_trust`, 422): into the PM
+operating bank it would be the PM paying itself. The alternative, a new account class for contributed
+funds, was rejected: every held-fees reader (I2, I3, I11, the floor, the trust equation report,
+migration verification) would have had to learn it, for a distinction no rule yet asks for.
+
+**It is not income.** The management-fee income report, the one reader that treats `pm_income` as
+earned income, leaves out `PMContribution` and its voids, as it leaves out opening positions. Every
+other reader keeps reading `pm_income` as a balance and includes it.
+
+**The floor stays strict.** A contribution covers a charge dated on or after it. A bank that charged its
+fee before the PM's deposit arrived is recorded with the fee dated on or after the contribution and the
+bank's date in the internal note, rather than letting held fees sit below zero between the two dates.
+Each `pm_fees_insufficient` message now says that a contribution dated on or before the charge covers it.
+
+**A staff void keeps to the floor.** Before this, voiding an entry that raised a bank's held fees (a
+management fee since swept to the PM operating bank, or now a contribution a fee has drawn on) could
+take them below zero with no refusal. `VoidEntry` now refuses with `pm_fees_insufficient` (409), naming
+the bank and the shortfall, when the void's mirrored lines would leave held fees in any bank below zero
+on its date or later, read under the posting lock. It sits in the staff void command, not in the shared
+reversal service: the service's other callers either carry no held-fee lines (payment returns, refund
+check voids) or repost the corrected position at once (the onboarding supersede of an opening
+position, which migration verification checks). Voids that leave held fees alone or raise them are
+unaffected.
+
+The floor reads every bank the void takes held fees from, the PM operating bank included: voiding a
+sweep takes back fees that bank received, and I11 already holds it to zero. There the refusal offers
+no contribution, since one cannot go into that bank. A void into a closed period, or into a reconciled
+month of a bank it takes from, is refused as that first, as a bank fee is, because no contribution can
+be dated there.
+
+**No cap, provisionally.** Whether NCREC rules limit how much of a broker's own money may sit in a
+trust account is a question for the compliance review; this is built without a cap and revisited on
+its answer.

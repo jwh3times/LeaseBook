@@ -4,6 +4,7 @@ using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
+using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Accounting.Periods;
 using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
@@ -45,7 +46,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     {
         ["BankAccountId"] = (Fee with { BankAccountId = Guid.Empty }, ["BankAccountId"], null),
         ["SourceRef"] = (Fee with { SourceRef = "" }, ["SourceRef"], null),
-        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer."),
+        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution."),
         ["Amount"] = (Fee with { Amount = 0m }, ["Amount"], AmountMessage),
         ["Transfer.ToBankAccountId.Null"] = (Transfer with { ToBankAccountId = null }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Upper"] = (
@@ -57,6 +58,8 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         ["Fee.ToBankAccountId"] = (Fee with { ToBankAccountId = Other }, ["ToBankAccountId"], NotATransfer),
         ["Interest.ToBankAccountId"] = (
             Fee with { Kind = "Interest", ToBankAccountId = Other }, ["ToBankAccountId"], NotATransfer),
+        ["Contribution.ToBankAccountId"] = (
+            Fee with { Kind = "contribution", ToBankAccountId = Other }, ["ToBankAccountId"], NotATransfer),
         ["Fee.ToBankAccountId.Empty"] = (Fee with { ToBankAccountId = Guid.Empty }, ["ToBankAccountId"], NotATransfer),
     };
 
@@ -97,6 +100,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         { "fee", "BankFeeCharged", "Bank fee" },
         { "Interest", "InterestEarned", "Interest" },
         { "transfer", "TrustTransfer", "Transfer" },
+        { "contribution", "PMContribution", "PM contribution" },
     };
 
     [Theory]
@@ -136,6 +140,11 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
                 new(trust, 25m, null, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
                 new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
             ],
+            "PMContribution" =>
+            [
+                new(trust, 25m, null, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+                new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+            ],
             _ =>
             [
                 new(deposit, 25m, null, EntryBasis.Both, null, null, null, null, scope.DepositBankId),
@@ -144,6 +153,42 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
                 new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.DepositBankId),
             ],
         }, ignoreOrder: true);
+    }
+
+    // ---- a PM contribution keeps to the same locks as a bank fee (#720) ----
+
+    [Fact]
+    public async Task A_pm_contribution_into_a_closed_period_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await scope.RunAsync(() => Periods(scope).CloseAsync(2026, 2, ct), ct);
+
+        var refused = await Should.ThrowAsync<PeriodClosedException>(() => SendAsync(scope,
+            new RecordBankAdjustment("contribution", 25m, Feb5, scope.TrustBankId, null, null, "adj:closed"), ct));
+
+        refused.Code.ShouldBe("period_closed");
+        await scope.RunAsync(async () => (await scope.Db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0), ct);
+    }
+
+    [Fact]
+    public async Task A_pm_contribution_into_a_reconciled_month_of_its_account_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await scope.RunAsync(async () =>
+        {
+            var reconciliation = await new StartReconciliationHandler(scope.Db)
+                .Handle(new StartReconciliation(scope.TrustBankId, 2026, 2, 0m), ct);
+            await new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+                .Handle(new FinalizeReconciliation(reconciliation.Id), ct);
+        }, ct);
+
+        var refused = await Should.ThrowAsync<AccountPeriodLockedException>(() => SendAsync(scope,
+            new RecordBankAdjustment("contribution", 25m, Feb5, scope.TrustBankId, null, null, "adj:locked"), ct));
+
+        refused.Code.ShouldBe("account_period_locked");
+        await scope.RunAsync(async () => (await scope.Db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0), ct);
     }
 
     // ---- the guards on clearing ----

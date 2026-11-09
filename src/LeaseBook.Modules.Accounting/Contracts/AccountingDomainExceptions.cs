@@ -341,19 +341,31 @@ public enum HeldFeesCharge
     ProcessorFeeShortfall,
     BankFee,
     Transfer,
+
+    /// <summary>A staff void whose mirrored lines lower the held fees in a trust bank (#720).</summary>
+    Void,
+
+    /// <summary>
+    /// A staff void whose mirrored lines lower the held fees in the PM operating bank, such as voiding a
+    /// sweep it has since spent from (#720). A PM contribution cannot go there, so none is offered.
+    /// </summary>
+    VoidInPmOperatingBank,
 }
 
 /// <summary>
 /// A charge paid from the PM fees held in one bank is larger than they are, read as the lowest held
 /// balance on or after its date (409): a processor fee shortfall (ADR-053), a bank fee, or a transfer
-/// out of that bank (ADR-014 addendum, #553). Posting it would leave the bank holding less than owners
-/// and tenants are owed, so nothing is posted. The code is the same whichever charge it was; Payments
-/// keys its review on the code alone.
+/// out of that bank (ADR-014 addendum, #553), or a staff void that would lower them (#720). Posting it
+/// would leave the bank holding less than owners and tenants are owed, so nothing is posted. The code is
+/// the same whichever charge it was; Payments keys its review on the code alone. Each message names the
+/// remedy: a PM contribution to that bank dated on or before the charge.
 /// </summary>
 public sealed class PmFeesInsufficientException(
-    decimal shortfall, decimal held, Guid bankAccountId, HeldFeesCharge charge)
-    : AccountingDomainException("pm_fees_insufficient", Describe(charge, shortfall, held))
+    decimal shortfall, decimal held, Guid bankAccountId, HeldFeesCharge charge,
+    string? bankName = null, DateOnly? from = null)
+    : AccountingDomainException("pm_fees_insufficient", Describe(charge, shortfall, held, bankName, from))
 {
+    /// <summary>The amount the charge takes from the held fees (not the gap below them).</summary>
     public decimal Shortfall { get; } = shortfall;
 
     public decimal Held { get; } = held;
@@ -362,17 +374,30 @@ public sealed class PmFeesInsufficientException(
 
     public HeldFeesCharge Charge { get; } = charge;
 
-    // A floor already below zero is a breach I11 reports; to the person posting, it covers nothing.
-    private static string Describe(HeldFeesCharge charge, decimal amount, decimal held) => charge switch
-    {
-        HeldFeesCharge.BankFee =>
-            $"This account holds only {Math.Max(held, 0m):0.00} in management fees on or after the fee's date, "
-            + $"less than the {amount:0.00} fee, so nothing was posted.",
-        HeldFeesCharge.Transfer =>
-            $"The account this transfer comes from holds only {Math.Max(held, 0m):0.00} in management fees on "
-            + $"or after its date, less than the {amount:0.00} transfer, so nothing was posted.",
-        _ => "The management fees held in this account do not cover the processor fee shortfall.",
-    };
+    // A floor already below zero is a breach I11 reports; to the person posting, it covers nothing. A void
+    // names the bank, because the entry being voided may not show which bank its lines touch.
+    private static string Describe(
+        HeldFeesCharge charge, decimal amount, decimal held, string? bankName, DateOnly? from) => charge switch
+        {
+            HeldFeesCharge.BankFee =>
+                $"This account holds only {Math.Max(held, 0m):0.00} in management fees on or after the fee's date, "
+                + $"less than the {amount:0.00} fee, so nothing was posted. "
+                + "A PM contribution to this account dated on or before the fee covers it.",
+            HeldFeesCharge.Transfer =>
+                $"The account this transfer comes from holds only {Math.Max(held, 0m):0.00} in management fees on "
+                + $"or after its date, less than the {amount:0.00} transfer, so nothing was posted. "
+                + "A PM contribution to that account dated on or before the transfer covers it.",
+            HeldFeesCharge.Void =>
+                $"Voiding this entry would take the management fees held in {bankName} {amount - held:0.00} below "
+                + $"zero on or after {from:yyyy-MM-dd}, so nothing was posted. Void the later charge that uses them "
+                + $"first, or record a PM contribution to {bankName}.",
+            HeldFeesCharge.VoidInPmOperatingBank =>
+                $"Voiding this entry would take the management fees held in {bankName} {amount - held:0.00} below "
+                + $"zero on or after {from:yyyy-MM-dd}, so nothing was posted. Void the later charge that uses them "
+                + "first.",
+            _ => "The management fees held in this account do not cover the processor fee shortfall. "
+                + "A PM contribution to this account dated on or before the payout covers it.",
+        };
 }
 
 /// <summary>Which end of a transfer between bank accounts a refusal is about.</summary>
@@ -398,6 +423,19 @@ public sealed class TransferBankNotTrustException(Guid bankAccountId, TransferEn
     public Guid BankAccountId { get; } = bankAccountId;
 
     public TransferEnd End { get; } = end;
+}
+
+/// <summary>
+/// A PM contribution names a bank that is not a trust bank (422, #720). A contribution is the property
+/// manager's own money joining its held fees in a trust account; into the PM operating bank it would be
+/// the PM paying itself. Nothing is posted.
+/// </summary>
+public sealed class ContributionBankNotTrustException(Guid bankAccountId)
+    : AccountingDomainException(
+        "contribution_bank_not_trust",
+        "A PM contribution is paid into a trust account, and this account is not a trust account.")
+{
+    public Guid BankAccountId { get; } = bankAccountId;
 }
 
 public enum PaymentReturnBlock

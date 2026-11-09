@@ -464,14 +464,16 @@ export function BankingPage() {
           bankName={openBank?.name ?? 'this account'}
           isTrust={openBank?.isTrust ?? false}
           onClose={() => setAdjusting(false)}
-          onPosted={({ amount, toBankAccountId }) => {
+          onPosted={({ kind, amount, toBankAccountId }) => {
             setAdjusting(false);
             refreshAccount(acctId);
             if (toBankAccountId) refreshAccount(toBankAccountId);
             setAdjustmentNotice(
               toBankAccountId
                 ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
-                : `Bank fee of ${formatMoney(amount)} recorded.`,
+                : kind === 'contribution'
+                  ? `PM contribution of ${formatMoney(amount)} recorded.`
+                  : `Bank fee of ${formatMoney(amount)} recorded.`,
             );
           }}
         />
