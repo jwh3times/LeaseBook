@@ -81,7 +81,7 @@ describe('BankAdjustmentDialog', () => {
     await user.click(saveFee());
 
     await vi.waitFor(() => expect(onPosted).toHaveBeenCalledTimes(1));
-    expect(onPosted).toHaveBeenCalledWith({ amount: 25.5, toBankAccountId: null });
+    expect(onPosted).toHaveBeenCalledWith({ kind: 'fee', amount: 25.5, toBankAccountId: null });
     expect(posted).toHaveLength(1);
     expect(posted[0]?.url).toBe('/api/accounting/banks/trust1/adjustments');
     const { sourceRef, ...body } = posted[0]?.body ?? {};
@@ -236,7 +236,11 @@ describe('BankAdjustmentDialog', () => {
     await user.click(save);
 
     await vi.waitFor(() => expect(onPosted).toHaveBeenCalledTimes(1));
-    expect(onPosted).toHaveBeenCalledWith({ amount: 12.34, toBankAccountId: 'res1' });
+    expect(onPosted).toHaveBeenCalledWith({
+      kind: 'transfer',
+      amount: 12.34,
+      toBankAccountId: 'res1',
+    });
     expect(posted[0]?.body).toMatchObject({ kind: 'transfer', toBankAccountId: 'res1' });
   });
 
@@ -286,6 +290,57 @@ describe('BankAdjustmentDialog', () => {
     expect(screen.getByRole('button', { name: 'Record transfer' })).toBeDisabled();
   });
 
+  it('records a PM contribution into a trust account, with no destination', async () => {
+    const posted = serve();
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await user.click(screen.getByRole('radio', { name: 'PM contribution' }));
+    expect(screen.getByRole('dialog', { name: 'Record a PM contribution' })).toBeInTheDocument();
+    expect(screen.getByText(/The property manager’s own money/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('To account')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Description')).toHaveAttribute('placeholder', 'PM contribution');
+    await user.type(amountField(), '25');
+    await user.type(screen.getByLabelText(/Internal note/), 'bank charged the fee on the 3rd');
+    await user.click(screen.getByRole('button', { name: 'Record contribution' }));
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledTimes(1));
+    expect(onPosted).toHaveBeenCalledWith({
+      kind: 'contribution',
+      amount: 25,
+      toBankAccountId: null,
+    });
+    const { sourceRef, ...body } = posted[0]?.body ?? {};
+    expect(sourceRef).toMatch(/^bank-adjustment:[0-9a-f-]{36}$/);
+    expect(body).toEqual({
+      bankAccountId: 'trust1',
+      kind: 'contribution',
+      amount: 25,
+      date: orgToday(),
+      description: null,
+      toBankAccountId: null,
+      internalNote: 'bank charged the fee on the 3rd',
+    });
+  });
+
+  it('shows a contribution refused for an account that is not a trust account in the server’s words', async () => {
+    const detail =
+      'A PM contribution is paid into a trust account, and this account is not a trust account.';
+    serve({ respond: () => problem(422, 'contribution_bank_not_trust', detail) });
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await user.click(screen.getByRole('radio', { name: 'PM contribution' }));
+    await user.type(amountField(), '25');
+    await user.click(screen.getByRole('button', { name: 'Record contribution' }));
+
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+    expect(screen.getByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    expect(onPosted).not.toHaveBeenCalled();
+  });
+
   it('offers no transfer from an account that is not a trust account', async () => {
     serve();
     renderDialog({ bankAccountId: 'op1', bankName: 'Management Operating', isTrust: false });
@@ -293,6 +348,7 @@ describe('BankAdjustmentDialog', () => {
 
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     expect(screen.queryByText(/Transfer/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/contribution/i)).not.toBeInTheDocument();
     expect(saveFee()).toBeInTheDocument();
   });
 

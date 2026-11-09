@@ -30,12 +30,13 @@ is what keeps fiduciary money straight:
 | `owner_equity`      | How much of the trust belongs to each owner                                       |
 | `tenant_receivable` | What a tenant owes (rent, fees) — a promise, not cash                             |
 | `deposit_liability` | Security deposits and prepayments — money we **owe back** until it is applied     |
-| `pm_income`         | The property manager's earned management fee                                      |
+| `pm_income`         | Held PM fees: fees earned and not yet swept, plus any PM contribution             |
 | `pm_operating_bank` | The property manager's own **PM operating account**                               |
 
 The crucial separation: **`pm_income` can never carry an owner's name.** It is enforced at the
 database level (a line tagged owner-and-PM-income is rejected), so the manager's fee income can never
-appear on an owner's statement. Likewise security deposits and prepayments are **liabilities** — they
+appear on an owner's statement. Only the earned part of it is income: the management-fee report leaves
+out a PM contribution, and an opening position, along with their voids. Likewise security deposits and prepayments are **liabilities** — they
 are not income, and they do not become income until they are actually applied.
 
 ### Bank purpose fixes the trust boundary
@@ -223,7 +224,7 @@ read for it, and a statement, run or report with no period named opens on its mo
 
 Money that moves in or out cannot be dated after that day: a payment received, a deposit or prepayment
 collected or applied, deposits moved with a sale, a void, a refund check or its void, and a bank fee,
-interest or transfer. Each has happened by the day it is recorded, so a later date is refused
+interest, transfer or PM contribution. Each has happened by the day it is recorded, so a later date is refused
 (`posting_date_in_future`). A charge or a credit may be billed ahead, and so may the rent, late-fee and
 disbursement runs, which date their entries by the period they bill. A processor's settled payment is
 dated by its bank evidence and is not refused this way.
@@ -394,6 +395,18 @@ exceeds the lowest fees held in that bank on or after its date, and invariant I1
 held fees are below zero. A transfer is refused (`transfer_bank_not_trust`) when either end is the PM
 operating bank ([ADR-014 addendum](adr/ADR-014-reconciliation-engine-and-lock.md)). Staff record a fee
 or a transfer from the bank register; interest has no screen until #307 settles who it belongs to.
+
+**PM contributions.** When a charge is larger than the PM's held fees in a trust account, the property
+manager covers it with its own money: `PMContribution` (`DR bank / CR pm_income@bank`, both bases)
+records that deposit, so the bank and the held fees rise together and the trust equation still holds.
+It is recorded from the same register dialog, into a trust account only (`contribution_bank_not_trust`
+for the PM operating account), and keeps to the same period and reconciliation locks as a fee. The
+held-fees floor stays strict: a contribution covers a charge dated on or after it, so staff record it
+first and date the fee on or after it, putting the bank's own date in the internal note. A staff void is
+held to the same floor: a void whose lines take held fees from a bank, such as voiding a management fee
+already swept out, or a sweep the PM operating account has since spent from, is refused with
+`pm_fees_insufficient` when they would go below zero there on its date or later. There is no cap on a contribution yet; whether one applies is an open compliance
+question ([ADR-014 addendum, #720](adr/ADR-014-reconciliation-engine-and-lock.md)).
 
 **Processor fee differences.** `ProcessorFeeDifference` records the amount by which a payment
 processor's fee differed from the fee quoted to the tenant

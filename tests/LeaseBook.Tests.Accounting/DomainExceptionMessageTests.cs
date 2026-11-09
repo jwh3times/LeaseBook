@@ -200,13 +200,24 @@ public sealed class DomainExceptionMessageTests
         yield return (new RefundCheckClearedException(SampleId), "refund_check_cleared",
             "This check has cleared the bank, so it can no longer be voided.");
         yield return (new PmFeesInsufficientException(30m, 10m, SampleId, HeldFeesCharge.ProcessorFeeShortfall), "pm_fees_insufficient",
-            "The management fees held in this account do not cover the processor fee shortfall.");
+            "The management fees held in this account do not cover the processor fee shortfall. A PM contribution to this account dated on or before the payout covers it.");
         yield return (new PmFeesInsufficientException(30m, 10m, SampleId, HeldFeesCharge.BankFee), "pm_fees_insufficient",
-            "This account holds only 10.00 in management fees on or after the fee's date, less than the 30.00 fee, so nothing was posted.");
+            "This account holds only 10.00 in management fees on or after the fee's date, less than the 30.00 fee, so nothing was posted. A PM contribution to this account dated on or before the fee covers it.");
         yield return (new PmFeesInsufficientException(30m, -4m, SampleId, HeldFeesCharge.Transfer), "pm_fees_insufficient",
-            "The account this transfer comes from holds only 0.00 in management fees on or after its date, less than the 30.00 transfer, so nothing was posted.");
+            "The account this transfer comes from holds only 0.00 in management fees on or after its date, less than the 30.00 transfer, so nothing was posted. A PM contribution to that account dated on or before the transfer covers it.");
+        yield return (new PmFeesInsufficientException(30m, 10m, SampleId, HeldFeesCharge.Void, "Operating Trust", new DateOnly(2026, 3, 4)),
+            "pm_fees_insufficient",
+            "Voiding this entry would take the management fees held in Operating Trust 20.00 below zero on or after 2026-03-04, so nothing was posted. Void the later charge that uses them first, or record a PM contribution to Operating Trust.");
+        yield return (new PmFeesInsufficientException(30m, 10m, SampleId, HeldFeesCharge.VoidInPmOperatingBank, "Management Operating", new DateOnly(2026, 3, 4)),
+            "pm_fees_insufficient",
+            "Voiding this entry would take the management fees held in Management Operating 20.00 below zero on or after 2026-03-04, so nothing was posted. Void the later charge that uses them first.");
+        yield return (new PmFeesInsufficientException(30m, -4m, SampleId, HeldFeesCharge.Void, "Operating Trust", new DateOnly(2026, 3, 4)),
+            "pm_fees_insufficient",
+            "Voiding this entry would take the management fees held in Operating Trust 34.00 below zero on or after 2026-03-04, so nothing was posted. Void the later charge that uses them first, or record a PM contribution to Operating Trust.");
+        yield return (new ContributionBankNotTrustException(SampleId), "contribution_bank_not_trust",
+            "A PM contribution is paid into a trust account, and this account is not a trust account.");
         yield return (new PmFeesInsufficientException(30m, 10m, SampleId, (HeldFeesCharge)99), "pm_fees_insufficient",
-            "The management fees held in this account do not cover the processor fee shortfall.");
+            "The management fees held in this account do not cover the processor fee shortfall. A PM contribution to this account dated on or before the payout covers it.");
         yield return (new TransferBankNotTrustException(SampleId, TransferEnd.Source), "transfer_bank_not_trust",
             "A transfer moves money between trust accounts, and the account it comes from is not a trust account.");
         yield return (new TransferBankNotTrustException(SampleId, TransferEnd.Destination), "transfer_bank_not_trust",
@@ -256,14 +267,14 @@ public sealed class DomainExceptionMessageTests
             if (enumIndex < 0)
             {
                 yield return (AccountingDomainException)ctor.Invoke(
-                    [.. parameters.Select(p => SampleValue(p.ParameterType, null))]);
+                    [.. parameters.Select(p => SampleValue(p, null))]);
                 continue;
             }
 
             foreach (var enumValue in Enum.GetValues(Underlying(parameters[enumIndex].ParameterType)))
             {
                 var args = parameters
-                    .Select((p, i) => SampleValue(p.ParameterType, i == enumIndex ? enumValue : null))
+                    .Select((p, i) => SampleValue(p, i == enumIndex ? enumValue : null))
                     .ToArray();
                 yield return (AccountingDomainException)ctor.Invoke(args);
             }
@@ -272,20 +283,22 @@ public sealed class DomainExceptionMessageTests
 
     private static Type Underlying(Type t) => Nullable.GetUnderlyingType(t) ?? t;
 
-    private static object? SampleValue(Type parameterType, object? enumOverride)
+    private static object? SampleValue(System.Reflection.ParameterInfo parameter, object? enumOverride)
     {
         if (enumOverride is not null)
         {
             return enumOverride;
         }
 
-        var t = Underlying(parameterType);
+        var t = Underlying(parameter.ParameterType);
 
         if (t.IsEnum) return Enum.GetValues(t).GetValue(0);
         if (t == typeof(Guid)) return SampleId;
         if (t == typeof(decimal)) return 1234.56m;
         if (t == typeof(int)) return 2026;
         if (t == typeof(DateOnly)) return new DateOnly(2026, 10, 31);
+        // A display name the user chose (a bank's) may be shown; any other string could be a code.
+        if (t == typeof(string) && parameter.Name!.EndsWith("Name", StringComparison.Ordinal)) return "Sample Bank";
         if (t == typeof(string)) return SampleCode;
 
         throw new NotSupportedException(
