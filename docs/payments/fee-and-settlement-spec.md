@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of processor fees and payouts (issues #498, #500 and #513)
 - **Status:** Accepted for the payment simulation and built there. The Stripe sandbox mode (ADR-054, proposed) holds and posts payouts through the same model. Its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-09
 
 ## Evidence and boundary
 
