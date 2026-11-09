@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-09
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-78 scenarios, 1 of them an expected failure that shows a known limit. 5 journal event types and 18 routes are exempt.
+79 scenarios, 1 of them an expected failure that shows a known limit. 5 journal event types and 18 routes are exempt.
 
 ### Scenarios
 
@@ -273,6 +273,7 @@ not edit between the markers.
 | `bank-reconcile-finalize-and-lock` | Reconcile a trust account to $0.00, finalize, and see the locked month refuse a posting | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived` | `GET /api/accounting/banks/balances`<br>`GET /api/accounting/reconciliations`<br>`POST /api/accounting/banks/clearances`<br>`POST /api/accounting/reconciliations`<br>`POST /api/accounting/reconciliations/{id}/finalize`<br>`POST /api/accounting/tenants/{tenantId}/payments` |
 | `bank-reconciliation-unlock-and-refinalize` | As an administrator, unlock a finalized month with a reason, post into it, and finalize it again | Banking | `m4-banking.spec.ts` | demo | `PaymentReceived`<br>`EntryVoided` | `POST /api/accounting/reconciliations/{id}/unlock` |
 | `bank-fee-from-register` | Record a bank fee from the register by keyboard, and see a fee larger than the PM's held fees refused in place | Banking | `bank-adjustments.spec.ts` | scenario | `BankFeeCharged` | `POST /api/accounting/banks/{bankAccountId}/adjustments` |
+| `pm-contribution-from-register` | Record a PM contribution from the register by keyboard, so a bank fee larger than the PM's held fees posts | Banking | `bank-adjustments.spec.ts` | scenario | `PMContribution` | `POST /api/accounting/banks/{bankAccountId}/adjustments` |
 | `trust-transfer-from-register` | Transfer the PM's held fees to the other trust account from the register and back, and see both registers show it | Banking | `bank-adjustments.spec.ts` | scenario | `TrustTransfer` |  |
 | `owner-statement-view-export-deliver` | View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes`<br>`GET /api/statements/{ownerId}/pdf`<br>`GET /api/statements/{ownerId}/csv`<br>`POST /api/statements/{ownerId}/deliver` |
 | `report-catalog-preview-and-export` | Open the report catalog, preview a report with filters, and export it as CSV | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/reports`<br>`GET /api/reports/{id}/preview`<br>`GET /api/reports/{id}/csv` |

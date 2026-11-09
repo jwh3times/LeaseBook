@@ -21,7 +21,10 @@ public enum AccountClass
     /// <summary>Security deposits and prepayments — liabilities until applied (P35 splits this into two accounts).</summary>
     DepositLiability,
 
-    /// <summary>The PM's earned management income. Structurally unreachable by owner statements (CLAUDE.md).</summary>
+    /// <summary>
+    /// The PM's held fees in a bank: management fees earned and not yet swept, plus any PM contribution
+    /// (#720). Structurally unreachable by owner statements (CLAUDE.md).
+    /// </summary>
     PmIncome,
 
     /// <summary>The PM's own operating bank account — receives swept fees; outside the trust equation.</summary>

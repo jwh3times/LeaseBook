@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of processor fees and payouts (issues #498, #500 and #513)
 - **Status:** Accepted for the payment simulation and built there. The Stripe sandbox mode (ADR-054, proposed) holds and posts payouts through the same model. Its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-09
 
 ## Evidence and boundary
 
@@ -92,7 +92,9 @@ earned later cannot cover it. Read under the posting lock. If not, the batch doe
 (`pm_fees_insufficient`). The bank-fee entry had no such guard until #553 gave it this one; the
 evidence test `A_shortfall_beyond_held_fees_is_refused_and_I11_reports…` shows what an unguarded
 entry did — held fees at −$7.50 and the bank $7.50 short of what the owner is owed, with the trust
-equation still balancing — and that invariant I11 now reports it.
+equation still balancing — and that invariant I11 now reports it. The PM covers a refused shortfall
+with its own money: a PM contribution to that bank dated on or before the bank date, then the batch is
+posted again (#720).
 
 A processor's own return or dispute fee is a shortfall with no payment beside it: the same entry, the
 same guard.
@@ -282,7 +284,7 @@ As built:
 | `bank_amount_mismatch`             | The bank received another amount than the processor says it paid.     | Close with a note                          |
 | `payout_failed`                    | The processor says the payout failed. Nothing is reversed for it.     | Close with a note after correcting by hand |
 | `settlement_requires_confirmation` | The batch contains a return and has passed every other check.         | An administrator posts the batch           |
-| `pm_fees_insufficient`             | A shortfall would take held PM fees below zero.                       | Fund held fees, then post; or close        |
+| `pm_fees_insufficient`             | A shortfall would take held PM fees below zero.                       | Add a PM contribution, then post; or close |
 | `return_*`                         | A return in the batch failed an ADR-052 guard.                        | As ADR-052                                 |
 | `conflicting_evidence`             | The payout contradicts itself, an earlier copy, or a payment's state. | Close with a note                          |
 | `settlement_period_locked`         | The bank date is in a closed period or a reconciled bank month.       | Close with a note after correcting by hand |

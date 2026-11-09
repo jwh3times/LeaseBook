@@ -23,3 +23,12 @@ public sealed record InterestEarned(
 public sealed record TrustTransfer(
     Money Amount, DateOnly Date, Guid FromBankId, Guid ToBankId, string Description, string? SourceRef = null,
     string? InternalNote = null) : AccountingEvent;
+
+/// <summary>
+/// The property manager deposits its own money into a trust bank so that charges against its held PM fees
+/// there can be paid (bank ↑, held fees ↑, #720). It joins the held fees and is never earned income: the
+/// management-fee income report leaves it out. A PM operating bank is refused.
+/// </summary>
+public sealed record PMContribution(
+    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;

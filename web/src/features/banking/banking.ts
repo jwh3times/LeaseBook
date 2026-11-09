@@ -188,12 +188,13 @@ export async function unlockReconciliation(
 }
 
 /**
- * The adjustments the register offers (#553). The server also takes `interest`, which no screen offers
+ * The adjustments the register offers: a bank fee, a transfer between trust accounts (#553), and a PM
+ * contribution into a trust account (#720). The server also takes `interest`, which no screen offers
  * until #307 settles who interest belongs to.
  */
-export type BankAdjustmentKind = 'fee' | 'transfer';
+export type BankAdjustmentKind = 'fee' | 'transfer' | 'contribution';
 
-/** Records a bank fee or a transfer between trust accounts; the one caller path for the route. */
+/** Records a bank adjustment the register offers; the one caller path for the route. */
 export async function recordBankAdjustment(
   bankAccountId: string,
   input: {
