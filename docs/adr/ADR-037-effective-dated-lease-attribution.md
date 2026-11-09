@@ -75,8 +75,8 @@ resolves all seven at startup, failing to start rather than dating anything in U
 
 The list above of money that cannot be dated after the organization's today predates the PM
 contribution. A contribution is the property manager's own deposit into a trust account, recorded
-from the same bank-register dialog as a bank fee, interest or a transfer, and it is refused the same
-way: `posting_date_in_future` (422). The contribution itself is decided in the
+from the same bank-register dialog as a bank fee or a transfer, and it is refused the same way:
+`posting_date_in_future` (422). The contribution itself is decided in the
 [ADR-014 addendum](ADR-014-reconciliation-engine-and-lock.md); this addendum only adds it to the list.
 
 ## Consequences
