@@ -18,6 +18,41 @@ next section.
 
 No unreleased changes.
 
+## [0.32.4] - 2026-11-09
+
+### Changed
+
+- The accounting guide and the local-development runbook now describe invariant I11 as the check
+  makes it: no bank's held management fees, trust or PM operating, may go below zero, whatever took
+  them there. That covers a bank fee, a transfer, a processor fee larger than the one quoted, or a
+  staff void, where the docs had named only the fee and the transfer. The accounting guide and the
+  coverage record now list the PM contribution among what the bank register records. An ADR-037
+  addendum adds the contribution to the money that cannot be dated after the organization's today
+  (#737).
+
+## [0.32.3] - 2026-11-09
+
+### Changed
+
+- Bumped the web dependencies `@tanstack/react-query` and `@tanstack/react-query-devtools` from
+  5.105.3 to 5.106.1, `@tanstack/react-virtual` from 3.14.25 to 3.14.26, `@playwright/test` from
+  1.64.1 to 1.65.0, `msw` from 3.0.3 to 3.0.4, `oxlint` from 1.90.0 to 1.91.0, `oxlint-tsgolint`
+  from 7.0.2005 to 7.0.2006, and `vite` from 8.3.5 to 8.3.6.
+
+## [0.32.2] - 2026-11-09
+
+### Changed
+
+- Bumped the web test dependency `jsdom` from 30.1.3 to 31.0.0, a major version. It is used only as
+  the Vitest test environment, and none of its breaking changes reach the web app's tests.
+
+## [0.32.1] - 2026-11-09
+
+### Changed
+
+- Bumped `OpenTelemetry.Instrumentation.AspNetCore` from 1.20.1 to 1.20.2, and the test
+  dependencies `xunit.v3.mtp-v2` and `xunit.v3.extensibility.core` from 4.0.2 to 4.0.3.
+
 ## [0.32.0] - 2026-11-09
 
 ### Added
@@ -1962,7 +1997,11 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.4...HEAD
+[0.32.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.4
+[0.32.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.3
+[0.32.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.2
+[0.32.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.1
 [0.32.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.0
 [0.31.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.4
 [0.31.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.3
