@@ -133,6 +133,18 @@ _Avoid_: deposit account, deposit bank
 The property management company's own non-trust bank account. It is outside the trust equation.
 _Avoid_: operating account, management operating account
 
+**Held PM fees**:
+The property manager's own money inside one trust bank account: fees it has earned and not yet swept
+out, plus any PM contribution. It is one balance per bank account, and the PM's charges in that bank
+(a bank fee, a fee difference's shortfall, a transfer out) are paid from it and only from it.
+_Avoid_: PM income (that names only the fees earned), PM balance, PM float
+
+**PM contribution**:
+Money the property manager deposits from its own funds into a trust bank account so that charges
+against its held PM fees can be paid. It joins the held PM fees in that account and is never earned
+income.
+_Avoid_: owner contribution (an owner's own money), PM deposit, top-up
+
 **Refund check**:
 A check that returns a tenant's held security deposit or prepaid credit. It posts when issued, draws on
 the bank account that holds that liability, and is identified by its number on that bank account. It is

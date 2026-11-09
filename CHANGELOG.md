@@ -18,6 +18,32 @@ next section.
 
 No unreleased changes.
 
+## [0.32.0] - 2026-11-09
+
+### Added
+
+- **Record a PM contribution from the bank register.** On a trust account, **Fee or transfer** now
+  offers a third choice, **PM contribution**: the property manager's own money paid into that
+  account. It joins the management fees held there, so a bank fee or a transfer dated on the same
+  day or later can be paid from it, and the trust equation still balances. A contribution is never
+  counted as fee income: the management-fee income report leaves it out, and its void too. It goes
+  only into a trust account; one aimed at the PM's operating account is refused with
+  `contribution_bank_not_trust` (422), through the API as well as the screen. Like a bank fee, it is
+  refused in a closed period or a reconciled month (#720).
+
+### Changed
+
+- **A staff void can no longer push a bank's held management fees below zero.** A void that would
+  take fees the account no longer holds on its date or later is refused with `pm_fees_insufficient`
+  and nothing is posted. Voiding a management fee that has already been swept out is one example.
+  The message names the account and how much is missing. A void into a reconciled or closed month
+  is refused for the locked month first. Payment returns, refund-check voids and onboarding
+  re-imports reverse entries exactly as before (#720).
+- Every `pm_fees_insufficient` refusal now says how to get past it: record a PM contribution dated
+  on or before the charge. The exception is a void in the PM's operating account, where a
+  contribution cannot go. The payout review's remedy reads "Record a PM contribution to that
+  account, then post again" (#720).
+
 ## [0.31.4] - 2026-11-08
 
 ### Fixed
@@ -1936,7 +1962,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.31.4...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.0
 [0.31.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.4
 [0.31.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.3
 [0.31.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.31.2

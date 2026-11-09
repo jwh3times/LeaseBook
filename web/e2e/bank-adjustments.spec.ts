@@ -60,7 +60,7 @@ async function tabTo(page: Page, target: Locator, max = 12): Promise<void> {
 const registerRow = (page: Page, description: string) =>
   page.getByRole('table').getByRole('row').filter({ hasText: description });
 
-test.describe('bank fee and trust transfer from the register', () => {
+test.describe('bank fee, trust transfer and PM contribution from the register', () => {
   test('records a bank fee by keyboard, and shows a fee past the held fees refused in place @scenario:bank-fee-from-register', async ({
     page,
   }) => {
@@ -145,5 +145,59 @@ test.describe('bank fee and trust transfer from the register', () => {
     await expect(registerRow(page, back)).toContainText(`$${amount}`);
     await openRegister(page, OPERATING_TRUST);
     await expect(registerRow(page, back)).toContainText(`$${amount}`);
+  });
+
+  test('records a PM contribution so a bank fee the held fees could not cover posts @scenario:pm-contribution-from-register', async ({
+    page,
+  }) => {
+    await signIn(page, SCENARIO_STAFF);
+    // The deposit trust holds no fees at rest (a run's transfer comes back, and this test spends what
+    // it contributes), so a fee there is refused until the PM puts its own money in. A retry after a
+    // run that stopped between the two is covered too: the fee is sized from what the refusal says is
+    // held, plus this run's contribution.
+    await openRegister(page, DEPOSIT_TRUST);
+    let dialog = await openDialog(page);
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('999999');
+    await dialog.getByRole('button', { name: 'Record fee' }).click();
+    const refusal = dialog.getByText(/holds only [\d.]+ in management fees/);
+    await expect(refusal).toBeVisible();
+    await expect(refusal).toContainText(
+      'A PM contribution to this account dated on or before the fee covers it.',
+    );
+    const held =
+      /holds only ([\d.]+) in management fees/.exec((await refusal.textContent()) ?? '')?.[1] ?? '';
+    const contribution = randomAmount(0);
+    const feeCents = Math.round(Number(held) * 100) + Math.round(Number(contribution) * 100);
+    const fee = `${Math.floor(feeCents / 100)}.${String(feeCents % 100).padStart(2, '0')}`;
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+    // The contribution, by keyboard: arrow from "Bank fee" past the transfer to it.
+    const contributed = describeRun('pm contribution');
+    await openDialog(page);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    dialog = page.getByRole('dialog', { name: 'Record a PM contribution' });
+    await expect(dialog.getByRole('radio', { name: 'PM contribution' })).toBeChecked();
+    await tabTo(page, dialog.getByLabel('Amount'));
+    await page.keyboard.type(contribution);
+    await tabTo(page, dialog.getByLabel('Description'));
+    await page.keyboard.type(contributed);
+    await tabTo(page, dialog.getByRole('button', { name: 'Record contribution' }));
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(`PM contribution of $${contribution} recorded.`)).toBeVisible();
+    await expect(registerRow(page, contributed)).toContainText(`$${contribution}`);
+    await expect(registerRow(page, contributed)).toContainText('Uncleared');
+
+    // The same fee now posts, paid from the held fees the contribution joined.
+    const charged = describeRun('bank fee after contribution');
+    dialog = await openDialog(page);
+    await dialog.getByLabel('Amount').fill(fee);
+    await dialog.getByLabel('Description').fill(charged);
+    await dialog.getByRole('button', { name: 'Record fee' }).click();
+
+    await expect(page.getByText(`Bank fee of $${fee} recorded.`)).toBeVisible();
+    await expect(registerRow(page, charged)).toContainText(`$${fee}`);
   });
 });

@@ -12,9 +12,10 @@ using LeaseBook.SharedKernel.Cqrs;
 namespace LeaseBook.Modules.Accounting.Features.Banking;
 
 /// <summary>
-/// Records a bank-only adjustment from the register (P65): a service fee, interest, or a transfer between
-/// two of the org's bank accounts. The <c>Kind</c> selects the posting template; all three route through
-/// the existing engine — no new journal write path. Owner-/vendor-/fee-sweep runs are M6, not here.
+/// Records a bank-only adjustment from the register (P65): a service fee, interest, a transfer between
+/// two of the org's bank accounts, or a PM contribution into a trust bank (#720). The <c>Kind</c> selects
+/// the posting template; all four route through the existing engine — no new journal write path.
+/// Owner-/vendor-/fee-sweep runs are M6, not here.
 /// <para>
 /// <c>Description</c> is the entry's register/ledger text; <c>InternalNote</c> is staff-only (#468).
 /// </para>
@@ -28,7 +29,7 @@ public sealed record RecordBankAdjustment(
 public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBankAdjustment>
 {
     // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
-    public static readonly string[] Kinds = ["fee", "interest", "transfer"];
+    public static readonly string[] Kinds = ["fee", "interest", "transfer", "contribution"];
 
     public RecordBankAdjustmentValidator()
     {
@@ -65,7 +66,8 @@ internal sealed class RecordBankAdjustmentHandler(
 {
     public async Task<PostResult> Handle(RecordBankAdjustment command, CancellationToken ct)
     {
-        // A bank fee, interest or transfer appears on the bank's statement by the day it is recorded (#642).
+        // A bank fee, interest, transfer or PM contribution appears on the bank's statement by the day it is
+        // recorded (#642).
         await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
 
         // A closed period or a reconciled month refuses the posting whatever the PM's held fees are, so
@@ -96,6 +98,9 @@ internal sealed class RecordBankAdjustmentHandler(
             "transfer" => await events.PostAsync(
                 new TrustTransfer(money, command.Date, command.BankAccountId, command.ToBankAccountId!.Value,
                     command.Description ?? "Transfer", command.SourceRef, command.InternalNote), ct),
+            "contribution" => await events.PostAsync(
+                new PMContribution(money, command.Date, command.BankAccountId, command.Description ?? "PM contribution",
+                    command.SourceRef, command.InternalNote), ct),
             _ => throw new ValidationException("Unknown bank-adjustment kind."), // unreachable past the validator
         };
         return new PostResult(id);

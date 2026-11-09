@@ -411,6 +411,15 @@
       "routes": ["POST /api/accounting/banks/{bankAccountId}/adjustments"]
     },
     {
+      "id": "pm-contribution-from-register",
+      "workflow": "Record a PM contribution from the register by keyboard, so a bank fee larger than the PM's held fees posts",
+      "area": "Banking",
+      "spec": "bank-adjustments.spec.ts",
+      "org": "scenario",
+      "events": ["PMContribution"],
+      "routes": ["POST /api/accounting/banks/{bankAccountId}/adjustments"]
+    },
+    {
       "id": "trust-transfer-from-register",
       "workflow": "Transfer the PM's held fees to the other trust account from the register and back, and see both registers show it",
       "area": "Banking",

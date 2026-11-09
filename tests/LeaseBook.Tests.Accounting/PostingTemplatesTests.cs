@@ -343,6 +343,7 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
             (new BankFeeCharged(new Money(5m), Feb(3), scope.TrustBankId, "service charge"), "BankFeeCharged", null),
             (new TrustTransfer(new Money(10m), Feb(4), scope.TrustBankId, scope.DepositBankId, "move held fees"),
                 "TrustTransfer", null),
+            (new PMContribution(new Money(15m), Feb(4), scope.TrustBankId, "pm contribution"), "PMContribution", null),
             (new PMFeesSwept(new Money(20m), Feb(5), scope.TrustBankId, scope.OperatingBankId, "sweep"), "PMFeesSwept", null),
             (new RefundIssued(Tenant, new Money(100m), Feb(6), scope.TrustBankId, RefundSource.Prepayments, "refund"),
                 "RefundIssued", "prepayments"),
