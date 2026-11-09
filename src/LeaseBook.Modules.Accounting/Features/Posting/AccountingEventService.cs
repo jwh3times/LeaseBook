@@ -43,6 +43,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             BankFeeCharged e => PostBankFeeChargedAsync(e, ct),
             InterestEarned e => PostInterestEarnedAsync(e, ct),
             TrustTransfer e => PostTrustTransferAsync(e, ct),
+            PMContribution e => PostPmContributionAsync(e, ct),
             ProcessorFeeDifference e => PostProcessorFeeDifferenceAsync(e, ct),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(businessEvent), businessEvent.GetType().Name, "No posting template for this event."),
@@ -431,6 +432,20 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             ], InternalNote: e.InternalNote), ct);
     }
 
+    private async Task<Guid> PostPmContributionAsync(PMContribution e, CancellationToken ct)
+    {
+        // The PM's own money joins its held fees in that trust bank (the bank ↑, held PM fees ↑), so the
+        // trust equation still holds and the charges it covers are paid from PM money (#720). Into the PM
+        // operating bank it would be the PM paying itself, so only a trust bank takes one.
+        var bank = await TrustBankCodeAsync(
+            e.BankAccountId, () => new ContributionBankNotTrustException(e.BankAccountId), ct);
+        return await posting.PostAsync(new PostEntryRequest(e.Date, "PMContribution", null, e.Description, e.SourceRef,
+            [
+                new(bank, e.Amount, null, EntryBasis.Both, BankAccountId: e.BankAccountId),
+                new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.BankAccountId),
+            ], InternalNote: e.InternalNote), ct);
+    }
+
     // ----- Processor fee differences (ADR-053) ---------------------------------------------------
 
     private async Task<Guid> PostProcessorFeeDifferenceAsync(ProcessorFeeDifference e, CancellationToken ct)
@@ -477,8 +492,10 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
         // moved by this template (ADR-014). Both ends are trust banks: into the PM operating bank this
         // would be a fee sweep without the sweep's guard, and out of it the PM funding trust with its
         // own money (#720). Only the source is checked against its held fees; the destination only gains.
-        var fromBank = await TrustBankCodeAsync(e.FromBankId, TransferEnd.Source, ct);
-        var toBank = await TrustBankCodeAsync(e.ToBankId, TransferEnd.Destination, ct);
+        var fromBank = await TrustBankCodeAsync(
+            e.FromBankId, () => new TransferBankNotTrustException(e.FromBankId, TransferEnd.Source), ct);
+        var toBank = await TrustBankCodeAsync(
+            e.ToBankId, () => new TransferBankNotTrustException(e.ToBankId, TransferEnd.Destination), ct);
         await GuardHeldFeesFloorAsync(e.FromBankId, e.Date, e.Amount, HeldFeesCharge.Transfer, ct);
         return await posting.PostAsync(new PostEntryRequest(e.Date, "TrustTransfer", null, e.Description, e.SourceRef,
             [
@@ -501,10 +518,12 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     }
 
     /// <summary>
-    /// The chart code of a transfer's bank at <paramref name="end"/>, which must be a trust bank. A PM
-    /// operating bank is refused by name; an id that is no bank account at all stays an unknown account.
+    /// The chart code of a bank that must be a trust bank: either end of a transfer, or a PM contribution's
+    /// bank. A PM operating bank is refused with <paramref name="notTrust"/>, which carries the event's own
+    /// code; an id that is no bank account at all stays an unknown account.
     /// </summary>
-    private async Task<string> TrustBankCodeAsync(Guid bankId, TransferEnd end, CancellationToken ct)
+    private async Task<string> TrustBankCodeAsync(
+        Guid bankId, Func<AccountingDomainException> notTrust, CancellationToken ct)
     {
         var account = await db.Set<Account>()
             .Where(a => a.BankAccountId == bankId
@@ -512,9 +531,7 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
             .Select(a => new { a.Code, a.Class })
             .SingleOrDefaultAsync(ct)
             ?? throw new UnknownAccountException(AccountCodes.TrustBank(bankId));
-        return account.Class == AccountClass.TrustBank
-            ? account.Code
-            : throw new TransferBankNotTrustException(bankId, end);
+        return account.Class == AccountClass.TrustBank ? account.Code : throw notTrust();
     }
 
     /// <summary>

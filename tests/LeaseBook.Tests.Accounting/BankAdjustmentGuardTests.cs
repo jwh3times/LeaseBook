@@ -165,6 +165,55 @@ public sealed class BankAdjustmentGuardTests(PostgresFixture fixture)
         (await EntryCountAsync(scope, ct)).ShouldBe(before);
     }
 
+    // ---- a PM contribution (#720) ----
+
+    [Fact]
+    public async Task A_refused_bank_fee_posts_once_a_pm_contribution_dated_on_or_before_it_covers_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await PostAsync(scope, Interest(scope.TrustBankId, 10m, Date), ct);
+        await Should.ThrowAsync<PmFeesInsufficientException>(
+            () => PostAsync(scope, Fee(scope.TrustBankId, 35m, Date), ct));
+
+        await PostAsync(scope, Contribution(scope.TrustBankId, 25m, Date), ct);
+        await PostAsync(scope, Fee(scope.TrustBankId, 35m, Date), ct);
+
+        (await HeldFeesAsync(scope, scope.TrustBankId, ct)).ShouldBe(0m);
+        await AssertCleanAsync(scope, ct);
+    }
+
+    [Fact]
+    public async Task A_pm_contribution_dated_after_a_bank_fee_does_not_cover_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await PostAsync(scope, Contribution(scope.TrustBankId, 25m, Date.AddDays(1)), ct);
+
+        var error = await Should.ThrowAsync<PmFeesInsufficientException>(
+            () => PostAsync(scope, Fee(scope.TrustBankId, 25m, Date), ct));
+
+        error.Held.ShouldBe(0m);
+        error.Message.ShouldContain("A PM contribution to this account dated on or before the fee covers it.");
+    }
+
+    [Fact]
+    public async Task A_pm_contribution_into_the_pm_operating_bank_is_refused_and_posts_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        var before = await EntryCountAsync(scope, ct);
+
+        var error = await Should.ThrowAsync<ContributionBankNotTrustException>(
+            () => PostAsync(scope, Contribution(scope.OperatingBankId, 25m, Date), ct));
+
+        (error.Code, error.BankAccountId).ShouldBe(("contribution_bank_not_trust", scope.OperatingBankId));
+        (await EntryCountAsync(scope, ct)).ShouldBe(before);
+    }
+
+    private static PMContribution Contribution(Guid bank, decimal amount, DateOnly date) =>
+        new(new Money(amount), date, bank, "PM contribution");
+
     private static TrustTransfer Transfer(Guid from, Guid to, decimal amount, DateOnly date) =>
         new(new Money(amount), date, from, to, "Transfer");
 

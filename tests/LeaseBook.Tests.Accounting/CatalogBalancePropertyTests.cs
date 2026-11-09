@@ -108,13 +108,14 @@ public sealed class CatalogBalancePropertyTests(PostgresFixture fixture)
             refundDepTenant, amount, D(7), scope.DepositBankId, RefundSource.Deposits, "deposit refund",
             PropertyId: property, OwnerId: owner), ct);
 
-        // Bank adjustments (ADR-014) — fee, interest, and the trust→trust transfer. The fee and the
+        // Bank adjustments (ADR-014) — fee, interest, the trust→trust transfer and a PM contribution (#720). The fee and the
         // transfer draw on the PM's held fees in the trust bank (#553), so fund them first.
         await PostAsync(scope, new InterestEarned(big, D(1), scope.TrustBankId, "held fees"), ct);
         await AssertBalancesAsync(scope, new BankFeeCharged(amount, D(8), scope.TrustBankId, "bank fee"), ct);
         await AssertBalancesAsync(scope, new InterestEarned(amount, D(9), scope.TrustBankId, "interest"), ct);
         await AssertBalancesAsync(scope, new TrustTransfer(
             amount, D(10), scope.TrustBankId, scope.DepositBankId, "trust transfer"), ct);
+        await AssertBalancesAsync(scope, new PMContribution(amount, D(10), scope.TrustBankId, "pm contribution"), ct);
 
         // Processor fee differences (ADR-053). The surplus first: it is what gives the shortfall of
         // the same amount held fees to draw on, whatever the generated amount.

@@ -89,7 +89,7 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
         var fee = await client.PostAsJsonAsync(url,
             new { kind = "fee", amount = 40.01m, date = Feb1, sourceRef = Key() }, ct);
         await ShouldBeProblemAsync(fee, HttpStatusCode.Conflict, "pm_fees_insufficient",
-            "This account holds only 40.00 in management fees on or after the fee's date, less than the 40.01 fee, so nothing was posted.", ct);
+            "This account holds only 40.00 in management fees on or after the fee's date, less than the 40.01 fee, so nothing was posted. A PM contribution to this account dated on or before the fee covers it.", ct);
 
         var toOperating = await client.PostAsJsonAsync(url,
             new { kind = "transfer", amount = 10m, date = Feb1, toBankAccountId = setup.OperatingBankId, sourceRef = Key() },
@@ -105,6 +105,44 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
 
         var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
         register.Totals.Book.ShouldBe(40m); // only the interest posted
+    }
+
+    /// <summary>
+    /// A PM contribution over HTTP (#720): it lands in the register as an uncleared deposit and covers a
+    /// fee dated after it; into the PM operating bank it is refused with its own code; and once a fee has
+    /// drawn on it, voiding it is refused with the held-fees code, naming the bank.
+    /// </summary>
+    [Fact]
+    public async Task A_pm_contribution_covers_a_fee_and_cannot_be_voided_out_from_under_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var url = $"/api/accounting/banks/{setup.TrustBankId}/adjustments";
+
+        var contribution = await PostOkAsync<PostResult>(client, url,
+            new { kind = "contribution", amount = 25m, date = Feb1, sourceRef = Key(), internalNote = "covers the Feb fee" }, ct);
+        var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        var row = register.Rows.ShouldHaveSingleItem();
+        (row.Deposit, row.Status, row.Description).ShouldBe((25m, BankLineStatus.Uncleared, "PM contribution"));
+
+        await PostOkAsync<PostResult>(client, url, new { kind = "fee", amount = 25m, date = Feb1, sourceRef = Key() }, ct);
+
+        var toOperating = await client.PostAsJsonAsync($"/api/accounting/banks/{setup.OperatingBankId}/adjustments",
+            new { kind = "contribution", amount = 25m, date = Feb1, sourceRef = Key() }, ct);
+        await ShouldBeProblemAsync(toOperating, HttpStatusCode.UnprocessableEntity, "contribution_bank_not_trust",
+            "A PM contribution is paid into a trust account, and this account is not a trust account.", ct);
+
+        var asOf = new DateOnly(2026, 2, 2);
+        var voided = await client.PostAsJsonAsync($"/api/accounting/entries/{contribution.EntryId}/void",
+            new { reason = "posted in error", asOfDate = asOf, sourceRef = Key() }, ct);
+        await ShouldBeProblemAsync(voided, HttpStatusCode.Conflict, "pm_fees_insufficient",
+            "Voiding this entry would take the management fees held in Operating Trust 25.00 below zero on or after "
+            + "2026-02-02, so nothing was posted. Void the later charge that uses them first, or record a PM "
+            + "contribution to Operating Trust.", ct);
+
+        var after = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        (after.Rows.Count, after.Totals.Book).ShouldBe((2, 0m));
     }
 
     private static async Task ShouldBeProblemAsync(

@@ -93,7 +93,7 @@ const PAYOUT_REASONS: Record<string, string> = {
   settlement_requires_confirmation:
     'This payout contains a returned payment, so it waits for an administrator. Posting it posts every line of the payout together, or none of them.',
   pm_fees_insufficient:
-    'The management fees held in the account do not cover a processor fee shortfall in this payout, so nothing was posted. Fund the held fees, then post again.',
+    'The management fees held in the account do not cover a processor fee shortfall in this payout, so nothing was posted. Record a PM contribution to that account, then post again.',
   settlement_period_locked:
     'The payout’s bank date is in a locked period, and the date cannot be changed. Correct the ledger, then close the review.',
   attribution_unavailable:
