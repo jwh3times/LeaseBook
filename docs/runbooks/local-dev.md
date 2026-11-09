@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-09
 
 ## Prerequisites
 
@@ -296,7 +296,7 @@ violation:
 | I8  | Every event type posting an owner-attributed `owner_equity` line has a statement section      |
 | I9  | `migration_clearing` nets to $0 per basis                                                     |
 | I10 | Prepayment bank attribution — a held prepayment stays ≥ 0 per bank, not just per tenant       |
-| I11 | Held PM fees stay ≥ 0 per bank — no fee or transfer drew on fees the bank did not hold        |
+| I11 | Held PM fees stay ≥ 0 per bank, whatever drew them down: fee, transfer, processor fee, void   |
 
 **I5** and **I6** are not in that table and never will be: they are relational or conditional
 assertions proven in the test harness rather than swept per-org — I5 is cash/accrual basis

@@ -164,8 +164,10 @@ deposit is owner-tagged, no _owner's_ held-deposit position can go negative eith
 what catches a release booked against a different owner than the collection: the tenant's own total
 would still come to zero while the owner's column silently stayed high. Prepayments get the same check
 per **bank**: no bank's held prepayment for a tenant can go negative, which catches credit applied from
-a bank that never received it. So do the PM's held management fees: no bank's can go negative, which
-catches a bank fee or a transfer paid from fees that bank did not hold.
+a bank that never received it. So do the PM's held management fees: no bank's can go negative, trust or
+PM operating, whatever took them there — a bank fee, a transfer, a processor fee larger than the one
+quoted, or a staff void. Each of those is refused at posting when it would go below zero; the check
+catches a journal that got there anyway.
 
 The sweep also checks one thing that is not about balances at all: that every kind of event crediting
 an owner is one the statement knows how to present. If a new kind of transaction reaches an owner's
@@ -393,8 +395,9 @@ implies an owner/vendor/fee-sweep workflow (those are M6). A fee, and a transfer
 from the PM's held fees there and only from them: each is refused (`pm_fees_insufficient`) when it
 exceeds the lowest fees held in that bank on or after its date, and invariant I11 reports any bank whose
 held fees are below zero. A transfer is refused (`transfer_bank_not_trust`) when either end is the PM
-operating bank ([ADR-014 addendum](adr/ADR-014-reconciliation-engine-and-lock.md)). Staff record a fee
-or a transfer from the bank register; interest has no screen until #307 settles who it belongs to.
+operating bank ([ADR-014 addendum](adr/ADR-014-reconciliation-engine-and-lock.md)). Staff record a fee,
+a transfer or a PM contribution (below) from the bank register; interest has no screen until #307 settles
+who it belongs to.
 
 **PM contributions.** When a charge is larger than the PM's held fees in a trust account, the property
 manager covers it with its own money: `PMContribution` (`DR bank / CR pm_income@bank`, both bases)
