@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-09
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -381,8 +381,9 @@ The 22 routes no test reached, by what they have in common:
   property page now transfers a property to another owner, and a browser test reaches that route
   (#555).
 - **Bank adjustments (1).** No screen recorded a bank fee, interest or a transfer between accounts
-  when this was measured. The bank register now records a bank fee or a transfer, and a browser test
-  reaches the route (#553); interest still has no screen until #307 settles who it belongs to.
+  when this was measured. The bank register now records a bank fee, a transfer or a PM contribution
+  (#720), and a browser test reaches the route (#553); interest still has no screen until #307 settles
+  who it belongs to.
 - **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
   screen requests these routes; the screens that show the same figures get them from other routes.
   The catalogue records these four as permanent exemptions.
