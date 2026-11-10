@@ -18,6 +18,18 @@ next section.
 
 No unreleased changes.
 
+## [0.32.5] - 2026-11-09
+
+### Changed
+
+- An ADR-014 addendum records how a reopened past month is to be finalized again, which #656 will
+  build; no behavior changes yet. A month reconciles to its own statement: its cleared balance is
+  the lines its own and earlier reconciliations counted, plus the cleared lines assigned to it,
+  which must be dated by its last day. Each bank account's months finalize and unlock in order, no
+  month after the organization's current one can be reconciled, and a new invariant, I12, will
+  check that every finalized month still balances. The glossary gains Reconciliation and Cleared
+  balance.
+
 ## [0.32.4] - 2026-11-09
 
 ### Changed
@@ -1997,7 +2009,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.4...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.5...HEAD
+[0.32.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.5
 [0.32.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.4
 [0.32.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.3
 [0.32.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.2

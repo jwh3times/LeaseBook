@@ -175,6 +175,9 @@ zero difference only at today's cleared balance, never at its own statement, and
 of every month since as its own. Nothing kept an account's months in order, so a later month could be
 finalized while an earlier one stayed open.
 
+This addendum is decided but not yet built: #656 implements it, and until then the engine behaves as
+the paragraph above describes.
+
 **A month's cleared balance.** It is the bank lines stamped by that account's reconciliations for that
 month or an earlier one, plus the cleared, unreconciled lines assigned to the month while it is being
 finalized. Finalize stamps only the assigned lines. Only a line dated on or before the month's last day
