@@ -51,7 +51,8 @@ lock** — closes that account-month to new bank postings. The posting service c
 `period_closed` (409, M1) — the per-org close stays a separate "close the books" concept that M5/M6
 lean on. **Unlock** is `PMAdmin` + reason: it flips `finalized → reopened`, releasing the lock; the
 status change is audited with the acting user and carries the reason. Reconciled items stay reconciled
-until a re-finalize.
+until a re-finalize. Which lines a finalize counts and stamps, and the order an account's months
+finalize and unlock in, are narrowed by the addendum below on a month's own statement.
 
 ### 5. Bank adjustments move the PM's own held funds (the fiduciary-safe model)
 
@@ -164,3 +165,64 @@ be dated there.
 **No cap, provisionally.** Whether NCREC rules limit how much of a broker's own money may sit in a
 trust account is a question for the compliance review; this is built without a cap and revisited on
 its answer.
+
+## Addendum — a month reconciles to its own statement, and an account's months finalize in order (2026-11-09)
+
+Decision 4 let an administrator unlock a finalized month and left the re-finalize to the engine, but
+its arithmetic had no month in it (#656). The cleared balance summed every cleared or reconciled line
+on the account, and finalize stamped every cleared line. A past month re-finalized later could reach a
+zero difference only at today's cleared balance, never at its own statement, and it stamped the lines
+of every month since as its own. Nothing kept an account's months in order, so a later month could be
+finalized while an earlier one stayed open.
+
+This addendum is decided but not yet built: #656 implements it, and until then the engine behaves as
+the paragraph above describes.
+
+**A month's cleared balance.** It is the bank lines stamped by that account's reconciliations for that
+month or an earlier one, plus the cleared, unreconciled lines assigned to the month while it is being
+finalized. Finalize stamps only the assigned lines. Only a line dated on or before the month's last day
+can be assigned to it. A line's date does not decide its month: a check written on 28 April and paid on
+3 May is assigned to May, the statement that shows it paid. A date bound ("lines dated through the
+month's end") was rejected for that reason: it would count the April check in April, against a
+statement that never showed it. This rule applies to every finalize. Finalizing the current month
+assigns every cleared, unreconciled line dated through its last day, which in practice is what it
+stamped before, since a bank line cannot be dated after the organization's today.
+
+**Finalizing a reopened month again.** A reopened row in the reconciliation history offers to finalize
+it again, which opens that month's reconcile view in place. The statement ending balance is prefilled
+from the one stored and can be changed, and a change is audited. The view offers every unreconciled
+line dated through the month's last day, cleared or not, with none ticked, and shows the difference as
+lines are ticked. Ticking an uncleared line clears it and assigns it. Lines the month stamped when it
+was first finalized stay stamped, as decision 4 says. Staff may finalize it again, as they may finalize
+any month: the administrator's decision, and its reason, is the unlock.
+
+**An account's months finalize in order.** For each bank account:
+
+- finalizing a month is refused while a later month is finalized
+  (`reconciliation_later_month_finalized`, 409);
+- finalizing a month is refused while an earlier month is reopened
+  (`reconciliation_earlier_month_reopened`, 409);
+- unlocking a month is refused while a later month is finalized
+  (`reconciliation_later_month_finalized`, 409).
+
+Each refusal names the month to act on. To correct April when May and June are finalized, an
+administrator unlocks June, then May, then April; April is corrected and finalized, then May, then
+June. Each later month's cleared balance then includes the correction, as its real statement does. A
+month never reconciled does not block a later one: an account may start reconciling at any month, and
+a skipped month can still be reconciled until a later one is finalized.
+
+**No future month.** Starting or finalizing a reconciliation for a month after the organization's
+current month is refused with `reconciliation_period_in_future` (422), read in the organization's zone
+([ADR-037](ADR-037-effective-dated-lease-attribution.md)).
+
+**The report.** Finalizing a month again replaces its stored report. The report it replaces stays in
+the audit trail's before-image. The new report records when the month was first finalized, who
+reopened it and why, and when it was finalized again.
+
+**Invariant I12 sweeps it.** For every finalized reconciliation, (a) its cleared balance, recomputed
+under the rule above, equals its statement ending balance; and (b) no line it stamped is dated after its
+month's last day. It runs in the core set, so the nightly sweep and `check-invariants` both report a
+month that stopped balancing. No stored data is rewritten. The seeded organizations finalize their
+months in order and stamp only lines dated through each month, so their golden figures are expected
+to be unchanged. The implementation proves that by replaying all three, and any report snapshot that
+moves does so deliberately, in the same change.
