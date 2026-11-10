@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-09
+- **Last reviewed:** 2026-11-10
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -323,20 +323,21 @@ not edit between the markers.
 | No screen requests it; the portal reads the tenant's whole list of payments. | 1 |
 | No screen requests it; the screens read the whole list of bank accounts. | 1 |
 | No screen requests it; the screens that show these figures get them from other routes. | 4 |
+| Only the seed fixtures post it, as their cutover entry; onboarding posts OpeningBalance instead. | 1 |
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 12 |
+| baseline gap | 11 |
 
 #### Journal event types with no scenario
 
 | Event type | Reason | Date | Issue |
 | :-- | :-- | :-- | :-- |
-| `BalanceForward` | baseline gap | 2026-10-12 | #556 |
+| `BalanceForward` | Only the seed fixtures post it, as their cutover entry; onboarding posts OpeningBalance instead. | 2026-11-10 |  |
 | `InterestEarned` | No screen offers interest until #307 settles who interest in a trust account belongs to. | 2026-11-06 | #307 |
-| `OwnerContribution` | baseline gap | 2026-10-12 | #556 |
-| `PMFeesSwept` | baseline gap | 2026-10-12 | #556 |
-| `VendorPaid` | baseline gap | 2026-10-12 | #556 |
+| `OwnerContribution` | baseline gap | 2026-10-12 | #744 |
+| `PMFeesSwept` | baseline gap | 2026-10-12 | #743 |
+| `VendorPaid` | baseline gap | 2026-10-12 | #745 |
 
 #### Routes with no scenario
 

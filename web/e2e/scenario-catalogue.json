@@ -844,9 +844,8 @@
     "events": [
       {
         "event": "BalanceForward",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 556
+        "reason": "Only the seed fixtures post it, as their cutover entry; onboarding posts OpeningBalance instead.",
+        "date": "2026-11-10"
       },
       {
         "event": "InterestEarned",
@@ -858,19 +857,19 @@
         "event": "OwnerContribution",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 556
+        "issue": 744
       },
       {
         "event": "PMFeesSwept",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 556
+        "issue": 743
       },
       {
         "event": "VendorPaid",
         "reason": "baseline gap",
         "date": "2026-10-12",
-        "issue": 556
+        "issue": 745
       }
     ],
     "routes": [
