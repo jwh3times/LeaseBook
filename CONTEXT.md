@@ -237,6 +237,20 @@ An issued check whose bank line has not cleared. It is already out of the book b
 uncleared withdrawal in the register until the bank pays it.
 _Avoid_: pending check, open check
 
+**Reconciliation**:
+One bank account's month, matched to that month's bank statement: the statement ending balance against
+the month's cleared balance. Finalizing it at a zero difference locks the account's month against bank
+postings. An administrator can reopen it, with a reason, so that it can be corrected and finalized
+again.
+_Avoid_: bank rec, statement match, close (closing a period is a separate, organization-wide lock)
+
+**Cleared balance** (of a month):
+The total of the bank lines that a month's reconciliation, or an earlier month's, counted as paid by the
+bank, plus the cleared lines assigned to that month while it is being finalized. A line's own date does
+not decide its month: a check written on the 28th and paid on the 3rd belongs to the next month's
+statement.
+_Avoid_: reconciled balance, bank balance (the book balance includes uncleared lines)
+
 **Undecided line**:
 A stored bank statement line with no recorded decision: nobody has confirmed it, even as unmatched. A
 later upload that repeats the line brings it back for review instead of skipping it as a duplicate
