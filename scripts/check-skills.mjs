@@ -11,13 +11,27 @@
 // moving every repository to a new snapshot is one change there. A skill from any other source only
 // has to match its lock entry, and a folder with no lock entry is the repository's own.
 //
-// A lock's `computedHash` covers each file's bytes as the CLI read them, and `git` gives a Windows
-// clone CRLF, so a hash is accepted when the folder matches it as it stands, with LF, or with CRLF.
+// A lock's `computedHash` is computed one of two ways, by the lock's `version`:
+//
+// - Version 2 (CLI 1.8.0 on) follows the CLI's published rule ("Lock File Content Hash" in its
+//   README): CRLF becomes LF in a text file, paths sort by their UTF-8 bytes, and each file feeds
+//   path, NUL, length, NUL, content. The same skill hashes the same on every machine.
+// - Version 1 (CLI 1.7.x) covers each file's bytes as the CLI read them, and `git` gives a Windows
+//   clone CRLF, so a hash is accepted when the folder matches it as it stands, with LF, or with CRLF.
+//
+// The CLI upgrades a version 1 lock on its next write, and gives an empty hash to each entry whose
+// folder no longer matched its old one; that entry fails here until the install is re-run.
 //
 // This repository holds the canonical copy (jwh3times/skills); every consumer carries it unchanged.
 
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,6 +67,7 @@ export function parseInstallCommands(text) {
   return commands;
 }
 
+// Version 1: every file but those under .git and node_modules, symlinks skipped.
 function collectFiles(baseDir, currentDir, results) {
   for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
     const fullPath = path.join(currentDir, entry.name);
@@ -73,8 +88,8 @@ function collectFiles(baseDir, currentDir, results) {
   return results;
 }
 
-// The CLI's computeSkillFolderHash, with each file's bytes passed through `transform`. Its order is
-// `localeCompare`, so names are compared the same way, in a fixed locale.
+// Version 1: the CLI's computeSkillFolderHash, with each file's bytes passed through `transform`.
+// Its order is `localeCompare`, so names are compared the same way, in a fixed locale.
 function folderHash(files, transform) {
   const hash = createHash("sha256");
   for (const file of files.toSorted((a, b) =>
@@ -95,7 +110,71 @@ const withCrlf = (content) =>
     "latin1",
   );
 
-export function matchesLock(folder, computedHash) {
+// Version 2: every file but `metadata.json` and those under .git, __pycache__ and __pypackages__.
+// A symlink counts as what it points to, unless that is broken, outside the folder, or a loop.
+const EXCLUDED_FILES = new Set(["metadata.json"]);
+const EXCLUDED_DIRS = new Set([".git", "__pycache__", "__pypackages__"]);
+
+function collectFilesV2(root, dir, prefix, ancestors, results) {
+  const realDir = realpathSync(dir);
+  if (ancestors.has(realDir)) return results;
+  const branch = new Set(ancestors).add(realDir);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (EXCLUDED_FILES.has(entry.name)) continue;
+    const fullPath = path.join(dir, entry.name);
+    let isDirectory = entry.isDirectory();
+    if (entry.isSymbolicLink()) {
+      let target;
+      try {
+        target = realpathSync(fullPath);
+      } catch {
+        continue;
+      }
+      if (target !== root && !target.startsWith(root + path.sep)) continue;
+      isDirectory = statSync(target).isDirectory();
+    } else if (!isDirectory && !entry.isFile()) continue;
+    if (isDirectory) {
+      if (!EXCLUDED_DIRS.has(entry.name))
+        collectFilesV2(
+          root,
+          fullPath,
+          `${prefix}${entry.name}/`,
+          branch,
+          results,
+        );
+    } else {
+      results.push({
+        path: Buffer.from(prefix + entry.name, "utf8"),
+        content: readFileSync(fullPath),
+      });
+    }
+  }
+  return results;
+}
+
+// The CLI's version 2 hashSkillFiles. A file with a NUL byte is binary and keeps its CRLF.
+export function folderHashV2(folder) {
+  const root = realpathSync(folder);
+  const files = collectFilesV2(root, folder, "", new Set(), []).map(
+    ({ path: name, content }) => ({
+      path: name,
+      content: content.includes(0) ? content : withLf(content),
+    }),
+  );
+  files.sort((a, b) => Buffer.compare(a.path, b.path));
+  const hash = createHash("sha256");
+  for (const file of files) {
+    hash.update(file.path);
+    hash.update("\0");
+    hash.update(String(file.content.length));
+    hash.update("\0");
+    hash.update(file.content);
+  }
+  return hash.digest("hex");
+}
+
+export function matchesLock(folder, computedHash, version = 1) {
+  if (version === 2) return folderHashV2(folder) === computedHash;
   const files = collectFiles(folder, folder, []);
   return [asIs, withLf, withCrlf].some(
     (transform) => folderHash(files, transform) === computedHash,
@@ -110,7 +189,13 @@ export function checkSkills(root = defaultRoot) {
   if (!existsSync(blocksPath))
     return [`${BLOCKS}: not found; install the ship skill`];
 
-  const locked = JSON.parse(readFileSync(lockPath, "utf8")).skills ?? {};
+  const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+  const version = lock.version ?? 1;
+  if (version !== 1 && version !== 2)
+    return [
+      `${LOCK}: version ${version}, which this check-skills.mjs cannot read; take the latest from jwh3times/skills`,
+    ];
+  const locked = lock.skills ?? {};
   const commands = parseInstallCommands(readFileSync(blocksPath, "utf8"));
 
   for (const { source, ref, names } of commands) {
@@ -143,7 +228,11 @@ export function checkSkills(root = defaultRoot) {
     const folder = path.join(root, SKILLS, name);
     if (!existsSync(folder)) {
       problems.push(`${name}: in ${LOCK}, but ${SKILLS}/${name} is missing`);
-    } else if (!matchesLock(folder, entry.computedHash)) {
+    } else if (!entry.computedHash) {
+      problems.push(
+        `${name}: no hash in ${LOCK}; the CLI could not carry it over from a version 1 lock`,
+      );
+    } else if (!matchesLock(folder, entry.computedHash, version)) {
       problems.push(`${name}: ${SKILLS}/${name} differs from ${LOCK}`);
     }
   }
