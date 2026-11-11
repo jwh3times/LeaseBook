@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation, useNavigationType } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { trackInteraction } from '@/lib/telemetry';
+import { ORG_SETTINGS } from '@/test/mocks/handlers';
 import { server } from '@/test/mocks/server';
 import { bankRegisterKey } from './banking';
 import { BankingPage } from './BankingPage';
@@ -61,6 +62,18 @@ function baseHandlers() {
     http.get('/api/accounting/reconciliations', () => HttpResponse.json({ rows: [] })),
   ];
 }
+
+const RECON_IN_PROGRESS = {
+  id: 'rec1',
+  bankAccountId: 'acct1',
+  year: 2026,
+  month: 10,
+  statementEndingBalance: 1300,
+  clearedBalance: 1300,
+  difference: 0,
+  status: 'in_progress',
+  finalizedAt: null,
+};
 
 const registerHandler = (body: Record<string, unknown>) =>
   http.get('/api/accounting/banks/:id/register', () => HttpResponse.json(body));
@@ -371,6 +384,113 @@ describe('BankingPage reconcile mode', () => {
 
     // Back out of reconcile mode (balance strip returns).
     expect(await screen.findByText('Book balance')).toBeInTheDocument();
+  });
+
+  it('reconciles the organization’s month, not the viewer’s (#740)', async () => {
+    // 06:30 UTC on 1 Nov 2026 is already November for this suite's Eastern viewer, and still 31 Oct
+    // for an organization that keeps Pacific time.
+    vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));
+    let period: { year?: number; month?: number } | undefined;
+    server.use(
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.get('/api/settings/org', () =>
+        HttpResponse.json({ ...ORG_SETTINGS, timeZone: 'America/Los_Angeles' }),
+      ),
+      http.post('/api/accounting/banks/clearances', () => HttpResponse.json({ affected: 1 })),
+      http.post('/api/accounting/reconciliations', async ({ request }) => {
+        period = (await request.json()) as { year?: number; month?: number };
+        return HttpResponse.json(RECON_IN_PROGRESS);
+      }),
+      http.post('/api/accounting/reconciliations/:id/finalize', () =>
+        HttpResponse.json({ ...RECON_IN_PROGRESS, status: 'finalized' }),
+      ),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconcile account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select all uncleared' }));
+    const finalizeButton = await screen.findByRole('button', { name: 'Finalize' });
+    await vi.waitFor(() => expect(finalizeButton).toBeEnabled());
+    await userEvent.click(finalizeButton);
+
+    await vi.waitFor(() => expect(period).toMatchObject({ year: 2026, month: 10 }));
+  });
+
+  it('holds Finalize while the organization’s settings are still loading', async () => {
+    let releaseSettings = () => {};
+    const settingsHeld = new Promise<void>((resolve) => (releaseSettings = resolve));
+    server.use(
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.get('/api/settings/org', async () => {
+        await settingsHeld;
+        return HttpResponse.json(ORG_SETTINGS);
+      }),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconcile account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select all uncleared' }));
+
+    const finalizeButton = await screen.findByRole('button', { name: 'Finalize' });
+    expect(finalizeButton).toBeDisabled();
+    expect(screen.getByText(/Still loading the organization’s settings/)).toBeInTheDocument();
+
+    releaseSettings();
+    await vi.waitFor(() => expect(finalizeButton).toBeEnabled());
+  });
+
+  it('blocks Finalize, with the reason and a retry, while the organization’s today is unknown', async () => {
+    let settingsReads = 0;
+    let started = false;
+    server.use(
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.get('/api/settings/org', () => {
+        settingsReads += 1;
+        return settingsReads === 1
+          ? HttpResponse.json(
+              {
+                title: 'internal_error',
+                status: 500,
+                detail: 'The settings could not be read.',
+                code: 'internal_error',
+                correlationId: '0123456789abcdef0123456789abcdef',
+              },
+              { status: 500, headers: { 'content-type': 'application/problem+json' } },
+            )
+          : HttpResponse.json(ORG_SETTINGS);
+      }),
+      http.post('/api/accounting/reconciliations', () => {
+        started = true;
+        return HttpResponse.json(RECON_IN_PROGRESS);
+      }),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconcile account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select all uncleared' }));
+
+    const reason = await screen.findByText(
+      /settings couldn’t be loaded, so today’s date isn’t known/,
+    );
+    const finalizeButton = screen.getByRole('button', { name: 'Finalize' });
+    expect(finalizeButton).toBeDisabled();
+    expect(finalizeButton).toHaveAccessibleDescription(reason.textContent ?? '');
+    await userEvent.click(finalizeButton);
+    expect(started).toBe(false);
+
+    // Scoped to the reconcile notice: the refund-checks panel has no handler here and offers its own.
+    const notice = reason.parentElement as HTMLElement;
+    expect(within(notice).getByText(/Something went wrong on our end/)).toBeInTheDocument();
+    expect(
+      within(notice).getByText('Reference: 0123456789abcdef0123456789abcdef'),
+    ).toBeInTheDocument();
+    await userEvent.click(within(notice).getByRole('button', { name: 'Retry' }));
+
+    await vi.waitFor(() => expect(finalizeButton).toBeEnabled());
+    expect(screen.queryByText(/today’s date isn’t known/)).not.toBeInTheDocument();
   });
 
   it('ticks an uncleared item through its row checkbox (keyboard-operable, not readonly)', async () => {
