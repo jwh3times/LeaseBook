@@ -18,6 +18,25 @@ next section.
 
 No unreleased changes.
 
+## [0.32.7] - 2026-11-10
+
+### Changed
+
+- The installed-skills check (`scripts/check-skills.mjs`) reads the version 2 `skills-lock.json`
+  that `skills` CLI 1.8.0 writes, whose hashes no longer depend on line endings, so the shared
+  skills install with the current CLI instead of a pinned 1.7.4 (#748). The lock is now version 2;
+  no skill's content changed.
+
+## [0.32.6] - 2026-11-10
+
+### Changed
+
+- Settled the four journal events that only the seeders post (#556). `BalanceForward` stays
+  seed-only: its scenario-catalogue exemption is now permanent, since onboarding posts
+  `OpeningBalance` instead. A fee sweep, an owner contribution and a vendor payment each get a
+  screen in Phase 1, and their exemptions now name the issues that build them (#743, #744, #745).
+  The glossary gains Owner contribution, Fee sweep and Vendor payment.
+
 ## [0.32.5] - 2026-11-09
 
 ### Changed
@@ -2009,7 +2028,9 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.5...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.7...HEAD
+[0.32.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.7
+[0.32.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.6
 [0.32.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.5
 [0.32.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.4
 [0.32.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.3

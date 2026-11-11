@@ -145,6 +145,23 @@ against its held PM fees can be paid. It joins the held PM fees in that account 
 income.
 _Avoid_: owner contribution (an owner's own money), PM deposit, top-up
 
+**Owner contribution**:
+Money an owner deposits from their own funds into an operating trust account for one of their
+properties, raising that owner's balance there. It is owner money, never the property manager's.
+_Avoid_: PM contribution (the property manager's own money), owner deposit, owner payment
+
+**Fee sweep**:
+Moving held PM fees out of a trust bank account into the PM operating account. Only fees the property
+manager has held there on every day since the sweep's date can be swept.
+_Avoid_: transfer (a transfer moves held fees between two trust accounts), fee withdrawal, payout
+
+**Vendor payment**:
+A payment from one owner's funds in an operating trust account to a vendor, for one of that owner's
+properties. It is charged to whoever owned the property on its date, and it may use the owner's reserve
+but never take the owner below zero.
+_Avoid_: disbursement (a disbursement pays the owner), vendor bill (the vendor's invoice, not the
+payment)
+
 **Refund check**:
 A check that returns a tenant's held security deposit or prepaid credit. It posts when issued, draws on
 the bank account that holds that liability, and is identified by its number on that bank account. It is
