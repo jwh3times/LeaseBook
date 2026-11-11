@@ -18,6 +18,18 @@ next section.
 
 No unreleased changes.
 
+## [0.32.8] - 2026-11-10
+
+### Fixed
+
+- Reconcile-in-place on Banking reconciles the organization's current month, taken from the time
+  zone its settings keep, instead of the month on the viewer's own clock (#740). A staff member on
+  the other side of a month boundary from the organization, such as someone in Eastern time just
+  after midnight on the 1st for a Pacific organization, finalized and locked the next month and
+  left the one just ended unreconciled. While the organization's settings are still loading or
+  could not be read, Finalize is disabled with the reason beside it, and a failed read shows its
+  support reference and a Retry.
+
 ## [0.32.7] - 2026-11-10
 
 ### Changed
@@ -2028,7 +2040,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.7...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.8...HEAD
+[0.32.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.8
 [0.32.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.7
 [0.32.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.6
 [0.32.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.5

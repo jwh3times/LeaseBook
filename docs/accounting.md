@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-09
+- **Last reviewed:** 2026-11-10
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -384,8 +384,9 @@ the reader can do: an administrator is pointed at the month's reconciliation his
 are told to ask an administrator. A `PMAdmin` can **unlock** a finalized month from its row in that history,
 giving a reason the audit log keeps with the acting user. The month then reads **Reopened**: postings dated
 into it land again until it is finalized again, and items stay reconciled meanwhile. Reconcile-in-place
-finalizes only the current month, so a reopened past month has no screen to finalize it again (#656). There
-is no bulk un-reconcile.
+finalizes only the organization's current month, read in its zone ("Which day it is" above) and never the
+viewer's, so a reopened past month has no screen to finalize it again (#656). Until the organization's
+settings are read, Finalize waits rather than guess the month (#740). There is no bulk un-reconcile.
 
 **Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`

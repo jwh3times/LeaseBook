@@ -11,6 +11,11 @@ interface ReconcileBarProps {
   onSelectAll: () => void;
   onFinalize: () => void;
   finalizing: boolean;
+  /**
+   * Set while the month to finalize can't be known yet (the organization's today is unread, #740): the
+   * id of the element that says why, which disables Finalize and describes it.
+   */
+  finalizeBlockedBy?: string;
 }
 
 /**
@@ -27,6 +32,7 @@ export function ReconcileBar({
   onSelectAll,
   onFinalize,
   finalizing,
+  finalizeBlockedBy,
 }: ReconcileBarProps) {
   const current = clearedBalance + selectedSum;
   const statementNum = Number.parseFloat(statementBalance);
@@ -86,7 +92,8 @@ export function ReconcileBar({
               variant="primary"
               size="md"
               icon="check"
-              disabled={finalizing}
+              disabled={finalizing || finalizeBlockedBy !== undefined}
+              aria-describedby={finalizeBlockedBy}
               onClick={onFinalize}
             >
               Finalize
