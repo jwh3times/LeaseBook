@@ -18,6 +18,54 @@ next section.
 
 No unreleased changes.
 
+## [0.32.10] - 2026-11-11
+
+### Added
+
+- **Invariant I12.** The core sweep, nightly and `check-invariants`, now reports any finalized bank
+  reconciliation whose reconciled lines no longer net to its statement, or that reconciled a line
+  dated after its month (#656).
+- `GET /api/accounting/reconciliations/{id}/lines` returns what a month's reconciliation can be
+  finalized against: the balance already reconciled through that month, and every unreconciled bank
+  line dated through its last day. The screen for finalizing a reopened past month again, which reads
+  it, comes next (#656).
+
+### Changed
+
+- **Months reconcile in order for each bank account.** Finalizing a month is refused while a later
+  month is finalized (`reconciliation_later_month_finalized`) or an earlier one is reopened
+  (`reconciliation_earlier_month_reopened`). Unlocking a month is refused while a later month is
+  finalized. Each refusal names the month to deal with first. To correct April when May and June are
+  finalized, unlock June, then May, then April, and finalize them again in the other direction. A month
+  after the organization's current month can't be started or finalized
+  (`reconciliation_period_in_future`) (#656).
+- Finalizing a month again replaces its stored report. The new report also records when the month
+  first closed, who reopened it and why, and when it closed again; the report it replaced stays in the
+  audit trail (#656).
+- The demo organization's finalized April 2026 Operating Trust reconciliation now marks the four
+  cleared lines it reconciled as reconciled, so April nets to its 250,450.14 statement. No balance
+  moves; those four register lines now read **Reconciled** instead of **Cleared** (#656).
+
+### Fixed
+
+- **A month reconciles to its own statement** (#656). A reconciliation's cleared balance used to be
+  every cleared line on the account, whatever its month, and finalizing reconciled all of them. So a
+  past month unlocked and finalized again could only balance at today's figure, and it swept in the
+  lines of every month since. A month's cleared balance is now what earlier months and this one
+  reconciled, plus the lines assigned to it as it is finalized, and finalize reconciles only those.
+  A line is assigned to the statement that shows it paid, not the month it was dated: a check
+  written on 28 April and paid on 3 May counts in May. Only a line dated on or before the month's last
+  day can be assigned (`reconciliation_line_not_assignable`). Only the organization's current month
+  may be finalized without naming its lines; any other month must name them
+  (`reconciliation_lines_required`), and an uncleared line named is cleared.
+
+## [0.32.9] - 2026-11-10
+
+### Changed
+
+- Bumped the web dependencies `@tanstack/react-query` and `@tanstack/react-query-devtools` from
+  5.106.1 to 5.107.1, `cspell` from 10.4.0 to 10.4.1, and `oxlint` from 1.91.0 to 1.92.0.
+
 ## [0.32.8] - 2026-11-10
 
 ### Fixed
@@ -2040,7 +2088,9 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.8...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.10...HEAD
+[0.32.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.10
+[0.32.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.9
 [0.32.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.8
 [0.32.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.7
 [0.32.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.6
