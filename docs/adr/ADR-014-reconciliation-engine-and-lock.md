@@ -175,8 +175,11 @@ zero difference only at today's cleared balance, never at its own statement, and
 of every month since as its own. Nothing kept an account's months in order, so a later month could be
 finalized while an earlier one stayed open.
 
-This addendum is decided but not yet built: #656 implements it, and until then the engine behaves as
-the paragraph above describes.
+Issue #656 implements it. The engine rules, the finalize-again report and invariant I12 are built; the
+history row's screen for finalizing a reopened past month again is its remaining step. Building it settled
+one point this addendum left implicit: only the organization's current month may be finalized without
+naming its lines. Any other month names them (`reconciliation_lines_required`, 422), because assigning a
+past month every cleared line dated through its end is the date bound rejected below.
 
 **A month's cleared balance.** It is the bank lines stamped by that account's reconciliations for that
 month or an earlier one, plus the cleared, unreconciled lines assigned to the month while it is being
@@ -225,4 +228,7 @@ month's last day. It runs in the core set, so the nightly sweep and `check-invar
 month that stopped balancing. No stored data is rewritten. The seeded organizations finalize their
 months in order and stamp only lines dated through each month, so their golden figures are expected
 to be unchanged. The implementation proves that by replaying all three, and any report snapshot that
-moves does so deliberately, in the same change.
+moves does so deliberately, in the same change. Replaying them found one exception: the demo
+organization's finalized April 2026 Operating Trust row was written directly by its seeder and stamped
+no lines, so I12 reported it. The seeder now stamps the four cleared lines dated through April with it,
+which nets April to its 250,450.14 statement; no posted figure moves, only those lines' status.

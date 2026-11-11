@@ -390,9 +390,9 @@ public sealed class PostingServiceTests(PostgresFixture fixture)
     {
         await scope.RunAsync(async () =>
         {
-            var started = await new StartReconciliationHandler(scope.Db)
+            var started = await new StartReconciliationHandler(scope.Db, AccountingTestHarness.Calendar(new DateOnly(2026, 2, 28)), AccountingTestHarness.Lock(scope))
                 .Handle(new StartReconciliation(bankId, 2026, 2, 0m), ct);
-            await new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+            await new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, AccountingTestHarness.Calendar(new DateOnly(2026, 2, 28)), AccountingTestHarness.Lock(scope))
                 .Handle(new FinalizeReconciliation(started.Id), ct);
         }, ct);
     }

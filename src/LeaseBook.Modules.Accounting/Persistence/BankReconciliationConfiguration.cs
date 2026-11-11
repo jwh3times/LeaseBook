@@ -33,6 +33,8 @@ public sealed class BankReconciliationConfiguration : IEntityTypeConfiguration<B
         builder.Property(e => e.FinalizedBy);
         builder.Property(e => e.ReportSnapshot).HasColumnType("jsonb");
         builder.Property(e => e.ReopenReason);
+        builder.Property(e => e.FirstFinalizedAt);
+        builder.Property(e => e.ReopenedBy);
         builder.Property(e => e.CreatedAt).IsRequired();
 
         // One reconciliation per (org, bank account, month). The composite FK to bank_accounts

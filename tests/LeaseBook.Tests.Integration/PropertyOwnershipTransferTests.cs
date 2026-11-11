@@ -164,7 +164,8 @@ public sealed class PropertyOwnershipTransferTests(PostgresFixture fixture)
                 null, "deposit:before-reconciled-sale"), ct);
             var reconciliation = await sender.Send(
                 new StartReconciliation(depositBank.Id, 2026, 2, 0m), ct);
-            await sender.Send(new FinalizeReconciliation(reconciliation.Id), ct);
+            // February has no lines on its statement; a past month names them (#656).
+            await sender.Send(new FinalizeReconciliation(reconciliation.Id, []), ct);
 
             await Should.ThrowAsync<AccountPeriodLockedException>(() => sender.Send(
                 new TransferPropertyOwnership(

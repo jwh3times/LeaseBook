@@ -250,6 +250,128 @@ public sealed class ReconciliationStateException(
     };
 }
 
+public enum ReconciliationOrderProblem
+{
+    /// <summary>A later month of the account is finalized: unlock it first.</summary>
+    LaterMonthFinalized,
+
+    /// <summary>An earlier month of the account is reopened: finalize it again first.</summary>
+    EarlierMonthReopened,
+}
+
+public enum ReconciliationAction
+{
+    Start,
+    Finalize,
+    Unlock,
+}
+
+/// <summary>
+/// An account's months finalize and unlock in order (409, #656, the ADR-014 addendum of 2026-11-09).
+/// <see cref="Year"/> and <see cref="Month"/> name the month to act on first: the latest finalized
+/// later month, or the earliest reopened earlier one.
+/// </summary>
+public sealed class ReconciliationOrderException(
+    ReconciliationOrderProblem problem, ReconciliationAction action, int year, int month)
+    : AccountingDomainException(CodeOf(problem), Describe(problem, action, year, month))
+{
+    public ReconciliationOrderProblem Problem { get; } = problem;
+
+    public int Year { get; } = year;
+
+    public int Month { get; } = month;
+
+    private static string CodeOf(ReconciliationOrderProblem problem) => problem switch
+    {
+        ReconciliationOrderProblem.EarlierMonthReopened => "reconciliation_earlier_month_reopened",
+        _ => "reconciliation_later_month_finalized",
+    };
+
+    private static string Describe(ReconciliationOrderProblem problem, ReconciliationAction action, int year, int month) =>
+        problem == ReconciliationOrderProblem.EarlierMonthReopened
+            ? $"{year}-{month:D2} is reopened for this account; finalize it again before a later month."
+            : $"{year}-{month:D2} is finalized for this account; unlock it before " + action switch
+            {
+                ReconciliationAction.Unlock => "unlocking an earlier month.",
+                ReconciliationAction.Start => "reconciling an earlier month.",
+                _ => "finalizing an earlier month.",
+            };
+}
+
+/// <summary>
+/// A reconciliation for a month after the organization's current month, read in its zone (422, #656,
+/// ADR-037): the month has not ended, or not begun, so no statement for it exists.
+/// </summary>
+public sealed class ReconciliationPeriodInFutureException(int year, int month, DateOnly today)
+    : AccountingDomainException(
+        "reconciliation_period_in_future",
+        $"{year}-{month:D2} is after the organization's current month, {today:yyyy-MM}, so it cannot be reconciled yet.")
+{
+    public int Year { get; } = year;
+
+    public int Month { get; } = month;
+
+    public DateOnly Today { get; } = today;
+}
+
+/// <summary>
+/// A month other than the organization's current one was finalized without naming its lines (422,
+/// #656). Assigning a past month every cleared line dated through its end would count a check paid on
+/// a later statement in the month it was written, the rule the ADR-014 addendum of 2026-11-09 rejected.
+/// </summary>
+public sealed class ReconciliationLinesRequiredException(int year, int month, DateOnly today)
+    : AccountingDomainException(
+        "reconciliation_lines_required",
+        $"{year}-{month:D2} is not the organization's current month, {today:yyyy-MM}, so finalizing it must name "
+        + "the lines its statement shows.")
+{
+    public int Year { get; } = year;
+
+    public int Month { get; } = month;
+
+    public DateOnly Today { get; } = today;
+}
+
+public enum ReconciliationLineProblem
+{
+    /// <summary>The line is dated after the month's last day (ADR-014 addendum, 2026-11-09).</summary>
+    AfterMonthEnd,
+
+    /// <summary>The id is not a bank line of the reconciliation's account.</summary>
+    NotOnAccount,
+
+    /// <summary>A reconciliation already stamped the line.</summary>
+    AlreadyReconciled,
+}
+
+/// <summary>
+/// A line named for a month's reconciliation cannot be assigned to it (422, #656). Only an unreconciled
+/// bank line of the account, dated on or before the month's last day, can be.
+/// </summary>
+public sealed class ReconciliationLineNotAssignableException(
+    ReconciliationLineProblem problem, int year, int month, DateOnly? lineDate = null)
+    : AccountingDomainException("reconciliation_line_not_assignable", Describe(problem, year, month, lineDate))
+{
+    public ReconciliationLineProblem Problem { get; } = problem;
+
+    public int Year { get; } = year;
+
+    public int Month { get; } = month;
+
+    public DateOnly? LineDate { get; } = lineDate;
+
+    private static string Describe(ReconciliationLineProblem problem, int year, int month, DateOnly? lineDate) => problem switch
+    {
+        ReconciliationLineProblem.AfterMonthEnd when lineDate is { } date =>
+            $"A line dated {date:yyyy-MM-dd} is after the end of {year}-{month:D2}, so it cannot be reconciled in that month.",
+        ReconciliationLineProblem.AfterMonthEnd =>
+            $"A line chosen for {year}-{month:D2} is dated after the month's end, so it cannot be reconciled in that month.",
+        ReconciliationLineProblem.AlreadyReconciled =>
+            $"A line chosen for {year}-{month:D2} is already reconciled in a month's reconciliation.",
+        _ => $"A line chosen for {year}-{month:D2} is not a bank line of this account.",
+    };
+}
+
 /// <summary>No reconciliation with the given id exists in this org (404).</summary>
 public sealed class ReconciliationNotFoundException(Guid reconciliationId)
     : AccountingDomainException("reconciliation_not_found", "That reconciliation was not found.")

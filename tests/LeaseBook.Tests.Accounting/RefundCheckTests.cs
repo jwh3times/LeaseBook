@@ -475,8 +475,8 @@ public sealed class RefundCheckTests(PostgresFixture fixture)
         lines.ShouldContain(await BankLineAsync(scope, checkEntryId, ct));
         await ClearAsync(scope, [.. lines], true, ct);
         var view = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 3, 200m), ct);
-        view.Difference.ShouldBe(0m);
-        await SendAsync(scope, new FinalizeReconciliation(view.Id), ct);
+        // March is a past month, so it names the lines its statement shows (#656).
+        (await SendAsync(scope, new FinalizeReconciliation(view.Id, [.. lines]), ct)).Difference.ShouldBe(0m);
     }
 
     /// <summary>The posting through the posting seam of a pre-#475 application drawn from the trust bank.</summary>

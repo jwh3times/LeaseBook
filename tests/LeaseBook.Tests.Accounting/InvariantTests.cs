@@ -395,10 +395,18 @@ public sealed class InvariantTests(PostgresFixture fixture)
             new(trust, 12m, null, "both", Bank: scope.TrustBankId),
             new(AccountCodes.OwnerEquity, null, 12m, "both", Owner: Owner, Bank: scope.TrustBankId));
 
+        // I12 (a): February is finalized on the deposit bank at 99.00 with nothing stamped for it.
+        var unbacked = await plant.FinalizedReconciliationAsync(scope.DepositBankId, 2026, 2, 99m, ct);
+
+        // I12 (b) alone: January on the operating bank stamped the I3 entry's operating line, dated
+        // 1 February, at a statement that counts it, so the month still nets to its statement.
+        var january = await plant.FinalizedReconciliationAsync(scope.OperatingBankId, 2026, 1, 40m, ct);
+        await plant.StampAsync(pmLines[0], january, ct);
+
         var violations = await plant.SweepAsync(ct);
 
         violations.Select(v => v.Invariant).ShouldBe(
-            ["I1", "I1", "I2", "I3", "I4", "I4", "I4", "I7", "I7", "I10", "I10", "I11", "I9", "I9", "I8"]);
+            ["I1", "I1", "I2", "I3", "I4", "I4", "I4", "I7", "I7", "I10", "I10", "I11", "I9", "I9", "I8", "I12", "I12"]);
         violations.Select(v => $"{v.Invariant} {v.Detail}").ShouldBe(
             [
                 $"I1 entry {unbalanced} does not balance in cash: debits 0.00 != credits 60.00",
@@ -423,6 +431,10 @@ public sealed class InvariantTests(PostgresFixture fixture)
                 "I8 event_type 'UnmappedOwnerCredit' posts owner-attributed owner_equity lines but has no "
                     + $"statement section — 1 line(s), e.g. entry {uncovered}; every owner statement covering "
                     + "one of them fails to render",
+                $"I12 reconciliation {unbacked} for bank {scope.DepositBankId} 2026-02 is finalized at a statement "
+                    + "of 99.00, but the lines stamped for it and the months before it net to 0.00",
+                $"I12 reconciliation {january} for bank {scope.OperatingBankId} 2026-01 stamped 1 line(s) dated "
+                    + $"after the month's last day, e.g. line {pmLines[0]} dated 2026-02-01",
             ],
             ignoreOrder: true);
     }
@@ -520,6 +532,37 @@ public sealed class InvariantTests(PostgresFixture fixture)
             }
 
             return (entryId, lineIds);
+        }
+
+        /// <summary>A finalized reconciliation for the bank's month, at the given statement balance.</summary>
+        public async Task<Guid> FinalizedReconciliationAsync(
+            Guid bankAccountId, int year, int month, decimal statement, CancellationToken ct)
+        {
+            var id = UuidV7.NewId();
+            await using var insert = new NpgsqlCommand(
+                "INSERT INTO bank_reconciliations (id, org_id, bank_account_id, period_year, period_month, " +
+                "statement_ending_balance, status, finalized_at, created_at) " +
+                "VALUES (@id, @org, @bank, @year, @month, @statement, 'finalized', now(), now())", _conn, _tx);
+            insert.Parameters.AddWithValue("id", id);
+            insert.Parameters.AddWithValue("org", _orgId);
+            insert.Parameters.AddWithValue("bank", bankAccountId);
+            insert.Parameters.AddWithValue("year", year);
+            insert.Parameters.AddWithValue("month", month);
+            insert.Parameters.AddWithValue("statement", statement);
+            await insert.ExecuteNonQueryAsync(ct);
+            return id;
+        }
+
+        /// <summary>Stamps a bank line as reconciled by the given reconciliation.</summary>
+        public async Task StampAsync(Guid journalLineId, Guid reconciliationId, CancellationToken ct)
+        {
+            await using var insert = new NpgsqlCommand(
+                "INSERT INTO bank_line_status (journal_line_id, org_id, status, cleared_at, reconciliation_id, " +
+                "created_at, updated_at) VALUES (@line, @org, 'reconciled', now(), @recon, now(), now())", _conn, _tx);
+            insert.Parameters.AddWithValue("line", journalLineId);
+            insert.Parameters.AddWithValue("org", _orgId);
+            insert.Parameters.AddWithValue("recon", reconciliationId);
+            await insert.ExecuteNonQueryAsync(ct);
         }
 
         /// <summary>The whole sweep, read through a context on this transaction.</summary>

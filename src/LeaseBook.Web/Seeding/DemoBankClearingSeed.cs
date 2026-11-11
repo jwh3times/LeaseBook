@@ -26,7 +26,9 @@ namespace LeaseBook.Web.Seeding;
 /// the FinalizeReconciliation command, same pattern as bank_line_status) so no live difference-check is
 /// required. The statement ending balance (250,450.14) is the Operating Trust book through April:
 /// 246,075.14 (BF Jan 31) + 1,450 (Feb payment) + 1,450 (Mar payment) + 1,475 (Apr payment).
-/// Locked: (OperBank, April 2026) — no other period is touched.
+/// Locked: (OperBank, April 2026) — no other period is touched. The four Operating Trust lines dated
+/// through April, all cleared, are stamped reconciled by that row, so April nets to its own statement
+/// as invariant I12 requires (#656): a finalized month is the lines it stamped, not a bare row.
 /// </para>
 /// </summary>
 internal static class DemoBankClearingSeed
@@ -87,6 +89,9 @@ internal static class DemoBankClearingSeed
     ///   246,075.14 (balance-forward Jan 31) + 1,450 (Feb payment) + 1,450 (Mar payment)
     ///   + 1,475 (Apr payment) = 250,450.14.
     /// Locked period: (OperBank = 01923000-0000-7000-8000-00000000ba01, year=2026, month=4).
+    /// It then stamps the cleared Operating Trust lines dated through April with that row, as finalize
+    /// would have: they are what April reconciled (#656, I12). Idempotent, and a database seeded before
+    /// the stamp gains it on its next seed.
     /// </summary>
     private static async Task EnsureFinalizedReconciliationAsync(DbContext db, CancellationToken ct)
     {
@@ -99,7 +104,7 @@ internal static class DemoBankClearingSeed
             statementEndingBalance = 250_450.14m,
             clearedBalance = 250_450.14m,
             difference = 0m,
-            reconciledItemCount = 0,       // seed doesn't count lines; report reads live data
+            reconciledItemCount = 4,       // the four lines dated through April, stamped below
             finalizedAt = new DateTime(2026, 5, 2, 10, 0, 0, DateTimeKind.Utc),
         });
 
@@ -120,6 +125,20 @@ internal static class DemoBankClearingSeed
                 {snapshot}::jsonb, NULL, '2026-05-02T10:00:00Z'::timestamptz
             )
             ON CONFLICT (org_id, bank_account_id, period_year, period_month) DO NOTHING
+            """, ct);
+
+        await db.Database.ExecuteSqlAsync(
+            $"""
+            UPDATE bank_line_status s
+            SET status = 'reconciled', reconciliation_id = {SeedReconId}, updated_at = now()
+            FROM journal_lines jl
+            JOIN journal_entries e ON e.id = jl.entry_id
+            WHERE s.journal_line_id = jl.id
+              AND jl.bank_account_id = {DemoIds.OperBank}
+              AND jl.account_class IN ('trust_bank', 'pm_operating_bank')
+              AND jl.basis IN ('cash', 'both')
+              AND e.entry_date <= DATE '2026-04-30'
+              AND s.status = 'cleared'
             """, ct);
     }
 

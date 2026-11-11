@@ -27,6 +27,16 @@ public sealed class AccountingExceptionStatusTests
         (new AccountPeriodLockedException(Guid.NewGuid(), 2026, 1), StatusCodes.Status409Conflict),
         (new ReconciliationUnbalancedException(1.23m), StatusCodes.Status409Conflict),
         (new ReconciliationStateException(ReconciliationStateProblem.AlreadyFinalized), StatusCodes.Status409Conflict),
+        (new ReconciliationOrderException(
+            ReconciliationOrderProblem.LaterMonthFinalized, ReconciliationAction.Finalize, 2026, 5), StatusCodes.Status409Conflict),
+        (new ReconciliationOrderException(
+            ReconciliationOrderProblem.EarlierMonthReopened, ReconciliationAction.Finalize, 2026, 3), StatusCodes.Status409Conflict),
+        (new ReconciliationPeriodInFutureException(2026, 12, new DateOnly(2026, 11, 11)),
+            StatusCodes.Status422UnprocessableEntity),
+        (new ReconciliationLinesRequiredException(2026, 4, new DateOnly(2026, 11, 11)),
+            StatusCodes.Status422UnprocessableEntity),
+        (new ReconciliationLineNotAssignableException(ReconciliationLineProblem.AfterMonthEnd, 2026, 4, new DateOnly(2026, 5, 2)),
+            StatusCodes.Status422UnprocessableEntity),
         (new ReconciliationNotFoundException(Guid.NewGuid()), StatusCodes.Status404NotFound),
         (new EntryNotFoundException(Guid.NewGuid()), StatusCodes.Status404NotFound),
         (new DuplicateSourceRefException("ref", Guid.NewGuid()), StatusCodes.Status409Conflict),

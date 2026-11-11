@@ -412,6 +412,10 @@ export type FiduciaryPanel = {
     latestReconciledBank: null | ReconciliationSnapshotRow;
 };
 
+export type FinalizeReconciliationRequest = {
+    assignedLineIds?: null | Array<string>;
+};
+
 export type HealthResponse = {
     status: string;
 };
@@ -905,6 +909,21 @@ export type ReadStatementHeaders = {
 
 export type ReconciliationHistoryResponse = {
     rows: Array<ReconciliationSummary>;
+};
+
+export type ReconciliationLine = {
+    journalLineId: string;
+    entryDate: string;
+    description: null | string;
+    amount: number | string;
+    status: string;
+    payoutReference: null | string;
+};
+
+export type ReconciliationLinesResponse = {
+    reconciliation: ReconciliationView;
+    reconciledThrough: number | string;
+    lines: Array<ReconciliationLine>;
 };
 
 export type ReconciliationReportResponse = {
@@ -1859,7 +1878,7 @@ export type PostApiAccountingReconciliationsResponses = {
 export type PostApiAccountingReconciliationsResponse = PostApiAccountingReconciliationsResponses[keyof PostApiAccountingReconciliationsResponses];
 
 export type PostApiAccountingReconciliationsByIdFinalizeData = {
-    body?: never;
+    body?: null | FinalizeReconciliationRequest;
     path: {
         id: string;
     };
@@ -1893,6 +1912,31 @@ export type PostApiAccountingReconciliationsByIdUnlockResponses = {
 };
 
 export type PostApiAccountingReconciliationsByIdUnlockResponse = PostApiAccountingReconciliationsByIdUnlockResponses[keyof PostApiAccountingReconciliationsByIdUnlockResponses];
+
+export type GetApiAccountingReconciliationsByIdLinesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/accounting/reconciliations/{id}/lines';
+};
+
+export type GetApiAccountingReconciliationsByIdLinesErrors = {
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetApiAccountingReconciliationsByIdLinesResponses = {
+    /**
+     * OK
+     */
+    200: ReconciliationLinesResponse;
+};
+
+export type GetApiAccountingReconciliationsByIdLinesResponse = GetApiAccountingReconciliationsByIdLinesResponses[keyof GetApiAccountingReconciliationsByIdLinesResponses];
 
 export type GetApiAccountingReconciliationsByIdReportData = {
     body?: never;

@@ -81,13 +81,13 @@ public sealed class PaymentLifecycleEvidenceTests(PostgresFixture fixture)
             var bankLines = await scope.Db.Set<JournalLine>()
                 .Where(l => l.AccountClass == AccountClass.TrustBank).Select(l => l.Id).ToArrayAsync(ct);
             await new ApplyClearancesHandler(scope.Db, scope.Tenant).Handle(new ApplyClearances(bankLines), ct);
-            var reconciliation = await new StartReconciliationHandler(scope.Db)
+            var reconciliation = await new StartReconciliationHandler(scope.Db, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new StartReconciliation(scope.TrustBankId, 2026, 2, 970m), ct);
             reconciliation.Difference.ShouldBe(receiptAmount == 1000m ? -30m : 0m);
             if (receiptAmount == 1000m)
             {
                 await Should.ThrowAsync<ReconciliationUnbalancedException>(() =>
-                    new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+                    new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                         .Handle(new FinalizeReconciliation(reconciliation.Id), ct));
             }
         }, ct);
@@ -179,9 +179,9 @@ public sealed class PaymentLifecycleEvidenceTests(PostgresFixture fixture)
             var bankLines = await scope.Db.Set<JournalLine>()
                 .Where(l => l.AccountClass == AccountClass.TrustBank).Select(l => l.Id).ToArrayAsync(ct);
             await new ApplyClearancesHandler(scope.Db, scope.Tenant).Handle(new ApplyClearances(bankLines), ct);
-            var reconciliation = await new StartReconciliationHandler(scope.Db)
+            var reconciliation = await new StartReconciliationHandler(scope.Db, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new StartReconciliation(scope.TrustBankId, 2026, 2, 600m), ct);
-            await new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+            await new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new FinalizeReconciliation(reconciliation.Id), ct);
         }, ct);
 

@@ -954,8 +954,9 @@ public static class ScenarioSeeder
     /// <summary>
     /// Clears every bank line through month end via the real <see cref="ApplyClearances"/> command
     /// (validated, idempotent — unlike the load org's raw upsert), then drives the reconciliation
-    /// commands to a $0.00 difference and finalizes. Re-runnable for the April Reopened →
-    /// re-finalize leg: <c>StartReconciliation</c> on a non-finalized row re-enters the balance.
+    /// commands to a $0.00 difference and finalizes, naming the month's lines as a past month must
+    /// (#656). Re-runnable for the April Reopened → re-finalize leg: <c>StartReconciliation</c> on a
+    /// non-finalized row re-enters the balance.
     /// </summary>
     private static async Task ReconcileAndFinalizeAsync(
         Ctx ctx, int year, int month, CancellationToken ct, Guid[]? banks = null)
@@ -980,10 +981,15 @@ public static class ScenarioSeeder
                 await ctx.Sender.Send(new ApplyClearances(lineIds), ct);
             }
 
+            // A past month names its lines (#656): every line the month's statement shows, which here
+            // is every line through month end, now cleared. The statement is what earlier months
+            // stamped plus those lines, read from the engine's own figures.
             var opened = await ctx.Sender.Send(new StartReconciliation(bankId, year, month, 0m), ct);
-            var restated = await ctx.Sender.Send(
-                new StartReconciliation(bankId, year, month, opened.ClearedBalance), ct);
-            await ctx.Sender.Send(new FinalizeReconciliation(restated.Id), ct);
+            var lines = (await ctx.Sender.Query(new GetReconciliationLines(opened.Id), ct))!;
+            var shown = lines.Lines.Where(l => l.Status == "cleared").ToList();
+            await ctx.Sender.Send(
+                new StartReconciliation(bankId, year, month, lines.ReconciledThrough + shown.Sum(l => l.Amount)), ct);
+            await ctx.Sender.Send(new FinalizeReconciliation(opened.Id, [.. shown.Select(l => l.JournalLineId)]), ct);
         }
 
         ctx.Db.ChangeTracker.Clear();

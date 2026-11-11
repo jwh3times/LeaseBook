@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-10
+- **Last reviewed:** 2026-11-11
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -384,9 +384,32 @@ the reader can do: an administrator is pointed at the month's reconciliation his
 are told to ask an administrator. A `PMAdmin` can **unlock** a finalized month from its row in that history,
 giving a reason the audit log keeps with the acting user. The month then reads **Reopened**: postings dated
 into it land again until it is finalized again, and items stay reconciled meanwhile. Reconcile-in-place
-finalizes only the organization's current month, read in its zone ("Which day it is" above) and never the
-viewer's, so a reopened past month has no screen to finalize it again (#656). Until the organization's
-settings are read, Finalize waits rather than guess the month (#740). There is no bulk un-reconcile.
+finalizes the organization's current month, read in its zone ("Which day it is" above) and never the
+viewer's. Until the organization's settings are read, Finalize waits rather than guess the month (#740).
+There is no bulk un-reconcile.
+
+**A month's cleared balance.** A month reconciles to its own statement ([ADR-014](adr/ADR-014-reconciliation-engine-and-lock.md),
+addendum of 2026-11-09). Its cleared balance is the lines the account's reconciliations stamped for that
+month or an earlier one, plus the cleared, unreconciled lines assigned to it as it is finalized, and finalize
+stamps only those. A line's date does not decide its month: a check written on 28 April and paid on 3 May
+is assigned to May, the statement that shows it paid. Only a line dated on or before the month's last day can
+be assigned to it (`reconciliation_line_not_assignable`). Only the organization's current month may be
+finalized without naming its lines, and it is assigned every cleared, unreconciled line dated through its last
+day. Any other month names them (`reconciliation_lines_required`): for a past month that default would count
+the 28 April check in April. The engine takes the named lines, with the rest of any processor payout they
+belong to, clears any that were uncleared, and checks them against the month's statement, so re-finalizing
+April in June reaches zero at April's own balance and stamps none of May's or June's lines. Finalizing again
+replaces the stored report, which then also records when the month first closed, who reopened it and why,
+and when it closed again; the report it replaced stays in the audit trail. The history row's screen for
+finalizing a reopened past month again is the remaining step of #656.
+
+**Months finalize in order.** Per bank account, a month cannot be finalized or unlocked while a later month
+is finalized (`reconciliation_later_month_finalized`), and cannot be finalized while an earlier one is
+reopened (`reconciliation_earlier_month_reopened`); each refusal names the month to act on first. To correct
+April when May and June are finalized, an administrator unlocks June, then May, then April; April is
+corrected and finalized, then May, then June. A month never reconciled blocks nothing, and a month after the
+organization's current month cannot be started or finalized (`reconciliation_period_in_future`). Invariant
+I12 sweeps the result: every finalized month nets to its statement and stamped no line dated after it.
 
 **Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`

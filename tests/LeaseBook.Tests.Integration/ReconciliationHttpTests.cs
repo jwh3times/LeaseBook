@@ -50,8 +50,14 @@ public sealed class ReconciliationHttpTests(PostgresFixture fixture)
             new { bankAccountId = setup.TrustBankId, year = 2026, month = 2, statementEndingBalance = 100m }, ct);
         started.Difference.ShouldBe(100m);
 
-        // Finalize now → 409 reconciliation_unbalanced.
-        var unbalanced = await client.PostAsJsonAsync($"/api/accounting/reconciliations/{started.Id}/finalize", new { }, ct);
+        // February is a past month, so finalize names its lines (#656); with none, 422.
+        var unnamed = await client.PostAsJsonAsync($"/api/accounting/reconciliations/{started.Id}/finalize", new { }, ct);
+        unnamed.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        (await unnamed.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!.Code.ShouldBe("reconciliation_lines_required");
+
+        // Finalize now, naming no lines → 409 reconciliation_unbalanced.
+        var unbalanced = await client.PostAsJsonAsync($"/api/accounting/reconciliations/{started.Id}/finalize",
+            new { assignedLineIds = Array.Empty<Guid>() }, ct);
         unbalanced.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await unbalanced.Content.ReadFromJsonAsync<ProblemWithCode>(ct))!.Code.ShouldBe("reconciliation_unbalanced");
 
@@ -59,7 +65,7 @@ public sealed class ReconciliationHttpTests(PostgresFixture fixture)
         await PostOkAsync<ClearancesResult>(client, "/api/accounting/banks/clearances",
             new { journalLineIds = new[] { lineId } }, ct);
         var finalized = await PostOkAsync<ReconciliationView>(client,
-            $"/api/accounting/reconciliations/{started.Id}/finalize", new { }, ct);
+            $"/api/accounting/reconciliations/{started.Id}/finalize", new { assignedLineIds = new[] { lineId } }, ct);
         finalized.Status.ShouldBe("finalized");
         finalized.Difference.ShouldBe(0m);
 
@@ -82,6 +88,83 @@ public sealed class ReconciliationHttpTests(PostgresFixture fixture)
         await PostOkAsync<PostResult>(client, $"/api/accounting/banks/{setup.TrustBankId}/adjustments",
             new { kind = "interest", amount = 5m, date = Feb6, sourceRef = Key() }, ct);
     }
+
+    /// <summary>
+    /// #656: the order refusals (409) and a future month (422) reach the client with their codes and a
+    /// message naming the month to act on; a month re-finalized against named lines refuses one dated
+    /// after its end (422) and finalizes against the rest.
+    /// </summary>
+    [Fact]
+    public async Task Order_and_future_month_refusals_and_named_lines_over_http()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var reconciliations = "/api/accounting/reconciliations";
+
+        await PostOkAsync<PostResult>(client, $"/api/accounting/banks/{setup.TrustBankId}/adjustments",
+            new { kind = "interest", amount = 100m, date = Feb1, sourceRef = Key() }, ct);
+        var february = await PostOkAsync<ReconciliationView>(client, reconciliations,
+            new { bankAccountId = setup.TrustBankId, year = 2026, month = 2, statementEndingBalance = 0m }, ct);
+        await PostOkAsync<ReconciliationView>(client, $"{reconciliations}/{february.Id}/finalize",
+            new { assignedLineIds = Array.Empty<Guid>() }, ct);
+        var march = await PostOkAsync<ReconciliationView>(client, reconciliations,
+            new { bankAccountId = setup.TrustBankId, year = 2026, month = 3, statementEndingBalance = 0m }, ct);
+        await PostOkAsync<ReconciliationView>(client, $"{reconciliations}/{march.Id}/finalize",
+            new { assignedLineIds = Array.Empty<Guid>() }, ct);
+
+        await ShouldRefuseAsync(
+            client.PostAsJsonAsync($"{reconciliations}/{february.Id}/unlock", new { reason = "re-issued" }, ct),
+            HttpStatusCode.Conflict, "reconciliation_later_month_finalized", "2026-03", ct);
+        await ShouldRefuseAsync(
+            client.PostAsJsonAsync(reconciliations,
+                new { bankAccountId = setup.TrustBankId, year = 2026, month = 1, statementEndingBalance = 0m }, ct),
+            HttpStatusCode.Conflict, "reconciliation_later_month_finalized", "2026-03", ct);
+        await ShouldRefuseAsync(
+            client.PostAsJsonAsync(reconciliations,
+                new { bankAccountId = setup.TrustBankId, year = 2099, month = 1, statementEndingBalance = 0m }, ct),
+            HttpStatusCode.UnprocessableEntity, "reconciliation_period_in_future", "2099-01", ct);
+
+        // Unlock March then February; April cannot finalize ahead of February.
+        await PostOkAsync<ReconciliationView>(client, $"{reconciliations}/{march.Id}/unlock", new { reason = "re-issued" }, ct);
+        await PostOkAsync<ReconciliationView>(client, $"{reconciliations}/{february.Id}/unlock", new { reason = "re-issued" }, ct);
+        var april = await PostOkAsync<ReconciliationView>(client, reconciliations,
+            new { bankAccountId = setup.TrustBankId, year = 2026, month = 4, statementEndingBalance = 0m }, ct);
+        await ShouldRefuseAsync(
+            client.PostAsJsonAsync($"{reconciliations}/{april.Id}/finalize", new { }, ct),
+            HttpStatusCode.Conflict, "reconciliation_earlier_month_reopened", "2026-02", ct);
+
+        // February again, at its real statement: the interest it missed, and a March line it may not take.
+        await PostOkAsync<PostResult>(client, $"/api/accounting/banks/{setup.TrustBankId}/adjustments",
+            new { kind = "interest", amount = 100m, date = Feb5, sourceRef = Key() }, ct);
+        await PostOkAsync<PostResult>(client, $"/api/accounting/banks/{setup.TrustBankId}/adjustments",
+            new { kind = "interest", amount = 7m, date = new DateOnly(2026, 3, 2), sourceRef = Key() }, ct);
+        var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        var feb1 = register.Rows.Single(r => r.Date == Feb1).JournalLineId;
+        var feb5 = register.Rows.Single(r => r.Date == Feb5).JournalLineId;
+        var mar2 = register.Rows.Single(r => r.Date == new DateOnly(2026, 3, 2)).JournalLineId;
+        await PostOkAsync<ReconciliationView>(client, reconciliations,
+            new { bankAccountId = setup.TrustBankId, year = 2026, month = 2, statementEndingBalance = 200m }, ct);
+
+        await ShouldRefuseAsync(
+            client.PostAsJsonAsync($"{reconciliations}/{february.Id}/finalize", new { assignedLineIds = new[] { feb1, feb5, mar2 } }, ct),
+            HttpStatusCode.UnprocessableEntity, "reconciliation_line_not_assignable", "2026-03-02", ct);
+        var refinalized = await PostOkAsync<ReconciliationView>(client,
+            $"{reconciliations}/{february.Id}/finalize", new { assignedLineIds = new[] { feb1, feb5 } }, ct);
+        (refinalized.Status, refinalized.ClearedBalance, refinalized.Difference).ShouldBe(("finalized", 200m, 0m));
+    }
+
+    private static async Task ShouldRefuseAsync(
+        Task<HttpResponseMessage> request, HttpStatusCode status, string code, string named, CancellationToken ct)
+    {
+        var response = await request;
+        response.StatusCode.ShouldBe(status, await response.Content.ReadAsStringAsync(ct));
+        var problem = (await response.Content.ReadFromJsonAsync<ProblemWithDetail>(ct))!;
+        problem.Code.ShouldBe(code);
+        problem.Detail.ShouldContain(named);
+    }
+
+    private sealed record ProblemWithDetail(string Code, string Detail);
 
     private sealed record ProblemWithCode(string Code);
 

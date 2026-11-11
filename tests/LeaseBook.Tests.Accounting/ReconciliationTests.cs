@@ -125,7 +125,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         // actor, whose null UserId would make this assertion vacuous.
         var user = UuidV7.NewId();
         await scope.Executor.RunAsync(scope.OrgId, Actor.User(user), Persona.Staff, () =>
-            new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+            new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new FinalizeReconciliation(view.Id), ct), ct);
 
         Guid? finalizedBy = null;
@@ -171,17 +171,21 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         }
     }
 
-    [Theory]
-    [InlineData(2000, 1)]
-    [InlineData(2100, 12)]
-    public async Task The_first_and_last_month_in_range_can_be_started(int year, int month)
+    /// <summary>
+    /// The validator admits 2000-01 through 2100-12. The first can be started; the last passes
+    /// validation and is refused by the handler as after the organization's current month (#656).
+    /// </summary>
+    [Fact]
+    public async Task The_first_month_in_range_can_be_started_and_the_last_is_refused_as_future()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var scope = await ProvisionedScopeAsync(fixture, ct);
 
-        var view = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, year, month, -12.5m), ct);
+        var view = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2000, 1, -12.5m), ct);
 
-        (view.Year, view.Month, view.StatementEndingBalance, view.Difference).ShouldBe((year, month, -12.5m, -12.5m));
+        (view.Year, view.Month, view.StatementEndingBalance, view.Difference).ShouldBe((2000, 1, -12.5m, -12.5m));
+        await Should.ThrowAsync<ReconciliationPeriodInFutureException>(
+            () => SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2100, 12, -12.5m), ct));
     }
 
     // ---- the states a reconciliation moves through ----
@@ -195,7 +199,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         var first = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 2, 100m), ct);
         var again = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 2, 0m), ct);
         (again.Id, again.Status, again.StatementEndingBalance).ShouldBe((first.Id, "in_progress", 0m));
-        (await SendAsync(scope, new FinalizeReconciliation(first.Id), ct)).Status.ShouldBe("finalized");
+        (await SendAsync(scope, new FinalizeReconciliation(first.Id, []), ct)).Status.ShouldBe("finalized");
 
         var refused = await Should.ThrowAsync<ReconciliationStateException>(
             () => SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 2, 0m), ct));
@@ -213,7 +217,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         await using var scope = await ProvisionedScopeAsync(fixture, ct);
         var finalized = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 2, 0m), ct);
-        await SendAsync(scope, new FinalizeReconciliation(finalized.Id), ct);
+        await SendAsync(scope, new FinalizeReconciliation(finalized.Id, []), ct);
         var open = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 3, 0m), ct);
 
         var twice = await Should.ThrowAsync<ReconciliationStateException>(
@@ -233,7 +237,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         var view = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 2, 0m), ct);
 
         var refused = await Should.ThrowAsync<InvalidOperationException>(() => scope.RunAsync(() =>
-            new FinalizeReconciliationHandler(scope.Db, new ActorContext()).Handle(new FinalizeReconciliation(view.Id), ct), ct));
+            new FinalizeReconciliationHandler(scope.Db, new ActorContext(), scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope)).Handle(new FinalizeReconciliation(view.Id), ct), ct));
 
         refused.Message.ShouldBe(
             "Finalizing a reconciliation requires a declared actor — Actor.User(id) for a signed-in " +
@@ -250,7 +254,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         await using var scope = await ProvisionedScopeAsync(fixture, ct);
         var december = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2025, 12, 0m), ct);
-        await SendAsync(scope, new FinalizeReconciliation(december.Id), ct);
+        await SendAsync(scope, new FinalizeReconciliation(december.Id, []), ct);
         var february = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 2, 20m), ct);
         var january = await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 1, 10m), ct);
         // The same month on another account, started after the trust account's.
@@ -289,7 +293,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         var reconciliation = BankReconciliation.Start(UuidV7.NewId(), 2026, 2, new Money(1000m));
         var at = new DateTime(2026, 3, 2, 9, 0, 0, DateTimeKind.Utc);
 
-        Should.Throw<InvalidOperationException>(() => reconciliation.Reopen("not finalized yet")).Message
+        Should.Throw<InvalidOperationException>(() => reconciliation.Reopen("not finalized yet", null)).Message
             .ShouldBe("Only a finalized reconciliation can be reopened.");
         reconciliation.Status.ShouldBe(ReconciliationStatus.InProgress);
 
@@ -304,7 +308,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         (reconciliation.StatementEndingBalance, reconciliation.ReportSnapshot, reconciliation.FinalizedAt, reconciliation.FinalizedBy)
             .ShouldBe((new Money(900m), "{\"snapshot\":1}", (DateTime?)at, (Guid?)null));
 
-        reconciliation.Reopen("statement corrected");
+        reconciliation.Reopen("statement corrected", null);
         reconciliation.SetStatementBalance(new Money(950m));
         reconciliation.StatementEndingBalance.ShouldBe(new Money(950m));
         (reconciliation.Status, reconciliation.ReopenReason).ShouldBe((ReconciliationStatus.Reopened, "statement corrected"));
@@ -342,7 +346,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         OrgScope scope, Guid bank, int year, int month, decimal statement, CancellationToken ct)
     {
         ReconciliationView view = null!;
-        await scope.RunAsync(async () => view = await new StartReconciliationHandler(scope.Db)
+        await scope.RunAsync(async () => view = await new StartReconciliationHandler(scope.Db, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
             .Handle(new StartReconciliation(bank, year, month, statement), ct), ct);
         return view;
     }
@@ -350,7 +354,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
     private static async Task<ReconciliationView> FinalizeAsync(OrgScope scope, Guid id, CancellationToken ct)
     {
         ReconciliationView view = null!;
-        await scope.RunAsync(async () => view = await new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+        await scope.RunAsync(async () => view = await new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
             .Handle(new FinalizeReconciliation(id), ct), ct);
         return view;
     }
@@ -359,7 +363,7 @@ public sealed class ReconciliationTests(PostgresFixture fixture)
         scope.RunAsync(() => new ApplyClearancesHandler(scope.Db, scope.Tenant).Handle(new ApplyClearances(ids), ct), ct);
 
     private static Task UnlockAsync(OrgScope scope, Guid id, string reason, CancellationToken ct) =>
-        scope.RunAsync(() => new UnlockReconciliationHandler(scope.Db).Handle(new UnlockReconciliation(id, reason), ct), ct);
+        scope.RunAsync(() => new UnlockReconciliationHandler(scope.Db, scope.Actor, Calendar(new DateOnly(2026, 2, 28)), Lock(scope)).Handle(new UnlockReconciliation(id, reason), ct), ct);
 
     private static async Task<ReconciliationReportResponse?> ReportAsync(OrgScope scope, Guid id, CancellationToken ct)
     {

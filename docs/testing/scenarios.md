@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-10
+- **Last reviewed:** 2026-11-11
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-79 scenarios, 1 of them an expected failure that shows a known limit. 5 journal event types and 18 routes are exempt.
+79 scenarios, 1 of them an expected failure that shows a known limit. 5 journal event types and 19 routes are exempt.
 
 ### Scenarios
 
@@ -327,6 +327,7 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
+| The reconciliation history's Finalize-again view that reads it is the next step of #656. | 1 |
 | baseline gap | 11 |
 
 #### Journal event types with no scenario
@@ -361,6 +362,7 @@ not edit between the markers.
 | `POST /api/payments/{id}/retry` | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 2026-10-12 |  |
 | `GET /api/payments/unmatched` | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 2026-10-12 |  |
 | `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #573 |
+| `GET /api/accounting/reconciliations/{id}/lines` | The reconciliation history's Finalize-again view that reads it is the next step of #656. | 2026-11-11 | #656 |
 
 <!-- prettier-ignore-end -->
 <!-- scenario-catalogue:end -->

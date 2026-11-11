@@ -102,9 +102,9 @@ public sealed class TransferPropertyDepositsTests(PostgresFixture fixture)
         // The transfer has no cash line, so the posting service would let it into a reconciled month.
         await scope.RunAsync(async () =>
         {
-            var started = await new StartReconciliationHandler(scope.Db)
+            var started = await new StartReconciliationHandler(scope.Db, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new StartReconciliation(scope.DepositBankId, 2026, 2, 0m), ct);
-            await new FinalizeReconciliationHandler(scope.Db, scope.Actor).Handle(new FinalizeReconciliation(started.Id), ct);
+            await new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope)).Handle(new FinalizeReconciliation(started.Id), ct);
         }, ct);
 
         var refused = await Should.ThrowAsync<AccountPeriodLockedException>(() => TransferAsync(scope, Feb1, ct));
