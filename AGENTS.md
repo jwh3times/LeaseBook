@@ -19,78 +19,17 @@ this one, for current progress.
 - M0-M7 are complete and merged to `main`: foundations; the trust-accounting engine; Directory; the
   tenant ledger action hub; Banking and Reconciliation; Owner Statements and Reporting; Bulk
   Operations; and the Migration toolkit and import-first onboarding.
-- M8, Hardening, Compliance and Beta Launch, remains the Phase 1 frontier. Merged so far:
-
-  - CI e2e run plus the automated WCAG 2 AA accessibility gate (ADR-022), visual-regression
-    baselines for money-critical states (ADR-023), the full-stack boot gate, and the changelog
-    (ADR-024) and public-docs policy gates.
-  - The host security hardening pass, the error-contract and observability seam (ADR-025) with the
-    diagnostics runbook, and the draft compliance set under `docs/compliance/`.
-  - `azure-infrastructure` specialist guidance and the authored Bicep under `infra/`.
-  - The `load` performance fixture with the `perf-probe` harness (`docs/perf.md`), and the trust
-    compliance pack (ADR-016 addendum).
-  - Migration close-outs: the pre-sign-off import supersede path and the held-PM-fees opening
-    balance kind (ADR-020 §5, ADR-021).
-  - Golden-data hardening and the all-scenario fixture org (`seed --org scenario`), plus the
-    deposit-disposition owner-attribution fix and its swept invariant I7 (ADR-026).
-  - The nightly trust-invariant sweep on Hangfire (ADR-001): `0 7 * * *` UTC, config-gated on
-    `Jobs:Enabled` (false everywhere but production), no dashboard mounted, violations logged under
-    stable event ids, and one code path shared with the `check-invariants` verb.
-  - Prod private networking: a VNet-injected Postgres server with no public endpoint, and prod
-    migrations as a one-shot Container Apps job polled to a terminal state (ADR-027).
-  - The platform capability seam (ADR-028): feature flags plus per-org entitlements and cohorts behind
-    one gate, resolved over a source-code registry, gating reachability only and never money. Its
-    write surface is the `capabilities` CLI verb — no endpoint, no UI — which production reaches
-    through a manual-trigger Container Apps job. Bulk runs freeze their capability set at
-    run-confirmation entry, and `/api/health/ready` splits readiness from liveness. Nothing in it is
-    deployment-validated; Azure stays operator-gated.
-  - The durable Data Protection keyring and declarable proxy trust (ADR-041). The keyring persists to
-    Postgres in every environment and is wrapped by a Key Vault key wherever deployment config names
-    one, so it is not tied to a container's filesystem. `ForwardedHeaders` trust is declared in
-    configuration, refused at startup when enabled without a named proxy, and ships off until an
-    operator names the ingress. Neither the wrap nor the ingress naming is deployment-validated.
-  - Bounded session lifetime and revocation on sign-out (ADR-043 addendum). A sign-in carries an
-    absolute twelve-hour ceiling held in the ticket itself, so sliding renewal and `RefreshSignInAsync`
-    move the idle window but never the ceiling, and a ticket without one is refused rather than
-    admitted. Signing out rotates the security stamp, which ends that account's sessions on every
-    device. `SessionLifetime` owns `OnValidatePrincipal` and calls the security-stamp validator
-    explicitly — assigning that event replaces it, and a replacement that forgot would switch off
-    revocation while every request still authenticated. The release that first deploys this signs
-    every existing session out once, by design.
-
-  Remaining M8 work is summarized publicly in `docs/ROADMAP.md`; detailed sequencing lives in the
-  open issues and the shared project board's `Track` and `Gate` fields, and priority order in its
-  `Priority` and `Rank` fields (`docs/agents/issue-tracker.md`).
-
-- Operator-gated remainder is deferred and is not ordinary engineering work: Azure OIDC federation,
-  ACR, enabling the authored `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed
-  identity, the first PITR drill, deployment-dependent telemetry and alerting — including alert
-  delivery for the sweep's violation events — and the two ADR-041 first-apply steps: naming the
-  ingress network so forwarded-header trust can be enabled and verified, and confirming the keyring's
-  Key Vault wrap engages.
-- Phase 2 includes the tenant own-ledger portal and the read-only owner portal (ADR-003, with
-  database persona enforcement from ADR-048), isolated development-only simulated payments
-  (ADR-046) with guarded returns (ADR-052) and processor fees, payout batches and their
-  reconciliation (ADR-053), and staff refund checks for held deposits and prepaid credit, printed on pre-printed
-  stock (ADR-050) or on blank stock with a MICR line LeaseBook draws itself (ADR-051; bank test-check
-  approval is an operator gate, `docs/runbooks/blank-stock-checks.md`). Before running or resetting payment fixtures, read
+- M8, Hardening, Compliance and Beta Launch, remains the Phase 1 frontier. What has shipped is in
+  `CHANGELOG.md` and `docs/adr/`; what remains is summarized in `docs/ROADMAP.md` and sequenced on
+  the board's `Track`/`Gate` and `Priority`/`Rank` fields (`docs/agents/issue-tracker.md`).
+- Operator-gated work is deferred and is not ordinary engineering work: Azure OIDC federation, ACR,
+  enabling the `deploy-dev`/`deploy-prod` workflows, live Key Vault and managed identity, the first
+  PITR drill, deployment-dependent telemetry and alerting, and the ADR-041 first-apply steps.
+- Phase 2 (tenant and owner portals, simulated payments, payouts, refund checks, the Stripe sandbox
+  adapter; ADR-003, -046, -048, -050 to -054) runs in development fixtures only — there is no live
+  payment provider. Before running or resetting payment fixtures, read
   `docs/runbooks/payment-simulation.md`; the dedicated database and generation binding protect
-  ordinary organizations and golden data. Production enrollment for either portal, owner-initiated
-  actions, durable artifact storage and live payments remain future work; M8 operator work stays
-  deferred.
-- `Accounting`, `Directory`, `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, and
-  `Migrator` carry implemented behavior; Payments has no live provider adapter. A Stripe sandbox
-  adapter (ADR-054, Proposed) runs in the development fixture only. It submits a charge, finds it
-  again and reads Stripe's payment, dispute, refund and payout events, asking Stripe again for one
-  that was never delivered. A dispute or a refund sends the payment to staff review. A payout is
-  stored with Stripe's own lines and held with no journal effect until a fixture-only command says
-  what the bank received: an amount equal to Stripe's net posts the whole payout or none of it, and
-  anything else goes to staff review. No Stripe event posts by itself, and a payout that posts has not
-  yet been shown against a real sandbox. The payment lists report the host's mode, and a sandbox
-  host's screens say "Test payment — no real money moves" and show a held payout as "Waiting for the
-  bank". ADR-054 lists the adapter's known limits. In either payment mode, a payment with no outcome after seven
-  days goes to staff review, and so does one reported both failed and succeeded, or one still waiting
-  on a payout that is closed with nothing posted.
+  ordinary organizations and golden data.
 
 The `private/` directory is gitignored by the public repository and is a separately versioned
 confidential checkout for authorized maintainers. Its repository locator and bootstrap details live
@@ -101,10 +40,6 @@ outside the public repository, and it may be absent in a public clone. It holds:
 - `private/security-review-findings.md`, `private/architecture-review-findings.md`: historical
   records of the review passes; new findings are draft repository advisories, not appends
 - `private/appfolio.md`: AppFolio export catalog (reference data)
-- `private/TODO.md`, `private/roadmap.md`: **removed 2026-09-04** — every item moved to GitHub
-  Issues and the project board; read them in the private repository's git history if you need the
-  pre-migration state. Their architecture baseline and Definition of Done have public counterparts
-  in `docs/blueprint.md` and `CONTRIBUTING.md`
 - `private/LeaseBook_PRD_v1.0.md`: product requirements and scope authority
 - `private/claude_design_files/`: interactive UI prototype, design-system source of truth, and
   design/product analysis
@@ -154,15 +89,11 @@ the configs it cites in sync when a port changes.
 - Format check: `dotnet format --verify-no-changes --exclude src/LeaseBook.Web/Migrations`
 - Run API on `:5080`: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web`
 - Integration tests use Testcontainers. Docker must be running; local compose is not required.
-- Suite coverage by module (measurement only, nothing is gated; ADR-055): add
-  `--coverage --coverage-output-format cobertura --coverage-settings tests/coverage.settings.xml --results-directory TestResults`
-  to the test command, then build the report with `dotnet reportgenerator`
-  (`docs/testing/coverage.md` owns the commands, the method and the baseline figures)
-- Mutation testing on Accounting, Payments or the organization-isolation code (an unexplained survivor fails a module's nightly job once its gate is on; ADR-055 addendum):
-  `node scripts/mutation.mjs payments --concurrency 4` (or `accounting`, `tenancy-kernel`,
-  `tenancy-web`, or `all`; add `--mutate '<glob>'` to mutate part of a module, or `--part <n>` for
-  one of the parts of Accounting or Payments the nightly jobs run; every module's gate is on)
-  (`docs/testing/mutation.md` owns the commands, the equivalents list and the gate)
+- Coverage, mutation testing (every module's gate is on), the scenario catalogue, `perf-probe`, the
+  `capabilities` CLI verb (the only capability write surface; ADR-028) and a maintainer's Stripe
+  sandbox run each have an owning doc with the exact commands: `docs/testing/coverage.md`,
+  `docs/testing/mutation.md`, `docs/testing/scenarios.md`, `docs/perf.md`,
+  `docs/runbooks/local-dev.md`, `docs/runbooks/payment-simulation.md`. Read it before running one.
 
 ### Database (run from repo root)
 
@@ -177,41 +108,19 @@ Run `dotnet tool restore` once for `dotnet-ef`.
 - Check all org invariants: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- check-invariants --all`
 - Seed the 300-unit load fixture: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org load`
 - Seed the all-scenario org (every template/workflow/report, golden-locked): `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- seed --org scenario`
-- Read/write platform capability state (flags, entitlements, cohorts — the only write surface; ADR-028):
-  `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- capabilities list [--org demo] [--stale]`
-  (also `flag enable|disable|clear <name>`, `grant|revoke <name> --org <id|demo>`,
-  `cohort add|remove <name> --org <id|demo> [--user <id>]`; `docs/runbooks/local-dev.md` owns the detail)
-- A maintainer's Stripe sandbox run, up to a held payout (never CI; the test-mode key comes from a
-  secret manager): `op run --env-file=<refs> -- node scripts/stripe-sandbox-run.mjs start`, later
-  `resume <run> [--keep]`; also `list` and `discard <run>`. It copies the sandbox fixture and never
-  touches it (`docs/runbooks/payment-simulation.md` owns the procedure)
-- Measure read-path p95 against a running host: `$env:ASPNETCORE_ENVIRONMENT='Development'; dotnet run --project src/LeaseBook.Web -- perf-probe`
-  (needs the load fixture seeded and the host already running; `docs/perf.md` owns the method and the
-  recorded numbers)
 
 ### Web (run from `web/`)
 
-- Dev server on `:5373`, proxying `/api` to `:5080`: `npm run dev`
-- Lint: `npm run lint`
-- Typecheck: `npm run typecheck`
-- Tests: `npm run test`
-- Build: `npm run build`
-- Single test: `npm run test -- src/design/formatMoney.test.ts`
+Scripts are in `web/package.json` (`dev` on `:5373` proxies `/api` to `:5080`; `lint`, `typecheck`,
+`test`, `build`). The ones with traps:
+
 - Regenerate API client (emits the contract itself; no running host or database): `npm run api:generate`
 - e2e, against a seeded host: `npm run e2e`
 - e2e on a fresh copy of a seeded template database, leaving the dev database alone (stop a running
   host first; the suite changes the data it runs on, so a second plain run fails): `npm run e2e:fresh`
-- e2e accessibility gate only: `npm run e2e -- a11y.spec.ts`
-- Unit tests with coverage (report in `web/coverage/unit/`): `npm run test:coverage`
-- e2e with host and browser coverage plus the route inventory, against the same seeded database as
-  `npm run e2e` (report in `web/coverage/e2e/`; stop a running host first): `npm run e2e:coverage`.
-  It also checks each scenario against what its tests did and runs `check-invariants --all`, and
-  fails on either (ADR-056)
-- Scenario catalogue, static check (every journal event type and contract route has a scenario or an
-  exemption; every test carries a known `@scenario:<id>` tag), from the repo root:
-  `node scripts/scenario-catalogue.mjs check --openapi src/LeaseBook.Web/obj/openapi/LeaseBook.Web.json`
-  after `node scripts/emit-openapi.mjs`; regenerate the table with `node scripts/scenario-catalogue.mjs doc`
-  (`docs/testing/scenarios.md` owns the method and the catalogue table)
+- e2e with host and browser coverage (stop a running host first): `npm run e2e:coverage`. It also
+  checks each scenario against what its tests did and runs `check-invariants --all`, and fails on
+  either (ADR-056)
 - Public documentation quality and policy gate: `npm run docs:check`
 
 ### Container
@@ -239,13 +148,9 @@ unless a higher-level invariant in this file conflicts.
 directly; both are generated and hand-editing either is overwritten on the next sync. After changing
 an agent or a skill, run `node scripts/sync-agents.mjs` (or `npm run sync:agents`) and commit the
 result. CI runs the script's `node:test` suite and regenerates with `--check`, failing the build if a
-committed mirror is stale. The same job runs `scripts/lint-agent-neutrality.mjs` and its test
-(`npm run lint:agents` from the root), which reject agent and skill sources that read wrongly from
-their mirrored copies: a bare `$0`–`$9` in a `SKILL.md`, a relative link that breaks under
-`.claude/skills/`. `scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `sync-main.mjs`,
-`next-version.mjs`, `check-changelog.mjs`, `check-docs.mjs`, `check-skills.mjs` and their tests are shared verbatim
-across repositories — don't edit them here; change the canonical copy in
-`jwh3times/skills` and re-copy it. Run `npm run docs:format` (from `web/`) **before** the sync, not
+committed mirror is stale, and `npm run lint:agents` (from the root) rejects sources that read
+wrongly from their mirrored copies: a bare `$0`–`$9` in a `SKILL.md`, a relative link that breaks
+under `.claude/skills/`. Run `npm run docs:format` (from `web/`) **before** the sync, not
 after — formatting the generated copy instead of the authored source just re-drifts it on the next
 pass. Never reintroduce symlinks under `.claude/skills/` (the sync script reports and removes them): this
 repo's `core.symlinks` is `false`, so git would silently duplicate every file inside a symlinked
@@ -387,16 +292,10 @@ elected; close the consolidated item only on distribution and completed deployme
 
 ### Machine handoff
 
-Switching machines uses `/handoff` (writes a handoff doc to the `Handoffs` folder, marks it active
-in `handoff_map.json` through `node .agents/skills/handoff/handoff-map.mjs`, then runs
-`/end-session`) and `/lets-go` on the other machine (resumes from that active handoff and claims it).
-This `/handoff` is the machine handoff; the portable-file handoff the vendored `ask-matt` skill
-describes is a different one. How the folder reaches a machine is that machine's config, not this
-repository's: `~/.config/handoffs/config` sets `HANDOFFS_TRANSPORT` (`folder` for a synced folder
-such as the Proton Drive desktop client's, `proton-cli` for a local mirror pulled and pushed through
-the `proton-drive` CLI), `HANDOFFS_DIR` and, for `proton-cli`, `HANDOFFS_REMOTE`. The skill proposes
-it on first run (`.agents/skills/handoff/machine-config.md`); an exported `HANDOFFS_DIR` still
-overrides it. What a LeaseBook handoff carries besides: `docs/agents/handoffs.md`.
+Switching machines uses `/handoff`, then `/lets-go` on the other machine — the machine handoff, not
+the portable-file handoff the vendored `ask-matt` skill describes. How the handoff folder reaches a
+machine is that machine's config (`.agents/skills/handoff/machine-config.md`); what a LeaseBook
+handoff carries: `docs/agents/handoffs.md`.
 
 ### Triage labels
 
@@ -558,13 +457,8 @@ These flows are instrumented in telemetry; regressions fail the release checklis
   work.
 - Accounting-adjacent changes must run the invariant, property-based, and golden-file suites.
 - If a budgeted UX flow changes, add or update the corresponding Playwright e2e coverage.
-- Before .NET work, read `.claude/agents/dotnet-api.md`.
-- Before React/UI work, read `.claude/agents/react-frontend.md`.
-- Before schema, migration, RLS, or query work, read `.claude/agents/postgres-specialist.md`.
-- Before accounting posting or trust-equation work, read `.claude/agents/trust-accounting.md`.
-- Before Azure infra, Bicep, deploy workflow, Key Vault, managed identity, or PITR work, read
-  `.claude/agents/azure-infrastructure.md`.
-- Before pre-merge review, read `.claude/agents/code-reviewer.md` and lead with findings.
+- Before work in a domain, read its guidance file from the table under Domain Guidance Files; for
+  pre-merge review, lead with findings.
 - When documentation accuracy is affected or in doubt, run the `docs-updater` skill
   (`.agents/skills/docs-updater/SKILL.md`) and update only the docs that actually drifted.
 
@@ -573,8 +467,6 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Use `rg` or `rg --files` for searches whenever available.
 - Do not overwrite user changes. Check `git status --short` before editing and review existing
   diffs in files you need to touch.
-- Keep edits scoped to the requested work and existing module boundaries.
-- Prefer existing repo patterns, helpers, tests, and design primitives over new abstractions.
 - Add tests proportional to risk. Money, organization isolation, RLS, posting, and migration changes require higher
   confidence than presentational changes.
 - Do not put confidential `private/` details into public commits, PR descriptions, public docs, or
