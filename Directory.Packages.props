@@ -48,7 +48,7 @@
          Microsoft.OpenApi transitively AND that version matches the tool's. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.12.2" />
     <!-- Build-time OpenAPI doc emission for the CI schema-drift gate (ADR-012). Build-only tool. -->
-    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
