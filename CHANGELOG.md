@@ -18,6 +18,15 @@ next section.
 
 No unreleased changes.
 
+## [0.32.7] - 2026-11-10
+
+### Changed
+
+- The installed-skills check (`scripts/check-skills.mjs`) reads the version 2 `skills-lock.json`
+  that `skills` CLI 1.8.0 writes, whose hashes no longer depend on line endings, so the shared
+  skills install with the current CLI instead of a pinned 1.7.4 (#748). The lock is now version 2;
+  no skill's content changed.
+
 ## [0.32.6] - 2026-11-10
 
 ### Changed
@@ -2019,7 +2028,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.6...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.7...HEAD
+[0.32.7]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.7
 [0.32.6]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.6
 [0.32.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.5
 [0.32.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.4
