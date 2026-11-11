@@ -18,6 +18,16 @@ next section.
 
 No unreleased changes.
 
+## [0.32.11] - 2026-11-11
+
+### Changed
+
+- `AGENTS.md` is about a quarter shorter (41.8k to 32.4k characters), under Claude Code's
+  large-memory-file warning, so every agent session spends less context on it. Shipped-work history
+  now lives only in this changelog and the ADRs, and the coverage, mutation, scenario-catalogue,
+  `perf-probe`, `capabilities` and Stripe sandbox commands are reached through the docs that own
+  them. No rule, invariant or trap was removed.
+
 ## [0.32.10] - 2026-11-11
 
 ### Added
@@ -2088,7 +2098,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.10...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.11...HEAD
+[0.32.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.11
 [0.32.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.10
 [0.32.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.9
 [0.32.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.8
