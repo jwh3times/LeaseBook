@@ -47,7 +47,7 @@ internal sealed class ApplyClearancesHandler(DbContext db, IOrgContext tenant)
             throw new ValidationException("Every id to clear must be a bank-account journal line in this org.");
         }
 
-        ids = await WithWholePayoutsAsync(ids, ct);
+        ids = await PayoutLines.WithWholePayoutsAsync(db, ids, ct);
 
         int affected;
         if (command.Cleared)
@@ -79,12 +79,20 @@ internal sealed class ApplyClearancesHandler(DbContext db, IOrgContext tenant)
 
         return new ClearancesResult(affected);
     }
+}
 
+/// <summary>
+/// The bank lines of one processor payout are one statement line at the bank (ADR-053), so whatever
+/// clears or reconciles one of them takes every one of them: clearing here, and the lines a month's
+/// reconciliation is assigned at finalize (#656).
+/// </summary>
+internal static class PayoutLines
+{
     private static readonly AccountClass[] BankClasses = [AccountClass.TrustBank, AccountClass.PmOperatingBank];
 
     // Widens the ids to every bank line of each payout they touch. Payouts are few per request, so one
     // prefix read per payout is cheaper than a pattern join across the journal.
-    private async Task<Guid[]> WithWholePayoutsAsync(Guid[] ids, CancellationToken ct)
+    public static async Task<Guid[]> WithWholePayoutsAsync(DbContext db, Guid[] ids, CancellationToken ct)
     {
         var touched = await (
             from line in db.Set<JournalLine>()

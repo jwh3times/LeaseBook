@@ -849,9 +849,10 @@ public static class LoadSeeder
 
     /// <summary>
     /// Marks every one of the account's bank lines through <paramref name="monthEnd"/> cleared, then
-    /// drives the real reconciliation commands to a $0.00 difference and finalizes. The statement
-    /// balance is read back from the engine's own <see cref="ReconciliationView.ClearedBalance"/>
-    /// rather than recomputed here, so the fixture can never disagree with the reconciliation report.
+    /// drives the real reconciliation commands to a $0.00 difference and finalizes, naming the month's
+    /// lines (#656). The statement balance is read back from the engine's own
+    /// <see cref="ReconciliationLinesResponse"/> rather than recomputed here, so the fixture can never
+    /// disagree with the reconciliation report.
     /// <para>
     /// Clearance lives on the <c>bank_line_status</c> side table (P62), never on a journal row, so this
     /// is written as a raw upsert exactly like <see cref="DemoBankClearingSeed"/> and the
@@ -874,12 +875,15 @@ public static class LoadSeeder
             ON CONFLICT (journal_line_id) DO NOTHING
             """, ct);
 
-        // Open with a placeholder, read the live cleared balance back, restate the statement to match
-        // (StartReconciliation on an open reconciliation updates it), then finalize at a $0 difference.
+        // Open with a placeholder, read the month's lines back, restate the statement to what earlier
+        // months stamped plus those lines (StartReconciliation on an open reconciliation updates it), then
+        // finalize at a $0 difference naming them, as a past month must (#656).
         var opened = await sender.Send(new StartReconciliation(bankId, period.Year, period.Month, 0m), ct);
-        var restated = await sender.Send(
-            new StartReconciliation(bankId, period.Year, period.Month, opened.ClearedBalance), ct);
-        await sender.Send(new FinalizeReconciliation(restated.Id), ct);
+        var lines = (await sender.Query(new GetReconciliationLines(opened.Id), ct))!;
+        var shown = lines.Lines.Where(l => l.Status == "cleared").ToList();
+        await sender.Send(
+            new StartReconciliation(bankId, period.Year, period.Month, lines.ReconciledThrough + shown.Sum(l => l.Amount)), ct);
+        await sender.Send(new FinalizeReconciliation(opened.Id, [.. shown.Select(l => l.JournalLineId)]), ct);
     }
 
     private static decimal Round2(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);

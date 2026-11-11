@@ -24,7 +24,8 @@ public interface IInvariantChecks
     /// I8: every event_type posting an owner-attributed owner_equity line has a statement section.
     /// I9: migration_clearing nets to $0 per basis.
     /// I10: held prepayment is ≥ 0 per (tenant, bank) — the bank an application or refund draws on held it.
-    /// I11: held PM fees are ≥ 0 per bank — no charge was paid from fees the bank did not hold.</summary>
+    /// I11: held PM fees are ≥ 0 per bank — no charge was paid from fees the bank did not hold.
+    /// I12: every finalized reconciliation nets to its own statement and stamped no line dated after its month.</summary>
     Task<IReadOnlyList<InvariantViolation>> CheckCoreAsync(CancellationToken ct);
 
     Task<IReadOnlyList<InvariantViolation>> CheckEntriesBalanceAsync(CancellationToken ct);
@@ -40,6 +41,13 @@ public interface IInvariantChecks
     Task<IReadOnlyList<InvariantViolation>> CheckPrepaymentBankAttributionAsync(CancellationToken ct);
 
     Task<IReadOnlyList<InvariantViolation>> CheckHeldFeesNonNegativeAsync(CancellationToken ct);
+
+    /// <summary>
+    /// I12 (#656): for every finalized reconciliation, (a) the bank lines stamped for its month or an
+    /// earlier one net to its statement ending balance, and (b) none of the lines it stamped is dated
+    /// after its month's last day.
+    /// </summary>
+    Task<IReadOnlyList<InvariantViolation>> CheckReconciledMonthsAsync(CancellationToken ct);
 
     /// <summary>
     /// I8: reachability, not arithmetic. An owner-equity event type absent from

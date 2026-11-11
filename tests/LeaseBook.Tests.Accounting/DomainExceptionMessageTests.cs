@@ -184,6 +184,34 @@ public sealed class DomainExceptionMessageTests
         yield return (new ReconciliationStateException(ReconciliationStateProblem.PeriodFinalized),
             "reconciliation_state", AlreadyFinalized);
 
+        // #656: an account's months finalize in order; the month named is the one to act on first.
+        yield return (new ReconciliationOrderException(ReconciliationOrderProblem.LaterMonthFinalized, ReconciliationAction.Finalize, 2026, 5),
+            "reconciliation_later_month_finalized", "2026-05 is finalized for this account; unlock it before finalizing an earlier month.");
+        yield return (new ReconciliationOrderException(ReconciliationOrderProblem.LaterMonthFinalized, ReconciliationAction.Unlock, 2026, 5),
+            "reconciliation_later_month_finalized", "2026-05 is finalized for this account; unlock it before unlocking an earlier month.");
+        yield return (new ReconciliationOrderException(ReconciliationOrderProblem.LaterMonthFinalized, ReconciliationAction.Start, 2026, 5),
+            "reconciliation_later_month_finalized", "2026-05 is finalized for this account; unlock it before reconciling an earlier month.");
+        yield return (new ReconciliationOrderException(ReconciliationOrderProblem.LaterMonthFinalized, (ReconciliationAction)99, 2026, 5),
+            "reconciliation_later_month_finalized", "2026-05 is finalized for this account; unlock it before finalizing an earlier month.");
+        yield return (new ReconciliationOrderException(ReconciliationOrderProblem.EarlierMonthReopened, ReconciliationAction.Finalize, 2026, 3),
+            "reconciliation_earlier_month_reopened", "2026-03 is reopened for this account; finalize it again before a later month.");
+        yield return (new ReconciliationOrderException((ReconciliationOrderProblem)99, ReconciliationAction.Unlock, 2026, 5),
+            "reconciliation_later_month_finalized", "2026-05 is finalized for this account; unlock it before unlocking an earlier month.");
+        yield return (new ReconciliationPeriodInFutureException(2026, 7, new DateOnly(2026, 6, 20)), "reconciliation_period_in_future",
+            "2026-07 is after the organization's current month, 2026-06, so it cannot be reconciled yet.");
+        yield return (new ReconciliationLinesRequiredException(2026, 4, new DateOnly(2026, 6, 20)), "reconciliation_lines_required",
+            "2026-04 is not the organization's current month, 2026-06, so finalizing it must name the lines its statement shows.");
+        yield return (new ReconciliationLineNotAssignableException(ReconciliationLineProblem.AfterMonthEnd, 2026, 4, new DateOnly(2026, 5, 2)),
+            "reconciliation_line_not_assignable", "A line dated 2026-05-02 is after the end of 2026-04, so it cannot be reconciled in that month.");
+        yield return (new ReconciliationLineNotAssignableException(ReconciliationLineProblem.AfterMonthEnd, 2026, 4),
+            "reconciliation_line_not_assignable", "A line chosen for 2026-04 is dated after the month's end, so it cannot be reconciled in that month.");
+        yield return (new ReconciliationLineNotAssignableException(ReconciliationLineProblem.AlreadyReconciled, 2026, 4),
+            "reconciliation_line_not_assignable", "A line chosen for 2026-04 is already reconciled in a month's reconciliation.");
+        yield return (new ReconciliationLineNotAssignableException(ReconciliationLineProblem.NotOnAccount, 2026, 4),
+            "reconciliation_line_not_assignable", "A line chosen for 2026-04 is not a bank line of this account.");
+        yield return (new ReconciliationLineNotAssignableException((ReconciliationLineProblem)99, 2026, 4),
+            "reconciliation_line_not_assignable", "A line chosen for 2026-04 is not a bank line of this account.");
+
         yield return (new ReconciliationNotFoundException(SampleId), "reconciliation_not_found", "That reconciliation was not found.");
         yield return (new EntryNotFoundException(SampleId), "entry_not_found", "That entry was not found.");
         yield return (new DuplicateSourceRefException(SampleCode, SampleId), "duplicate_source_ref", "This has already been posted.");

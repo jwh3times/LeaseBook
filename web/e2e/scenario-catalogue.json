@@ -970,6 +970,12 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 573
+      },
+      {
+        "route": "GET /api/accounting/reconciliations/{id}/lines",
+        "reason": "The reconciliation history's Finalize-again view that reads it is the next step of #656.",
+        "date": "2026-11-11",
+        "issue": 656
       }
     ]
   }

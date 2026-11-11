@@ -147,6 +147,23 @@ internal static class AccountingTestHarness
 
     public static AccountingPeriods Periods(OrgScope scope) => new(scope.Db);
 
+    /// <summary>The organization's calendar on the real clock, in the default zone.</summary>
+    public static PostingCalendar Calendar() => new(new FixedOrgTimeZone(), TimeProvider.System);
+
+    /// <summary>
+    /// The organization's calendar with <paramref name="today"/> as its today, at noon UTC so every
+    /// supported zone reads the same date. A test that finalizes a month without naming its lines pins
+    /// today inside that month: only the current month may (#656).
+    /// </summary>
+    public static PostingCalendar Calendar(DateOnly today) => new(new FixedOrgTimeZone(), new FixedDay(today));
+
+    public static PostingLock Lock(OrgScope scope) => new(scope.Db, scope.Tenant);
+
+    private sealed class FixedDay(DateOnly today) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(today.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
+    }
+
     public static AccountingEventService Events(OrgScope scope) =>
         new(scope.Db, Posting(scope), new PostingLock(scope.Db, scope.Tenant));
 

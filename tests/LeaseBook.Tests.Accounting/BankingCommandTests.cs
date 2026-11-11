@@ -178,9 +178,9 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(fixture, ct);
         await scope.RunAsync(async () =>
         {
-            var reconciliation = await new StartReconciliationHandler(scope.Db)
+            var reconciliation = await new StartReconciliationHandler(scope.Db, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new StartReconciliation(scope.TrustBankId, 2026, 2, 0m), ct);
-            await new FinalizeReconciliationHandler(scope.Db, scope.Actor)
+            await new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
                 .Handle(new FinalizeReconciliation(reconciliation.Id), ct);
         }, ct);
 

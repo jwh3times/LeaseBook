@@ -193,6 +193,10 @@ namespace LeaseBook.Web.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("finalized_by");
 
+                    b.Property<DateTime?>("FirstFinalizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_finalized_at");
+
                     b.Property<Guid>("OrgId")
                         .HasColumnType("uuid")
                         .HasColumnName("org_id");
@@ -208,6 +212,10 @@ namespace LeaseBook.Web.Migrations
                     b.Property<string>("ReopenReason")
                         .HasColumnType("text")
                         .HasColumnName("reopen_reason");
+
+                    b.Property<Guid?>("ReopenedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reopened_by");
 
                     b.Property<string>("ReportSnapshot")
                         .HasColumnType("jsonb")

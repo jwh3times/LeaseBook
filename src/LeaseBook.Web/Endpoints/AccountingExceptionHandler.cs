@@ -25,12 +25,15 @@ public sealed class AccountingExceptionHandler(ILogger<AccountingExceptionHandle
         {
             "unbalanced_entry" or "invalid_line" or "unknown_account" or "pm_income_owner_dim" or
             "invalid_assessment_target" or "posting_date_in_future" or "transfer_bank_not_trust" or
-            "contribution_bank_not_trust"
+            "contribution_bank_not_trust" or "reconciliation_line_not_assignable" or
+            "reconciliation_period_in_future" or "reconciliation_lines_required"
                 => StatusCodes.Status422UnprocessableEntity,
             "reconciliation_not_found" or "entry_not_found" => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status409Conflict, // period_closed, insufficient_liability, reserve_floor,
                                                 // already_reversed, duplicate_source_ref, account_period_locked,
                                                 // reconciliation_unbalanced, reconciliation_state,
+                                                // reconciliation_later_month_finalized,
+                                                // reconciliation_earlier_month_reopened,
                                                 // held_fees_* / pm_income_owner_dimension (opening shape)
         };
 

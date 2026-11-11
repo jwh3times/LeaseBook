@@ -1,6 +1,7 @@
 using FluentValidation;
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Posting;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using Microsoft.EntityFrameworkCore;
@@ -27,10 +28,19 @@ public sealed class StartReconciliationValidator : AbstractValidator<StartReconc
     }
 }
 
-internal sealed class StartReconciliationHandler(DbContext db) : ICommandHandler<StartReconciliation, ReconciliationView>
+internal sealed class StartReconciliationHandler(DbContext db, PostingCalendar calendar, IPostingLock postingLock)
+    : ICommandHandler<StartReconciliation, ReconciliationView>
 {
     public async Task<ReconciliationView> Handle(StartReconciliation command, CancellationToken ct)
     {
+        await postingLock.AcquireAsync(ct);
+
+        // A month not yet ended has no statement, and one before a finalized month can never finalize
+        // (#656). An earlier reopened month does not stop this one being prepared; it stops its finalize.
+        await ReconciliationOrder.EnsureNotFutureAsync(calendar, command.Year, command.Month, ct);
+        await ReconciliationOrder.EnsureNoLaterFinalizedAsync(
+            db, command.BankAccountId, command.Year, command.Month, ReconciliationAction.Start, ct);
+
         var statement = new Money(command.StatementEndingBalance);
         var recon = await db.Set<BankReconciliation>().FirstOrDefaultAsync(
             r => r.BankAccountId == command.BankAccountId && r.PeriodYear == command.Year && r.PeriodMonth == command.Month, ct);
@@ -51,6 +61,6 @@ internal sealed class StartReconciliationHandler(DbContext db) : ICommandHandler
         }
 
         await db.SaveChangesAsync(ct);
-        return await ReconciliationSql.BuildAsync(db, recon, ct);
+        return await ReconciliationSql.BuildAsync(db, recon, await calendar.TodayAsync(ct), ct);
     }
 }

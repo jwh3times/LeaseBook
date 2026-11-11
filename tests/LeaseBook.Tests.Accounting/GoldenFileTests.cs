@@ -1,3 +1,4 @@
+using LeaseBook.Modules.Accounting.Diagnostics;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.SharedKernel.Tenancy;
@@ -228,6 +229,29 @@ public sealed class GoldenFileTests(PostgresFixture fixture)
 
     private static TrustEquationRow Deposit(TrustEquationResponse r) =>
         r.Rows.Single(x => x.BankAccountId == DemoIds.DepositBank);
+
+    /// <summary>
+    /// The seeded demo org passes the whole core sweep. Its finalized April 2026 Operating Trust
+    /// reconciliation is a row the seeder writes directly, so nothing stamped the lines it reconciled
+    /// until I12 (#656) asked it to net to its statement: the four lines dated through April, cleared,
+    /// at 250,450.14. Stamping them moves no posted figure, only those lines' status.
+    /// </summary>
+    [Fact]
+    public async Task The_seeded_demo_org_sweeps_clean_and_April_is_stamped_with_its_own_lines()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedAsync(ct);
+
+        var violations = await QueryAsync(db => new InvariantChecks(db).CheckCoreAsync(ct), ct);
+        violations.ShouldBeEmpty(string.Join("; ", violations.Select(v => $"{v.Invariant} {v.Detail}")));
+
+        var stamped = await QueryAsync(db => db.Set<BankLineState>()
+            .Where(s => s.Status == BankLineStatus.Reconciled)
+            .GroupBy(s => s.ReconciliationId)
+            .Select(g => new { Reconciliation = g.Key, Lines = g.Count() })
+            .ToListAsync(ct), ct);
+        stamped.ShouldHaveSingleItem().Lines.ShouldBe(4);
+    }
 
     [Fact]
     public async Task Seeding_twice_does_not_duplicate_the_journal()

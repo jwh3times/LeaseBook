@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Accounting.Contracts;
+using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Accounting.Features.Statements;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,59 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
         violations.AddRange(await CheckHeldFeesNonNegativeAsync(ct));
         violations.AddRange(await CheckMigrationClearingBalancedAsync(ct));
         violations.AddRange(await CheckStatementSectionCoverageAsync(ct));
+        violations.AddRange(await CheckReconciledMonthsAsync(ct));
+        return violations;
+    }
+
+    // I12: every finalized reconciliation still reconciles to its own statement (#656, the ADR-014
+    // addendum of 2026-11-09). (a) The lines stamped for its month or an earlier one net to its statement
+    // ending balance — computed by the same ReconciliationSql finalize uses, so the sweep cannot disagree
+    // with what finalize checked. (b) None of the lines it stamped is dated after its month's last day.
+    // The engine refuses both; this reports a month that got there anyway, or a stamp a stray write moved.
+    public async Task<IReadOnlyList<InvariantViolation>> CheckReconciledMonthsAsync(CancellationToken ct)
+    {
+        // Raw SQL like every other check: the rows are the ambient org's by RLS alone, not by the EF
+        // query filter, which reads no rows on a context built without an org context.
+        var finalized = await db.Database.SqlQuery<FinalizedMonth>(
+            $"""
+            SELECT id AS reconciliation_id, bank_account_id, period_year, period_month, statement_ending_balance
+            FROM bank_reconciliations
+            WHERE status = 'finalized'
+            ORDER BY bank_account_id, period_year, period_month
+            """).ToListAsync(ct);
+
+        var violations = new List<InvariantViolation>();
+        foreach (var r in finalized)
+        {
+            var stamped = await ReconciliationSql.ReconciledThroughAsync(db, r.BankAccountId, r.PeriodYear, r.PeriodMonth, ct);
+            if (stamped != r.StatementEndingBalance)
+            {
+                violations.Add(new InvariantViolation("I12",
+                    $"reconciliation {r.ReconciliationId} for bank {r.BankAccountId} {r.PeriodYear}-{r.PeriodMonth:D2} is "
+                    + $"finalized at a statement of {r.StatementEndingBalance:0.00}, but the lines stamped for it and the "
+                    + $"months before it net to {stamped:0.00}"));
+            }
+        }
+
+        var late = await db.Database.SqlQuery<LateStamp>(
+            $"""
+            SELECT r.id AS reconciliation_id, r.bank_account_id, r.period_year, r.period_month,
+                   COUNT(*)::int AS line_count,
+                   (ARRAY_AGG(jl.id ORDER BY e.entry_date, jl.id))[1] AS first_line_id,
+                   MIN(e.entry_date) AS first_line_date
+            FROM bank_reconciliations r
+            JOIN bank_line_status s ON s.reconciliation_id = r.id AND s.status = 'reconciled'
+            JOIN journal_lines jl ON jl.id = s.journal_line_id
+            JOIN journal_entries e ON e.id = jl.entry_id
+            WHERE r.status = 'finalized'
+              AND e.entry_date > (make_date(r.period_year, r.period_month, 1) + INTERVAL '1 month - 1 day')::date
+            GROUP BY r.id, r.bank_account_id, r.period_year, r.period_month
+            ORDER BY r.bank_account_id, r.period_year, r.period_month
+            """).ToListAsync(ct);
+
+        violations.AddRange(late.Select(l => new InvariantViolation("I12",
+            $"reconciliation {l.ReconciliationId} for bank {l.BankAccountId} {l.PeriodYear}-{l.PeriodMonth:D2} stamped "
+            + $"{l.LineCount} line(s) dated after the month's last day, e.g. line {l.FirstLineId} dated {l.FirstLineDate:yyyy-MM-dd}")));
         return violations;
     }
 
@@ -264,6 +318,13 @@ internal sealed class InvariantChecks(DbContext db) : IInvariantChecks
     private sealed record PrepaymentBankBucket(Guid? TenantId, Guid? BankAccountId, decimal Held);
 
     private sealed record HeldFeesBucket(Guid? BankAccountId, decimal Held);
+
+    private sealed record FinalizedMonth(
+        Guid ReconciliationId, Guid BankAccountId, int PeriodYear, int PeriodMonth, decimal StatementEndingBalance);
+
+    private sealed record LateStamp(
+        Guid ReconciliationId, Guid BankAccountId, int PeriodYear, int PeriodMonth, int LineCount,
+        Guid FirstLineId, DateOnly FirstLineDate);
 
     private sealed record ClearingVariance(string BasisName, decimal Net);
 

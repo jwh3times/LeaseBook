@@ -33,11 +33,12 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
         var setup = await SetupAsync(admin: true, ct);
         var client = await LoggedInClientAsync(setup.Email, ct);
 
-        // Close December 2026 (a zero-activity bank reconciles trivially, difference 0.00) and pull a
+        // Close December 2025 (a past month: a month after the organization's current one cannot be
+        // reconciled, #656; a zero-activity bank reconciles trivially, difference 0.00) and pull a
         // pack scoped to that single closed month.
-        await FinalizeZeroReconciliationAsync(client, setup.TrustBankId, 2026, 12, ct);
+        await FinalizeZeroReconciliationAsync(client, setup.TrustBankId, 2025, 12, ct);
 
-        var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2026-12-01&to=2026-12-31";
+        var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2025-12-01&to=2025-12-31";
         var response = await client.GetAsync(url, ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
@@ -60,9 +61,9 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
 
         // Lock only the END month (December); January–November stay open. The gate requires EVERY month
         // in the period to be closed, so an end-month-only lock must still be rejected.
-        await FinalizeZeroReconciliationAsync(client, setup.TrustBankId, 2026, 12, ct);
+        await FinalizeZeroReconciliationAsync(client, setup.TrustBankId, 2025, 12, ct);
 
-        var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2026-01-01&to=2026-12-31";
+        var url = $"/api/reports/compliance-pack?bankAccountId={setup.TrustBankId}&from=2025-01-01&to=2025-12-31";
         var response = await client.GetAsync(url, ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
@@ -98,7 +99,7 @@ public sealed class CompliancePackEndpointTests(PostgresFixture fixture)
         body.Difference.ShouldBe(0m);
 
         var finalize = await client.PostAsJsonAsync(
-            $"/api/accounting/reconciliations/{body.Id}/finalize", new { }, ct);
+            $"/api/accounting/reconciliations/{body.Id}/finalize", new { assignedLineIds = Array.Empty<Guid>() }, ct);
         finalize.StatusCode.ShouldBe(HttpStatusCode.OK, await finalize.Content.ReadAsStringAsync(ct));
     }
 
