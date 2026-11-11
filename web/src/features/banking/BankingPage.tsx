@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button, Card, EmptyState, formatMoney, formatMoneyK, Icon, Money, Select } from '@/design';
 import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { num, useProperties } from '@/lib/directory';
+import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { trackInteraction } from '@/lib/telemetry';
 import { RefundChecksPanel } from '@/features/refundChecks/RefundChecksPanel';
 import { BankAdjustmentDialog } from './BankAdjustmentDialog';
@@ -165,20 +166,26 @@ export function BankingPage() {
     void queryClient.invalidateQueries({ queryKey: reconciliationHistoryKey(accountId) });
   };
 
-  const finalize = useMutation<void, BankingError, string>({
-    mutationFn: async (accountId) => {
+  // The month reconciled is the organization's current month, taken from the zone its books keep: the
+  // viewer's own clock can be on the other side of a month boundary (#740, ADR-037). Until the settings
+  // are read there is no month to offer, so Finalize waits rather than guess.
+  const orgToday = useOrgToday();
+  const orgTodayReasonId = useId();
+
+  const finalize = useMutation<void, BankingError, { accountId: string; today: string }>({
+    mutationFn: async ({ accountId, today }) => {
       const ids = uncleared.filter((r) => selected[r.journalLineId]).map((r) => r.journalLineId);
       if (ids.length > 0) await applyClearances(ids);
-      const now = new Date();
+      // `today` is the organization's `YYYY-MM-DD` (dateInZone).
       const recon = await startReconciliation({
         bankAccountId: accountId,
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
+        year: Number(today.slice(0, 4)),
+        month: Number(today.slice(5, 7)),
         statementEndingBalance: Number.parseFloat(statementBalance),
       });
       await finalizeReconciliation(recon.id);
     },
-    onSuccess: (_result, accountId) => {
+    onSuccess: (_result, { accountId }) => {
       refreshAccount(accountId);
       // A switch already left reconcile mode; don't end a session since started on another account.
       if (accountId === acctId) exitReconcile();
@@ -324,9 +331,36 @@ export function BankingPage() {
             selectedSum={selectedSum}
             reconciled={reconciled}
             onSelectAll={toggleAll}
-            onFinalize={() => finalize.mutate(acctId)}
+            onFinalize={() => {
+              if (orgToday.status === 'ready') {
+                finalize.mutate({ accountId: acctId, today: orgToday.today });
+              }
+            }}
             finalizing={finalize.isPending}
+            finalizeBlockedBy={orgToday.status === 'ready' ? undefined : orgTodayReasonId}
           />
+          {/* Beside Finalize only: while items are still being ticked there is nothing it blocks. */}
+          {reconciled && orgToday.status !== 'ready' && (
+            <div className="col gap6" style={{ marginBottom: 'var(--gap)' }}>
+              <p id={orgTodayReasonId} className="t3 fs12" role="status">
+                {orgTodayUnavailableMessage(orgToday)}
+              </p>
+              {orgToday.status === 'error' && (
+                <>
+                  <ApiErrorNotice
+                    error={orgToday.error}
+                    fallback="Couldn’t load the organization’s settings."
+                    kind="read"
+                  />
+                  <ErrorAction
+                    error={orgToday.error}
+                    onRetry={orgToday.retry}
+                    retrying={orgToday.retrying}
+                  />
+                </>
+              )}
+            </div>
+          )}
           <ApiErrorNotice error={reconcileError} style={{ marginBottom: 'var(--gap)' }} />
         </>
       )}
