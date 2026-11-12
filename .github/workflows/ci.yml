@@ -138,6 +138,13 @@ jobs:
       - name: Verify committed harness mirrors are up to date
         working-directory: ${{ github.workspace }}
         run: node scripts/sync-agents.mjs --check
+      # `.codex/config.toml` is generated from `.mcp.json`, so both harnesses share one MCP server list.
+      - name: Test the MCP config sync script
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/sync-mcp.test.mjs
+      - name: Verify the committed Codex MCP config is up to date
+        working-directory: ${{ github.workspace }}
+        run: node scripts/sync-mcp.mjs --check
       - name: Test the installed-skills check
         working-directory: ${{ github.workspace }}
         run: node --test scripts/check-skills.test.mjs
