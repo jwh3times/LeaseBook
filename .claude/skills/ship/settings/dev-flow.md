@@ -66,6 +66,7 @@ and wait for the user to run it.
 | A raw issue someone else filed | `/triage` |
 | A ready issue nobody has started | `/implement`, in a fresh context |
 | Something broken | File the bug issue (`bug` label), then `/diagnosing-bugs` |
+| Not sure what to pick up | `/what-next`, which ranks the open work and names its route |
 
 "Nobody has started" means open, with no open blocker, no assignee, and no open PR naming it.
 Tickets `/to-spec` and `/to-tickets` publish are already `ready-for-agent`: they go to `/implement`,
