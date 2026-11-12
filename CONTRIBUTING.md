@@ -180,6 +180,8 @@ Before requesting review, confirm:
 - [ ] When `.claude/agents/` or `.agents/skills/` changed, the regenerated mirrors are committed
       (`npm run sync:agents`), and `npm run sync:agents:check` and `npm run lint:agents` from the
       repository root are green.
+- [ ] When `.mcp.json` changed, the regenerated `.codex/config.toml` is committed
+      (`npm run sync:mcp`), and `npm run sync:mcp:check` from the repository root is green.
 - [ ] `CHANGELOG.md`'s newest section names the version this merge will mint
       (`node scripts/next-version.mjs`), with the change's entries (CI's `CHANGELOG [Unreleased] updated`
       job enforces this with `node scripts/check-changelog.mjs`).
