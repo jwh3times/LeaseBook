@@ -10,6 +10,8 @@
     "sync:main": "node ./scripts/sync-main.mjs",
     "sync:agents": "node scripts/sync-agents.mjs",
     "sync:agents:check": "node scripts/sync-agents.mjs --check",
+    "sync:mcp": "node scripts/sync-mcp.mjs",
+    "sync:mcp:check": "node scripts/sync-mcp.mjs --check",
     "lint:agents": "node scripts/lint-agent-neutrality.mjs"
   }
 }

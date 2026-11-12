@@ -18,6 +18,42 @@ next section.
 
 No unreleased changes.
 
+## [0.32.14] - 2026-11-12
+
+### Changed
+
+- The contributor checklist, the `ship` fast checks and the `end-session` generated-config check now
+  include `node scripts/sync-mcp.mjs --check`, so a stale `.codex/config.toml` is caught before CI
+  rejects it.
+
+## [0.32.13] - 2026-11-11
+
+### Added
+
+- Shared MCP servers for agent sessions: `.mcp.json` lists Microsoft Learn, Context7 and
+  Playwright for Claude Code, and `scripts/sync-mcp.mjs` generates the matching
+  `.codex/config.toml` for Codex. CI fails when the generated file is stale. `AGENTS.md` says when
+  to use each server, and why there is no GitHub or database server.
+
+## [0.32.12] - 2026-11-11
+
+### Changed
+
+- Dependabot no longer proposes .NET 11 updates: the majors of the runtime-versioned `Microsoft.*`
+  packages, `dotnet-ef`, the EF Core 11 providers (`Npgsql.EntityFrameworkCore.PostgreSQL`,
+  `EFCore.NamingConventions`) and the `dotnet/*` base images are ignored until the .NET 11
+  migration is chosen (#761). Patch and minor releases of the .NET 10 line still arrive as before.
+
+## [0.32.11] - 2026-11-11
+
+### Changed
+
+- `AGENTS.md` is about a quarter shorter (41.8k to 32.4k characters), under Claude Code's
+  large-memory-file warning, so every agent session spends less context on it. Shipped-work history
+  now lives only in this changelog and the ADRs, and the coverage, mutation, scenario-catalogue,
+  `perf-probe`, `capabilities` and Stripe sandbox commands are reached through the docs that own
+  them. No rule, invariant or trap was removed.
+
 ## [0.32.10] - 2026-11-11
 
 ### Added
@@ -2088,7 +2124,11 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.10...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.14...HEAD
+[0.32.14]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.14
+[0.32.13]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.13
+[0.32.12]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.12
+[0.32.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.11
 [0.32.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.10
 [0.32.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.9
 [0.32.8]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.8
