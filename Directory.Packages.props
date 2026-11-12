@@ -46,7 +46,7 @@
          version-conflict warning — 2.7.5 against the 10.0.12 tool, which wanted 2.12.0. Raise the two
          together. Drop the pin only once Microsoft.AspNetCore.OpenApi references a patched
          Microsoft.OpenApi transitively AND that version matches the tool's. -->
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.12.2" />
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.13.0" />
     <!-- Build-time OpenAPI doc emission for the CI schema-drift gate (ADR-012). Build-only tool. -->
     <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.15" />
   </ItemGroup>
