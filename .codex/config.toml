@@ -1,0 +1,14 @@
+# GENERATED from .mcp.json by scripts/sync-mcp.mjs — do not edit.
+# Edit .mcp.json, then run `node scripts/sync-mcp.mjs`. Codex loads this file only for a
+# trusted project (trust_level = "trusted" in your own ~/.codex/config.toml).
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+
+[mcp_servers.microsoft-learn]
+url = "https://learn.microsoft.com/api/mcp"
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@0.0.85"]
+startup_timeout_sec = 60
