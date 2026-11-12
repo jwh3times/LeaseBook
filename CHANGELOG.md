@@ -18,6 +18,15 @@ next section.
 
 No unreleased changes.
 
+## [0.32.12] - 2026-11-11
+
+### Changed
+
+- Dependabot no longer proposes .NET 11 updates: the majors of the runtime-versioned `Microsoft.*`
+  packages, `dotnet-ef`, the EF Core 11 providers (`Npgsql.EntityFrameworkCore.PostgreSQL`,
+  `EFCore.NamingConventions`) and the `dotnet/*` base images are ignored until the .NET 11
+  migration is chosen (#761). Patch and minor releases of the .NET 10 line still arrive as before.
+
 ## [0.32.11] - 2026-11-11
 
 ### Changed
@@ -2098,7 +2107,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.11...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.12...HEAD
+[0.32.12]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.12
 [0.32.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.11
 [0.32.10]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.10
 [0.32.9]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.9

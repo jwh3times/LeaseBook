@@ -48,6 +48,22 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # .NET 11 is held back until we choose to migrate (#761): the majors of the packages that
+    # version with the runtime, and the EF Core 11 providers that require it. Minor and patch
+    # releases of the 10.x line still flow. Remove this block as the migration's first step.
+    ignore:
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet-ef"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "EFCore.NamingConventions"
+        update-types: ["version-update:semver-major"]
 
   # React + TypeScript SPA (package.json / package-lock.json live in web/).
   - package-ecosystem: "npm"
@@ -171,6 +187,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # .NET 11 base images are held back with the NuGet majors until the migration (#761).
+    # Digest refreshes of the 10.0 tags still flow.
+    ignore:
+      - dependency-name: "dotnet/*"
+        update-types: ["version-update:semver-major"]
 
   # Service images in docker-compose.yml (postgres, pgadmin). Separate ecosystem from
   # "docker" since GA in Feb 2025.
