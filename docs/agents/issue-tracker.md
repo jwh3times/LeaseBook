@@ -158,3 +158,8 @@ while the weakness is unpatched, and never exploitable detail in memory. A repor
 arrives through private vulnerability reporting (`SECURITY.md`) as one already. A residual risk
 accepted by decision is a private companion issue labelled `security` that cites the advisory
 without restating it, closed `wontfix` or labelled `deferred-trigger`.
+
+## Priority order
+
+- `Priority`: `P0 - now` / `P1 - next` / `P2 - later` / `P3 - parked`.
+- `Rank`: lowest first.

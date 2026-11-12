@@ -7,13 +7,13 @@
 
 ## Public repository
 
-- **Read by:** end-session
+- **Read by:** end-session, what-next
 - **Value:** `owner/name` exactly as GitHub spells it (casing can differ from the directory name).
 - **Discover:** `gh repo view --json nameWithOwner -q .nameWithOwner`.
 
 ## Private issue repository
 
-- **Read by:** end-session, ship
+- **Read by:** end-session, ship, what-next
 - **Value:** `none`, a literal `owner/name`, or a `discover:` value — the repository that holds
   issues too sensitive for the public tracker.
 - **Default:** the `Private companion`'s repository; `none` without a companion.
@@ -23,7 +23,7 @@
 
 ## Board
 
-- **Read by:** end-session, ship
+- **Read by:** end-session, ship, what-next
 - **Value:** `none`, or the GitHub project as `<owner> <number>` (the arguments `gh project` takes),
   or a `discover:` value.
 - **Discover:** `gh project list --owner <owner>`, matched to the repository by title, and links to
@@ -31,12 +31,25 @@
 
 ## Board fields
 
-- **Read by:** end-session
+- **Read by:** end-session, what-next
 - **Value:** bulleted list, one per field the skills set: field name, its options, and when each
   applies (e.g. `Status: Todo / In Progress / Blocked / Parked / Done`; `Blocked by: <reason>` set
   with `Blocked`). Field and option IDs are looked up at run time, never written here.
 - **Discover:** `gh project field-list <number> --owner <owner> --format json`, and existing
   skills and docs for how each field is used.
+
+## Priority order
+
+- **Read by:** what-next
+- **Value:** how the `Board` ranks open work, highest first, as an ordered list of keys; a later
+  key breaks the earlier one's ties. A key is a single-select field with its options in rank order
+  (`Priority`: `P0` / `P1` / `P2` / `P3`), a number field and its direction (`Rank`, lowest first),
+  or `board order`, the board's manual order from the top (e.g. `Priority`, then `board order`).
+  `none` when nothing ranks the work.
+- **Default:** `none` with `Board: none`.
+- **Discover:** the `Board fields` setting, for a field it calls a priority, rank, order or stage,
+  and any rule there that the board's manual order follows. A field the board's workflows set on
+  their own (`Status`) is not a rank, nor is one that says why work waits (`Gate`).
 
 ## New work
 
@@ -50,7 +63,7 @@
 
 ## Security findings
 
-- **Read by:** docs-updater, end-session
+- **Read by:** docs-updater, end-session, what-next
 - **Value:** where a security finding is recorded before its fix ships, and what may point at it.
   Never a public issue.
 - **Default:** a draft repository security advisory on the `Public repository`. A board item or a

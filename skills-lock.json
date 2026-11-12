@@ -37,7 +37,7 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/docs-updater/SKILL.md",
-      "computedHash": "c2b00fce79652eef1afb67d1f9a5b6150cf4e76540bf352324e0aa9be1dbbbec",
+      "computedHash": "fc87a1e9321da95313ef2955ec9745dafdfa5db4e4ba48f7a68eeb4f04dad85d",
       "installMode": "copy"
     },
     "domain-modeling": {
@@ -52,7 +52,7 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/end-session/SKILL.md",
-      "computedHash": "355b8e6ea94d5fa01e6b72ce6ff5a2f42ef8e2a8e22603cfa9c32350a0b5fe55",
+      "computedHash": "ad84822884deef221005873f9b44071d904bcd4608ed6694deb51e77c938618e",
       "installMode": "copy"
     },
     "grill-me": {
@@ -137,7 +137,7 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "cd7e55892ce1181d33da4c22ef04246d0f380869e61f2aa1aef2602c8adf5598",
+      "computedHash": "b8d1838998982f420e26b7e3322f1a025cb882e5623d1ed8479e0452b0e19da8",
       "installMode": "copy"
     },
     "tdd": {
@@ -202,6 +202,13 @@
       "sourceType": "github",
       "skillPath": "skills/engineering/wayfinder/SKILL.md",
       "computedHash": "bd82983c105881f6cb0c15e5d029c0d5fca756939b69eebe94e49003069a276f",
+      "installMode": "copy"
+    },
+    "what-next": {
+      "source": "jwh3times/skills",
+      "sourceType": "github",
+      "skillPath": "skills/what-next/SKILL.md",
+      "computedHash": "9eafee034204dac2dfb5662c217b0b5dd5f1b445a77e2349cb4eb52f4b3a1f0d",
       "installMode": "copy"
     },
     "wizard": {

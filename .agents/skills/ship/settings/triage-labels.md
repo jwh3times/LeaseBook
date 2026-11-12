@@ -16,7 +16,7 @@ says what kind of issue it is.
 
 ## Extra labels
 
-- **Read by:** end-session
+- **Read by:** end-session, what-next
 - **Value:** bulleted list, one per label beyond the five: the label, what it means, and which of the
   five it replaces or sits beside.
 - **Default:** `none`
