@@ -307,6 +307,23 @@ Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 Single-context layout — `CONTEXT.md` and `docs/adr/` at the repo root. See
 [`docs/agents/domain.md`](docs/agents/domain.md).
 
+### MCP servers
+
+The shared servers are in `.mcp.json`, which Claude Code asks you to approve on first use.
+`.codex/config.toml` is generated from it, and Codex loads it once you trust the project in your own
+Codex config. Edit `.mcp.json` only, then run `node scripts/sync-mcp.mjs`; CI fails a stale copy.
+Entries carry no `env` or `headers`, so a server that needs a key stays in your own config. Nothing
+updates the pinned `@playwright/mcp` version: bump it by hand.
+
+- `microsoft-learn` for .NET, ASP.NET Core, EF Core and Azure; `context7` for the SPA and
+  third-party libraries. Query one before designing against an API from memory. Both send the
+  query text to an outside service, so keep `private/` material and confidential detail out of it.
+- `playwright` drives a browser against the running app (`:5373`) to check a change or a UX click
+  budget. It does not replace e2e coverage of a budgeted flow.
+- GitHub work goes through `gh`, not an MCP server.
+- There is deliberately no database server: a session missing `app.org_id` or `app.persona` reads
+  zero rows and reports them as fact. Use `./scripts/dev.ps1 psql` and set both.
+
 ## Architecture
 
 `docs/architecture.md` is the canonical public map of the implemented system. `docs/blueprint.md` is
