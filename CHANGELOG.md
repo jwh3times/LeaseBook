@@ -18,6 +18,14 @@ next section.
 
 No unreleased changes.
 
+## [0.32.14] - 2026-11-12
+
+### Changed
+
+- The contributor checklist, the `ship` fast checks and the `end-session` generated-config check now
+  include `node scripts/sync-mcp.mjs --check`, so a stale `.codex/config.toml` is caught before CI
+  rejects it.
+
 ## [0.32.13] - 2026-11-11
 
 ### Added
@@ -2116,7 +2124,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.13...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.14...HEAD
+[0.32.14]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.14
 [0.32.13]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.13
 [0.32.12]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.12
 [0.32.11]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.11
