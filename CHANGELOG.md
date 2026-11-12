@@ -18,6 +18,47 @@ next section.
 
 No unreleased changes.
 
+## [0.32.19] - 2026-11-12
+
+### Added
+
+- `/what-next`, a shared skill from `jwh3times/skills`, reports what to work on next. It reads the
+  open issues, open PRs and the board, and ranks the work by `Priority` and then `Rank`, per the new
+  `Priority order` setting in `docs/agents/issue-tracker.md`. It names one item and the command that
+  takes it, and changes nothing on GitHub. The development flow's routing points at it when nothing
+  is chosen yet.
+
+## [0.32.18] - 2026-11-12
+
+### Changed
+
+- Bumped the `dotnet/aspnet` `10.0-noble-chiseled` runtime image digest (Dependabot, #753). The
+  migrator stage stays on the `aspnet:10.0` tag at its current digest: Dependabot had moved it to
+  `aspnet:11.0`, which holds only the .NET 11 runtime, and .NET 11 is deferred (#761).
+
+## [0.32.17] - 2026-11-12
+
+### Changed
+
+- Bumped the `dotnet/sdk` `10.0` build image digest (Dependabot, #763).
+
+## [0.32.16] - 2026-11-12
+
+### Changed
+
+- Bumped the EF Core, ASP.NET Core and `Microsoft.Extensions.ApiDescription.Server` packages and
+  `dotnet-ef` from 10.0.14 to 10.0.15, `Microsoft.OpenApi` from 2.12.2 to 2.13.0 (which
+  `Microsoft.AspNetCore.OpenApi` 10.0.15 requires), the OpenTelemetry hosting and ASP.NET Core
+  instrumentation packages to 1.21.0, `dotnet-reportgenerator-globaltool` from 5.5.12 to 5.6.0 and
+  `dotnet-stryker` from 5.0.0 to 5.1.0 (Dependabot, #764).
+
+## [0.32.15] - 2026-11-12
+
+### Changed
+
+- Bumped `@vitejs/plugin-react` from 6.2.1 to 6.3.0 and `monocart-coverage-reports` from 3.2.0 to
+  3.2.1 in `web/` (Dependabot, #767).
+
 ## [0.32.14] - 2026-11-12
 
 ### Changed
@@ -2124,7 +2165,12 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.14...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.19...HEAD
+[0.32.19]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.19
+[0.32.18]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.18
+[0.32.17]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.17
+[0.32.16]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.16
+[0.32.15]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.15
 [0.32.14]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.14
 [0.32.13]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.13
 [0.32.12]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.12
