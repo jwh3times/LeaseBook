@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Fragment, useId, useState } from 'react';
 import { Badge, type BadgeTone, Button, Card, EmptyState, Money } from '@/design';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { useSession } from '@/features/auth/useSession';
@@ -11,6 +11,7 @@ import {
   type ReconciliationSummary,
   useReconciliationHistory,
 } from './banking';
+import { FinalizeAgainPanel } from './FinalizeAgainPanel';
 import { UnlockReconciliationDialog } from './UnlockReconciliationDialog';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -32,7 +33,8 @@ const periodLabel = (row: ReconciliationSummary) =>
 
 /**
  * Past reconciliations for the account, newest first; finalized ones expose their stored report (P64),
- * and a PMAdmin can unlock one with a reason (#554). The server enforces the role; hiding Unlock from
+ * a PMAdmin can unlock one with a reason (#554), and staff finalize a reopened one again in place
+ * (#656). The server enforces the role; hiding Unlock from
  * staff only keeps them from being offered what they cannot do.
  */
 export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string }) {
@@ -41,6 +43,16 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
   const queryClient = useQueryClient();
   const isAdmin = session.data?.role === 'PMAdmin';
   const [unlockTarget, setUnlockTarget] = useState<ReconciliationSummary | null>(null);
+  // The reopened month being finalized again in place (#656); one at a time, since months finalize
+  // in order.
+  const [againId, setAgainId] = useState<string | null>(null);
+  const baseId = useId();
+  const againButtonId = (id: string) => `${baseId}-again-${id}`;
+  const closeAgain = (id: string) => {
+    setAgainId(null);
+    // The button stays on the row while its view is open, so the keyboard returns to where it left.
+    document.getElementById(againButtonId(id))?.focus();
+  };
 
   return (
     <Card className="pf-ledger-card">
@@ -87,39 +99,64 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
       ) : (
         <div className="pf-recon-hist">
           {history.data?.map((row) => (
-            <div key={row.id} className="pf-recon-histrow">
-              <div className="grow col gap2">
-                <span className="fw6">{periodLabel(row)}</span>
-                <span className="t3 fs12">
-                  {row.finalizedAt ? `Finalized ${localDate(row.finalizedAt)}` : 'Not finalized'}
-                </span>
+            <Fragment key={row.id}>
+              <div className="pf-recon-histrow">
+                <div className="grow col gap2">
+                  <span className="fw6">{periodLabel(row)}</span>
+                  <span className="t3 fs12">
+                    {row.finalizedAt ? `Finalized ${localDate(row.finalizedAt)}` : 'Not finalized'}
+                  </span>
+                </div>
+                <Money value={num(row.statementEndingBalance)} plain />
+                <Badge tone={STATUS_TONE[row.status] ?? 'neutral'} soft dot>
+                  {STATUS_LABEL[row.status] ?? row.status}
+                </Badge>
+                {row.hasReport && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="download"
+                    onClick={() => void downloadReconciliationReport(row.id)}
+                  >
+                    Report
+                  </Button>
+                )}
+                {isAdmin && row.status === 'finalized' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="lock"
+                    aria-label={`Unlock ${periodLabel(row)}`}
+                    onClick={() => setUnlockTarget(row)}
+                  >
+                    Unlock
+                  </Button>
+                )}
+                {row.status === 'reopened' && (
+                  <Button
+                    id={againButtonId(row.id)}
+                    variant="ghost"
+                    size="sm"
+                    icon="check"
+                    aria-label={`Finalize ${periodLabel(row)} again`}
+                    aria-expanded={againId === row.id}
+                    aria-controls={againId === row.id ? `${baseId}-panel-${row.id}` : undefined}
+                    onClick={() => (againId === row.id ? closeAgain(row.id) : setAgainId(row.id))}
+                  >
+                    Finalize again
+                  </Button>
+                )}
               </div>
-              <Money value={num(row.statementEndingBalance)} plain />
-              <Badge tone={STATUS_TONE[row.status] ?? 'neutral'} soft dot>
-                {STATUS_LABEL[row.status] ?? row.status}
-              </Badge>
-              {row.hasReport && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon="download"
-                  onClick={() => void downloadReconciliationReport(row.id)}
-                >
-                  Report
-                </Button>
+              {againId === row.id && (
+                <FinalizeAgainPanel
+                  id={`${baseId}-panel-${row.id}`}
+                  reconciliation={row}
+                  period={periodLabel(row)}
+                  onClose={() => closeAgain(row.id)}
+                  onFinalized={() => setAgainId(null)}
+                />
               )}
-              {isAdmin && row.status === 'finalized' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon="lock"
-                  aria-label={`Unlock ${periodLabel(row)}`}
-                  onClick={() => setUnlockTarget(row)}
-                >
-                  Unlock
-                </Button>
-              )}
-            </div>
+            </Fragment>
           ))}
         </div>
       )}
