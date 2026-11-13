@@ -18,6 +18,30 @@ next section.
 
 No unreleased changes.
 
+## [0.33.0] - 2026-11-13
+
+### Added
+
+- **Finalize a reopened past month again from Banking** (#656). In the reconciliation history, a
+  month that was unlocked now offers **Finalize again**, which opens that month's reconcile view in
+  place under its row. The statement ending balance is prefilled from the stored one and can be
+  corrected; a correction is kept in the audit trail. The view lists every unreconciled line dated
+  through the month's last day, cleared or not, with none ticked: tick the lines that month's
+  statement shows, and lines from one processor payout tick together. The difference updates as you
+  tick, and Finalize is offered at $0.00. An uncleared line you tick is cleared as the month closes,
+  and lines the month reconciled before stay reconciled. Refusals appear in the view and name the
+  month to act on first: a later month still finalized, an earlier month still reopened, a line that
+  can't be assigned to this month. It works by keyboard, and staff can use it as well as
+  administrators; unlocking stays an administrator's action.
+
+### Changed
+
+- The diagnostics runbook's invariant-sweep triage covers I12. A finalized month whose statement no
+  longer matches the lines it reconciled is fixed by unlocking the account's months from the latest
+  back and finalizing them again in order, not by a correction entry, which the locked month refuses.
+  A line reconciled into a month dated after it has no screen fix and is escalated as a data repair
+  (#758).
+
 ## [0.32.20] - 2026-11-12
 
 ### Changed
@@ -2174,7 +2198,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.20...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.0
 [0.32.20]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.20
 [0.32.19]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.19
 [0.32.18]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.18

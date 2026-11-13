@@ -103,7 +103,7 @@ is recreated.
 - `docs/runbooks/restore.md` — disaster recovery and PITR. **When:** backup or restore tooling, or
   the database in `infra/`, changes.
 - `docs/runbooks/diagnostics.md` — error contract, event-id catalog, triage. **When:** an error
-  code, a logged event id or the bulk-run diagnostics change.
+  code, a logged event id, a swept invariant or the bulk-run diagnostics change.
 - `docs/migration/parallel-run.md` — the public parallel-run checklist. **When:** the import
   toolkit or its sign-off gate changes (`src/LeaseBook.Migrator/`).
 - `docs/compliance/data-handling.md` — GLBA and PII handling. **When:** data handling or a
