@@ -175,8 +175,8 @@ zero difference only at today's cleared balance, never at its own statement, and
 of every month since as its own. Nothing kept an account's months in order, so a later month could be
 finalized while an earlier one stayed open.
 
-Issue #656 implements it. The engine rules, the finalize-again report and invariant I12 are built; the
-history row's screen for finalizing a reopened past month again is its remaining step. Building it settled
+Issue #656 implements it: the engine rules, the finalize-again report, invariant I12, and the history
+row's **Finalize again** view, which ticks the lines finalize takes. Building it settled
 one point this addendum left implicit: only the organization's current month may be finalized without
 naming its lines. Any other month names them (`reconciliation_lines_required`, 422), because assigning a
 past month every cleared line dated through its end is the date bound rejected below.

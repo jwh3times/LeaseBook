@@ -4,6 +4,7 @@ import {
   getApiAccountingBanksBalances,
   getApiAccountingBanksByBankAccountIdRegister,
   getApiAccountingReconciliations,
+  getApiAccountingReconciliationsByIdLines,
   getApiAccountingReconciliationsByIdReport,
   getApiBankingBanksByBankAccountIdMappings,
   getApiBankingImportsByImportIdMatches,
@@ -25,6 +26,8 @@ import {
   type ImportResult,
   type MatchPreviewResponse,
   type MatchPreviewRow,
+  type ReconciliationLine,
+  type ReconciliationLinesResponse,
   type ReconciliationSummary,
   type ReconciliationView,
   type RegisterResponse,
@@ -41,6 +44,8 @@ export type {
   ImportResult,
   MatchPreviewResponse,
   MatchPreviewRow,
+  ReconciliationLine,
+  ReconciliationLinesResponse,
   ReconciliationSummary,
   ReconciliationView,
   RegisterResponse,
@@ -121,6 +126,30 @@ export function useReconciliationHistory(
   });
 }
 
+export const reconciliationLinesKey = (reconciliationId: string) =>
+  ['reconciliation-lines', reconciliationId] as const;
+
+/**
+ * What a month's reconciliation may be finalized against (#656): the balance already reconciled through
+ * it, and every unreconciled bank line dated through its last day, cleared or not. Finalize again ticks
+ * lines from this list, so the difference the view shows is the one finalize computes.
+ */
+export function useReconciliationLines(
+  reconciliationId: string,
+): UseQueryResult<ReconciliationLinesResponse> {
+  return useQuery({
+    queryKey: reconciliationLinesKey(reconciliationId),
+    // Every write on the account can change which lines are unreconciled, so the view asks again
+    // each time it opens rather than trusting a list read before a correction was posted.
+    refetchOnMount: 'always',
+    queryFn: () =>
+      unwrap(
+        getApiAccountingReconciliationsByIdLines({ path: { id: reconciliationId } }),
+        'Failed to load the lines this month can be reconciled with',
+      ),
+  });
+}
+
 /** The saved CSV column mappings of one bank account; a save invalidates it so the wizard offers it. */
 export const columnMappingsKey = (bankAccountId: string) =>
   ['csv-mappings', bankAccountId] as const;
@@ -163,9 +192,20 @@ export async function startReconciliation(input: {
   );
 }
 
-export async function finalizeReconciliation(id: string): Promise<ReconciliationView> {
+/**
+ * Finalizes a reconciliation. With `assignedLineIds` the month is finalized against exactly those lines
+ * (an uncleared one is cleared, a payout widens to its whole payout); without, the server assigns the
+ * current month's cleared lines and refuses a past month (`reconciliation_lines_required`, #656).
+ */
+export async function finalizeReconciliation(
+  id: string,
+  assignedLineIds?: string[],
+): Promise<ReconciliationView> {
   return unwrap(
-    postApiAccountingReconciliationsByIdFinalize({ path: { id } }),
+    postApiAccountingReconciliationsByIdFinalize({
+      path: { id },
+      ...(assignedLineIds ? { body: { assignedLineIds } } : {}),
+    }),
     'Failed to finalize the reconciliation',
   );
 }

@@ -3,7 +3,7 @@
 - **Audience:** Operators and maintainers
 - **Status:** Living runbook; canonical error-diagnosis reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-11-13
 
 How to turn the reference an operator sees on screen into the full server-side detail in
 Application Insights. See [ADR-025](../adr/ADR-025-error-contract-and-observability.md) for the
@@ -224,20 +224,40 @@ traces
 
 A **1200** names the affected org and the failed invariant in its message; it is a data condition,
 not a transient fault, so the job does not retry — the next night's run is the retry, and the
-condition persists until someone posts a correction. Reproduce it on demand with
+condition persists until someone corrects it. Reproduce it on demand with
 `dotnet run --project src/LeaseBook.Web -- check-invariants --org <guid>`, which runs the identical
 checks (see the local-dev runbook). The sweep also emits a `jobs.invariant_sweep` span with each
 violation attached as a span event, so the run's own trace is the correlation handle a request id
 would otherwise be.
 
-**One violation does not fit that shape: I8.** Every other swept invariant reports a balance that is
-wrong and is cleared by posting a correction. I8 reports that an `event_type` carrying
+**Two violations do not fit that shape: I8 and I12.** The other swept invariants report a balance
+that is wrong and are cleared by posting a correction. I8 reports that an `event_type` carrying
 owner-attributed `owner_equity` lines has no `StatementSectionMap` entry — a code condition. No
 correction entry clears it, and until the map gains the entry, every owner statement covering one of
 those entries fails to render (`UncategorizedEventException`) instead of dropping the line, so the
 figures were never wrong but the document cannot be produced. Triage it as a release defect: the
 message names the event type, how many lines carry it, and a sample entry id; the fix is a map entry
 and a deploy.
+
+**I12** reports a finalized bank reconciliation that no longer reconciles to its own statement
+([ADR-014](../adr/ADR-014-reconciliation-engine-and-lock.md), addendum of 2026-11-09). A correction
+entry cannot clear it: the month is locked, so a posting dated into it is refused
+(`account_period_locked`), and the fault is in what the reconciliation stamped, not in a balance. Its
+message takes one of two forms:
+
+- **"…is finalized at a statement of X, but the lines stamped for it and the months before it net to
+  Y."** The month's stored statement and its stamped lines disagree. An administrator unlocks the
+  account's months from the latest finalized one back to this one, from their rows in the
+  reconciliation history on Banking, then finalizes them again in order with **Finalize again** on
+  each row: the month's real statement balance, and the lines that statement shows. Months unlock and
+  finalize only in that order, and each refusal names the month to act on first.
+- **"…stamped N line(s) dated after the month's last day…"** The reconciliation stamped a line from a
+  later month, which only a finalize from before the addendum did. Finalizing again does not clear it,
+  because lines a month stamped stay stamped, and no screen or command un-stamps one. Treat it as a
+  data repair and escalate it with the reconciliation and line ids the message names.
+
+On a development database seeded before the addendum, the demo organization's April reconciliation
+reports the first form until the organization is seeded again; that is expected, not a fault.
 
 A run with violations is additionally recorded as **Failed** in Hangfire's job storage, which is
 readable without the log pipeline. The Hangfire dashboard is deliberately not mounted

@@ -402,6 +402,19 @@
       "routes": ["POST /api/accounting/reconciliations/{id}/unlock"]
     },
     {
+      "id": "bank-reconciliation-refinalize-past-month",
+      "workflow": "As an administrator, unlock a past month and the month after it, post the correction the past month's statement shows, and finalize both again in order from their history rows",
+      "area": "Banking",
+      "spec": "reconciliation-refinalize.spec.ts",
+      "org": "scenario",
+      "events": ["PMContribution", "BankFeeCharged"],
+      "routes": [
+        "GET /api/accounting/reconciliations/{id}/lines",
+        "POST /api/accounting/reconciliations/{id}/finalize",
+        "POST /api/accounting/reconciliations/{id}/unlock"
+      ]
+    },
+    {
       "id": "bank-fee-from-register",
       "workflow": "Record a bank fee from the register by keyboard, and see a fee larger than the PM's held fees refused in place",
       "area": "Banking",
@@ -970,12 +983,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 573
-      },
-      {
-        "route": "GET /api/accounting/reconciliations/{id}/lines",
-        "reason": "The reconciliation history's Finalize-again view that reads it is the next step of #656.",
-        "date": "2026-11-11",
-        "issue": 656
       }
     ]
   }

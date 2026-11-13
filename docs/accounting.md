@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-11
+- **Last reviewed:** 2026-11-13
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -400,8 +400,12 @@ the 28 April check in April. The engine takes the named lines, with the rest of 
 belong to, clears any that were uncleared, and checks them against the month's statement, so re-finalizing
 April in June reaches zero at April's own balance and stamps none of May's or June's lines. Finalizing again
 replaces the stored report, which then also records when the month first closed, who reopened it and why,
-and when it closed again; the report it replaced stays in the audit trail. The history row's screen for
-finalizing a reopened past month again is the remaining step of #656.
+and when it closed again; the report it replaced stays in the audit trail. A reopened month's history row
+offers **Finalize again**, which opens that month's reconcile view in place: the statement ending balance
+prefilled from the stored one and editable, every unreconciled line dated through the month's last day,
+cleared or not and none ticked, and the live difference the engine will compute. Lines of one payout tick
+together, ticking an uncleared line clears it as the month finalizes, and Finalize is offered only at a zero
+difference; a refusal is shown in the view with the month it names.
 
 **Months finalize in order.** Per bank account, a month cannot be finalized or unlocked while a later month
 is finalized (`reconciliation_later_month_finalized`), and cannot be finalized while an earlier one is

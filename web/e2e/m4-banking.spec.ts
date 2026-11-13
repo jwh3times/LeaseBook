@@ -254,7 +254,7 @@ test.describe.serial('M4 banking', () => {
     await expect(page.getByLabel('Difference')).toHaveText('$0.00');
     // Visual regression (CI-only): the reconcile bar at difference $0.00, before finalize.
     await visualSnapshot(page.locator('.pf-recon-bar'), 'reconcile-zero-strip.png');
-    await page.getByRole('button', { name: 'Finalize' }).click();
+    await page.getByRole('button', { name: 'Finalize', exact: true }).click();
 
     // Back to the balance strip; the reconciliation is recorded as finalized in history.
     await expect(page.getByRole('button', { name: 'Reconcile account' })).toBeVisible();
@@ -332,7 +332,7 @@ test.describe.serial('M4 banking', () => {
     await page.getByRole('button', { name: 'Reconcile account' }).click();
     await page.getByRole('button', { name: 'Select all uncleared' }).click();
     await expect(page.getByLabel('Difference')).toHaveText('$0.00');
-    await page.getByRole('button', { name: 'Finalize' }).click();
+    await page.getByRole('button', { name: 'Finalize', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Reconcile account' })).toBeVisible();
     await expect(status).toHaveText('Finalized');
     await expect(historyRow.getByRole('button', { name: `Unlock ${month}` })).toBeVisible();
