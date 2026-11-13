@@ -245,3 +245,16 @@ html[data-theme='dark'] .pf-acct-tab {
   margin: 0 0 var(--gap);
   color: var(--text-2);
 }
+
+/* Finalize a reopened month again, in place under its history row (#656). */
+.pf-recon-again {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px var(--card-pad) 16px;
+  border-top: 1px dashed var(--border);
+  background: var(--surface-2);
+}
+.pf-recon-again .pf-recon-bar {
+  margin-bottom: 0;
+}

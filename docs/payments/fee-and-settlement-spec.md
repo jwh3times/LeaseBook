@@ -3,7 +3,7 @@
 - **Audience:** Implementers and reviewers of processor fees and payouts (issues #498, #500 and #513)
 - **Status:** Accepted for the payment simulation and built there. The Stripe sandbox mode (ADR-054, proposed) holds and posts payouts through the same model. Its provisional assumptions are unverified and live payments remain unapproved
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-09
+- **Last reviewed:** 2026-11-13
 
 ## Evidence and boundary
 
@@ -271,8 +271,9 @@ As built:
   date or clearance. The record of the
   match holds one row for each bank line the statement line answered for.
 - **Every clearance obeys the rule, not only the import.** Clearing any line of a payout, or reversing its
-  clearance, from the import or from the register tick, does the same to every line of it. This is
-  how a group that sums to zero is cleared: by hand, as a whole.
+  clearance, from the import or from the register tick, does the same to every line of it, and so does
+  ticking one to finalize a reopened month again. This is how a group that sums to zero is cleared: by
+  hand, as a whole.
 
 ## Review reasons
 

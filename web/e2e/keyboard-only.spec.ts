@@ -317,7 +317,7 @@ test.describe('keyboard-only operability', () => {
     // Operating Trust's current month locks the period, which m4-banking.spec.ts (runs after this file,
     // alphabetical) performs itself — finalizing here would break that spec. Prove Finalize is reachable
     // by keyboard, then stop. No server mutation has occurred (the ticked selection is client-side only).
-    const finalize = page.getByRole('button', { name: 'Finalize' });
+    const finalize = page.getByRole('button', { name: 'Finalize', exact: true });
     await expect(finalize).toBeVisible();
     await finalize.focus();
     await expect(finalize).toBeFocused();
