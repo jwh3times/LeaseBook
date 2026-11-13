@@ -48,6 +48,7 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
   const [againId, setAgainId] = useState<string | null>(null);
   const baseId = useId();
   const againButtonId = (id: string) => `${baseId}-again-${id}`;
+  const periodId = (id: string) => `${baseId}-period-${id}`;
   const closeAgain = (id: string) => {
     setAgainId(null);
     // The button stays on the row while its view is open, so the keyboard returns to where it left.
@@ -102,7 +103,9 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
             <Fragment key={row.id}>
               <div className="pf-recon-histrow">
                 <div className="grow col gap2">
-                  <span className="fw6">{periodLabel(row)}</span>
+                  <span id={periodId(row.id)} tabIndex={-1} className="fw6">
+                    {periodLabel(row)}
+                  </span>
                   <span className="t3 fs12">
                     {row.finalizedAt ? `Finalized ${localDate(row.finalizedAt)}` : 'Not finalized'}
                   </span>
@@ -153,7 +156,11 @@ export function ReconciliationHistory({ bankAccountId }: { bankAccountId: string
                   reconciliation={row}
                   period={periodLabel(row)}
                   onClose={() => closeAgain(row.id)}
-                  onFinalized={() => setAgainId(null)}
+                  onFinalized={() => {
+                    setAgainId(null);
+                    // The view and its button leave together, so focus goes to the month it closed.
+                    document.getElementById(periodId(row.id))?.focus();
+                  }}
                 />
               )}
             </Fragment>

@@ -103,17 +103,21 @@ export function FinalizeAgainPanel({
     },
     onSettled: () => {
       // A refusal after the statement was re-entered still changed it, so the history reads again
-      // either way; a success also cleared and stamped register lines.
+      // either way. So do the lines: a refusal such as a line another month has since reconciled
+      // means the list on screen is stale.
       void queryClient.invalidateQueries({
         queryKey: reconciliationHistoryKey(reconciliation.bankAccountId),
       });
+      void queryClient.invalidateQueries({ queryKey: reconciliationLinesKey(reconciliation.id) });
     },
     onSuccess: () => {
+      // Finalize cleared the ticked uncleared lines and stamped them, which the register, the
+      // balances and the dashboard's uncleared counts all show.
       void queryClient.invalidateQueries({
         queryKey: bankRegisterKey(reconciliation.bankAccountId),
       });
       void queryClient.invalidateQueries({ queryKey: ['bank-balances'] });
-      void queryClient.invalidateQueries({ queryKey: reconciliationLinesKey(reconciliation.id) });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       onFinalized();
     },
   });
@@ -156,6 +160,7 @@ export function FinalizeAgainPanel({
                 <input
                   id={`${ids}-statement`}
                   inputMode="decimal"
+                  disabled={finalize.isPending}
                   value={statement}
                   onChange={(e) => setStatement(e.target.value.replace(/[^0-9.-]/g, ''))}
                 />
@@ -210,6 +215,7 @@ export function FinalizeAgainPanel({
                             className="pf-check"
                             aria-label={`Assign ${description} (${line.entryDate})`}
                             checked={ticked.has(line.journalLineId)}
+                            disabled={finalize.isPending}
                             onChange={() => toggle(line)}
                           />
                         </td>
@@ -258,10 +264,14 @@ export function FinalizeAgainPanel({
             aria-describedby={!balanced && lines.isSuccess ? `${ids}-why` : undefined}
             onClick={() => {
               if (statementCents === null) return;
-              finalize.mutate({ statementCents, ids: [...ticked] });
+              // Only lines still on offer: a re-read after a refusal can drop one that was ticked.
+              const assigned = rows
+                .filter((l) => ticked.has(l.journalLineId))
+                .map((l) => l.journalLineId);
+              finalize.mutate({ statementCents, ids: assigned });
             }}
           >
-            Finalize {period}
+            {finalize.isPending ? 'Finalizing…' : `Finalize ${period}`}
           </Button>
         </div>
       </div>

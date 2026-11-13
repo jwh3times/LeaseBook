@@ -516,6 +516,94 @@ describe('ReconciliationHistory finalize again (#656)', () => {
     expect(await within(panel).findByLabelText('Difference')).toHaveTextContent(/^\+\$500\.00$/);
   });
 
+  it('shows the finalize pending, holds the lines still meanwhile, and lands focus on the closed month', async () => {
+    let status = 'reopened';
+    let release: () => void = () => {};
+    server.use(
+      staff(),
+      historyOf(() => [{ ...REOPENED, status }]),
+      linesOf(),
+      http.post('/api/accounting/reconciliations/:id/finalize', async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        status = 'finalized';
+        return HttpResponse.json({ ...LINES.reconciliation, status, difference: 0 });
+      }),
+    );
+    renderHistory();
+
+    const panel = await openAugust();
+    for (const name of [/Deposit — Unit 2B/, /Check 1041/, /Payout — Unit 4A/])
+      await userEvent.click(within(panel).getByRole('checkbox', { name }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Finalize Aug 2026' }));
+
+    // In flight: the button says so, and nothing the request was built from can change under it.
+    expect(await within(panel).findByRole('button', { name: 'Finalizing…' })).toBeDisabled();
+    for (const box of within(panel).getAllByRole('checkbox')) expect(box).toBeDisabled();
+    expect(within(panel).getByLabelText('Statement ending balance')).toBeDisabled();
+
+    release();
+
+    // The view and its button are gone, so the keyboard lands on the month it just closed.
+    expect(await screen.findByText('Finalized')).toBeInTheDocument();
+    expect(screen.getByText('Aug 2026')).toHaveFocus();
+  });
+
+  it('reads the lines again after a refusal, and finalizes only lines still on offer', async () => {
+    let reads = 0;
+    let finalizeBody: { assignedLineIds?: string[] } | undefined;
+    let attempt = 0;
+    server.use(
+      staff(),
+      historyOf(() => [REOPENED]),
+      http.get('/api/accounting/reconciliations/:id/lines', () => {
+        reads += 1;
+        // Meanwhile another month reconciled the plumber's check, so it is no longer on offer.
+        return HttpResponse.json(
+          reads === 1
+            ? LINES
+            : { ...LINES, lines: LINES.lines.filter((l) => l.journalLineId !== 'l-chk') },
+        );
+      }),
+      http.post('/api/accounting/reconciliations', () => HttpResponse.json({})),
+      http.post('/api/accounting/reconciliations/:id/finalize', async ({ request }) => {
+        attempt += 1;
+        if (attempt === 1)
+          return HttpResponse.json(
+            {
+              code: 'reconciliation_line_not_assignable',
+              detail:
+                'A line chosen for 2026-08 is already reconciled in a month’s reconciliation.',
+            },
+            { status: 422 },
+          );
+        finalizeBody = (await request.json()) as { assignedLineIds?: string[] };
+        return HttpResponse.json({ ...LINES.reconciliation, status: 'finalized', difference: 0 });
+      }),
+    );
+    renderHistory();
+
+    const panel = await openAugust();
+    for (const name of [/Deposit — Unit 2B/, /Check 1041/, /Payout — Unit 4A/])
+      await userEvent.click(within(panel).getByRole('checkbox', { name }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Finalize Aug 2026' }));
+    await within(panel).findByRole('alert');
+
+    await waitFor(() =>
+      expect(within(panel).queryByRole('checkbox', { name: /Check 1041/ })).toBeNull(),
+    );
+    // Without the check the ticked lines come to $600.00, which the statement now has to show.
+    const statement = within(panel).getByLabelText('Statement ending balance');
+    await userEvent.clear(statement);
+    await userEvent.type(statement, '12100');
+    expect(within(panel).getByLabelText('Difference')).toHaveTextContent(/^\$0\.00$/);
+    await userEvent.click(within(panel).getByRole('button', { name: 'Finalize Aug 2026' }));
+
+    await waitFor(() => expect(finalizeBody).toBeDefined());
+    expect([...(finalizeBody?.assignedLineIds ?? [])].sort()).toEqual(['l-dep', 'l-po1', 'l-po2']);
+  });
+
   it.each([
     [
       409,
