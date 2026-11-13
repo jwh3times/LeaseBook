@@ -1,9 +1,9 @@
 ---
 name: what-next
-description: Report what to work on next in this repository — work already in flight, ready issues ranked the way the board ranks them, what needs the user, what needs shaping first, and blocks that have quietly cleared — and recommend the one command to run. Read-only. Use when the user asks what to work on next, what is ready or what to pick up, or when a phase ends with no next piece of work chosen.
+description: Report what to work on next in this repository — an active handoff waiting to be resumed, work already in flight, ready issues ranked the way the board ranks them, what needs the user, what needs shaping first, and blocks that have quietly cleared — and recommend the one command to run. Read-only. Use when the user asks what to work on next, what is ready or what to pick up, or when a phase ends with no next piece of work chosen.
 argument-hint: "A focus: agent, human, bugs, or a label, area or field value (optional)"
 metadata:
-  settings: issue-tracker triage-labels dev-flow
+  settings: issue-tracker triage-labels handoffs dev-flow
 ---
 
 # What next
@@ -12,18 +12,21 @@ Scan this repository's trackers and board, rank the open work, and say what to p
 development flow's routing table says which command takes each kind of work; this skill finds the
 work, ranks it, and names the command. It recommends and stops: the human starts every phase.
 
-**Read-only.** Never change a label, field, assignee, issue or PR, and never claim an issue: `/implement`
-and the other phase commands do that when the work begins. Tracker problems the scan finds are
-reported, for the user or `end-session` to fix. The settings files step 0 may write are the only
-files this skill ever changes.
+**Read-only.** Never change a label, field, assignee, issue or PR, and never claim an issue or a
+handoff: `/implement`, `/lets-go` and the other phase commands do that when the work begins.
+Tracker problems the scan finds are reported, for the user or `end-session` to fix. The settings
+files step 0 may write are the only files this skill ever changes; reading the handoff map may also
+fetch a copy of the map and its document into the local Handoffs folder.
 
 Run shell snippets in bash (Git Bash on Windows).
 
 ## 0. Settings
 
-This skill reads `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. Follow
-`.agents/skills/what-next/settings/README.md` to read them and complete any that are missing; the
-definitions sit beside it. Then read:
+This skill reads `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` and
+`docs/agents/handoffs.md`. Follow `.agents/skills/what-next/settings/README.md` to read them and
+complete any that are missing; the definitions sit beside it. It never sets up the handoffs machine
+config (`.agents/skills/handoff/machine-config.md`): that writes a file, so a machine without one
+skips the handoff check (step 1). Then read:
 
 - `.agents/skills/what-next/settings/dev-flow.md` `## Procedure`: **The gate** (what makes an issue
   ready), **Routing** (which command takes which work, and what "nobody has started" means) and
@@ -48,6 +51,22 @@ repository="<Public repository>"   # owner/name
 ```
 
 `board_owner` and `board_number` below are the two words of the `Board` setting.
+
+**The active handoff**, through the script the `handoff` skill installs, as `lets-go` reads it:
+
+```bash
+node .agents/skills/handoff/handoff-map.mjs get --key <Map key>
+```
+
+- **`file` is null** (or `inMap` is false): no handoff waits for this repository.
+- **`file` is set and `exists` is true**: a handoff waits to be resumed. Read the document's
+  **Where you are** and first **Next step** for the report; do not act on them.
+- **`file` is set and `exists` is false**: the document has not reached this machine yet (the
+  `note` says why). Report it as pending.
+- **`conflicts` not empty**: report that the map has conflicting copies, which `lets-go` resolves
+  with the user.
+- **An error**, a missing script, or no machine config (the error names `config`): the handoff
+  check was not read. Never run `config --write` from here.
 
 **Open issues**, once per tracker, with `owner` and `name` split from its `owner/name`:
 
@@ -143,6 +162,12 @@ checks' state.
 
 **Private work** is classified and routed like the rest, and marked `[private]` in the report.
 
+**An active handoff** heads **Finish first**, routed to `/lets-go`: another session parked its work
+for this one to resume, and its document names the next step. A pending one (its document not here
+yet) is listed there too, with no route. The map does not record which machine wrote a handoff, so
+the report names the document and its date: a handoff this machine wrote is waiting for the other
+one, and is left alone.
+
 ## 3. Rank
 
 Within each bucket, order by:
@@ -152,13 +177,15 @@ Within each bucket, order by:
 3. Age (`createdAt`), oldest first.
 
 With `Priority order: none`, or the board unreadable, rank by 2 and 3 alone and say so.
-**Finish first** goes: PRs with failing checks or changes requested, then approved PRs, then PRs
-waiting for review, then assigned issues with no PR, then drafts.
+**Finish first** goes: the active handoff, then PRs with failing checks or changes requested, then
+approved PRs, then PRs waiting for review, then assigned issues with no PR, then drafts.
 
 **The recommendation** is, in order:
 
-1. The top of **Finish first**, unless it holds only drafts. A green PR with nothing requested is
-   finished by the user's review and merge, which the recommendation names; it never merges.
+1. The top of **Finish first**, unless it holds only drafts or a pending handoff. An active handoff
+   whose document is here is resumed with `/lets-go`, which brings the checkout to its state before
+   anything else starts. A green PR with nothing requested is finished by the user's review and
+   merge, which the recommendation names; it never merges.
 2. Otherwise the higher-ranked of the tops of **Ready for an agent** and **Needs you**, comparing
    by the same keys. On a tie, the **Needs you** item: no agent can take it, and it may unblock
    others.
@@ -180,6 +207,8 @@ alone. List at most ten items per bucket and count the rest. Leave out an empty 
 **Next:** <title> (#<n>) <[private]> — run `<command> <n>`. <One line: why this, above the rest.>
 
 ### Finish first
+- Active handoff `<file>` (<date>) — <its first next step> — `/lets-go`, unless this machine wrote
+  it <or: pending, not on this machine yet>
 - <title> (#<n>) — <PR state, or "assigned, no PR"> — <what finishing takes>
 
 ### Ready for an agent (<count>)
@@ -197,7 +226,8 @@ work.<, <n> draft security advisories open.>
 
 **Tracker hygiene:** <stale blocks, assigned work that is waiting, ready-for-agent labels on raw
 issues, open items with no `Priority order` value, conflicting state labels — or "none found">.
-**Not read:** <the board, the private tracker or advisories, with why — or leave the line out>.
+**Not read:** <the handoff map, the board, the private tracker or advisories, with why — or leave
+the line out>.
 ```
 
 Then stop. Say which command the recommendation runs, and wait: the user starts the next phase.

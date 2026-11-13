@@ -83,7 +83,7 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/handoff/SKILL.md",
-      "computedHash": "563afc79f538dfd7089098848c6f118226affba457b14ce6671276de3a731885",
+      "computedHash": "9918f1f0885e39e27e047535f1bb661d42c27910978c1281ef71290b525b2028",
       "installMode": "copy"
     },
     "implement": {
@@ -106,7 +106,7 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/lets-go/SKILL.md",
-      "computedHash": "f82c8cc0151d524b280cde74cc1004ffd2446c7dfdf6ff112b8066bf6d43492c",
+      "computedHash": "5b0f2ead2e7be42c66cba87f075a925c1c538f0a8cae6876b8aab5e3fb66aa05",
       "installMode": "copy"
     },
     "prototype": {
@@ -208,7 +208,7 @@
       "source": "jwh3times/skills",
       "sourceType": "github",
       "skillPath": "skills/what-next/SKILL.md",
-      "computedHash": "9eafee034204dac2dfb5662c217b0b5dd5f1b445a77e2349cb4eb52f4b3a1f0d",
+      "computedHash": "1a0a35d36cf5757f39624a2d2dd0160d28b48535cc7ae8ddab8a3d21e04928b6",
       "installMode": "copy"
     },
     "wizard": {
