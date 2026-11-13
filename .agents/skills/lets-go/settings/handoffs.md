@@ -7,7 +7,7 @@ folder reaches a machine is that machine's config, not a repository setting (see
 
 ## Map key
 
-- **Read by:** handoff, lets-go
+- **Read by:** handoff, lets-go, what-next
 - **Value:** this repository's key in `handoff_map.json`, as a literal (`ApexRacers`, `skills`).
   Keys are the user's project names and match case- and punctuation-insensitively; the key also
   names the handoff documents (`apexracers-handoff-2026-10-26.md`).
