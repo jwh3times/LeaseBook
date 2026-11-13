@@ -18,6 +18,15 @@ next section.
 
 No unreleased changes.
 
+## [0.32.20] - 2026-11-12
+
+### Changed
+
+- `/what-next` puts an active handoff first: when `handoff_map.json` names one for this repository,
+  the report leads with it and recommends `/lets-go`, and one whose document has not reached this
+  machine is shown as pending. It still changes nothing, and a machine without the handoffs config
+  skips the check.
+
 ## [0.32.19] - 2026-11-12
 
 ### Added
@@ -2165,7 +2174,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.19...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.32.20...HEAD
+[0.32.20]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.20
 [0.32.19]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.19
 [0.32.18]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.18
 [0.32.17]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.17
