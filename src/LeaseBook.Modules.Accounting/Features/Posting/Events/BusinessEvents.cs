@@ -120,10 +120,14 @@ public sealed record PMFeesSwept(
     Money Amount, DateOnly Date, Guid OperatingBankId, Guid PmBankId,
     string Description, string? SourceRef = null, string? InternalNote = null) : AccountingEvent;
 
-/// <summary>An owner deposits their own funds into a trust bank.</summary>
+/// <summary>
+/// An owner deposits their own funds into an operating trust bank (bank ↑, owner equity ↑). A
+/// security-deposit trust or the PM operating bank is refused (#744).
+/// </summary>
 public sealed record OwnerContribution(
     Guid OwnerId, Guid? PropertyId,
-    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null) : AccountingEvent;
+    Money Amount, DateOnly Date, Guid BankAccountId, string Description, string? SourceRef = null,
+    string? InternalNote = null) : AccountingEvent;
 
 /// <summary>A disbursement of an owner's trust funds to the owner (guarded by the reserve floor).</summary>
 public sealed record OwnerDisbursed(

@@ -75,9 +75,11 @@ public sealed class ReturnTenantPaymentTests(PostgresFixture fixture)
         await using var scope = await NewScope(ct);
         await Charge(scope, 600m, ct);
         var receipt = await Post(scope, Receipt(scope, 600m), ct);
-        // The owner's total stays at 1,000, but nothing is left in the bank the receipt went into.
+        // The owner's total stays at 1,000, but nothing is left in the bank the receipt went into: the
+        // contribution is held in another operating trust (owner money is never held in deposit trust, #744).
+        var elsewhere = await AddOperatingTrustAsync(fixture, scope, ct);
         await Post(scope, new OwnerContribution(_owner, _property, new Money(1000m), ReceiptDate,
-            scope.DepositBankId, "contribution held elsewhere"), ct);
+            elsewhere, "contribution held elsewhere"), ct);
         await Post(scope, new OwnerDisbursed(_owner, new Money(600m), ReceiptDate, scope.TrustBankId, "draw"), ct);
 
         var error = await Should.ThrowAsync<PaymentReturnBlockedException>(() => Return(scope, receipt, ReturnDate, ct));

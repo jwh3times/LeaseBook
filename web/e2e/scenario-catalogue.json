@@ -451,6 +451,15 @@
       "routes": ["GET /api/accounting/banks/{bankAccountId}/held-fees"]
     },
     {
+      "id": "owner-contribution-from-register",
+      "workflow": "Record an owner's contribution into the operating trust account from the register by keyboard, on the owner and property chosen, and see a security-deposit trust offer none",
+      "area": "Banking",
+      "spec": "bank-adjustments.spec.ts",
+      "org": "scenario",
+      "events": ["OwnerContribution"],
+      "routes": []
+    },
+    {
       "id": "owner-statement-view-export-deliver",
       "workflow": "View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it",
       "area": "Reporting",
@@ -874,12 +883,6 @@
         "reason": "No screen offers interest until #307 settles who interest in a trust account belongs to.",
         "date": "2026-11-06",
         "issue": 307
-      },
-      {
-        "event": "OwnerContribution",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 744
       },
       {
         "event": "VendorPaid",

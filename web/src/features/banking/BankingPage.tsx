@@ -504,14 +504,23 @@ export function BankingPage() {
             setAdjusting(false);
             refreshAccount(acctId);
             if (toBankAccountId) refreshAccount(toBankAccountId);
+            if (kind === 'owner-contribution') {
+              // The owner's money moved: their balances, statements and the dashboard's owner balances.
+              void queryClient.invalidateQueries({ queryKey: ['owners'] });
+              void queryClient.invalidateQueries({ queryKey: ['owner'] });
+              void queryClient.invalidateQueries({ queryKey: ['statement'] });
+              void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            }
             setAdjustmentNotice(
-              kind === 'sweep'
-                ? `Sweep of ${formatMoney(amount)} to ${findBank(toBankAccountId ?? '')?.name ?? 'the PM operating account'} recorded.`
-                : toBankAccountId
-                  ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
-                  : kind === 'contribution'
-                    ? `PM contribution of ${formatMoney(amount)} recorded.`
-                    : `Bank fee of ${formatMoney(amount)} recorded.`,
+              kind === 'owner-contribution'
+                ? `Owner contribution of ${formatMoney(amount)} recorded.`
+                : kind === 'sweep'
+                  ? `Sweep of ${formatMoney(amount)} to ${findBank(toBankAccountId ?? '')?.name ?? 'the PM operating account'} recorded.`
+                  : toBankAccountId
+                    ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
+                    : kind === 'contribution'
+                      ? `PM contribution of ${formatMoney(amount)} recorded.`
+                      : `Bank fee of ${formatMoney(amount)} recorded.`,
             );
           }}
         />

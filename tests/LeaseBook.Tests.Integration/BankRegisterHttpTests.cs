@@ -5,6 +5,8 @@ using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Ledgers;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
+using LeaseBook.Modules.Directory.Features.Owners;
+using LeaseBook.Modules.Directory.Features.Properties;
 using LeaseBook.SharedKernel;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Tenancy;
@@ -221,6 +223,127 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
         var after = await GetAsync<HeldFeesView>(
             client, $"/api/accounting/banks/{setup.TrustBankId}/held-fees?from=2026-02-01", ct);
         (after.Held, after.Floor).ShouldBe((100m, 0m));
+    }
+
+    /// <summary>
+    /// An owner contribution over HTTP (#744), through the real Directory reads behind both ports: it posts
+    /// on the owner the property belonged to on its date, across an ownership transfer, and raises that
+    /// owner's operating balance and the bank; a property the owner did not hold that day, a bank that is
+    /// not operating trust, a future date and a missing property are each refused with their own answer.
+    /// </summary>
+    [Fact]
+    public async Task An_owner_contribution_lands_on_the_owner_of_the_property_on_its_date()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var url = $"/api/accounting/banks/{setup.TrustBankId}/adjustments";
+        var feb5 = new DateOnly(2026, 2, 5);
+        var feb12 = new DateOnly(2026, 2, 12);
+
+        Guid seller = default, buyer = default, property = default;
+        await using (var scope = fixture.Api.Services.CreateAsyncScope())
+        {
+            var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
+            {
+                seller = await sender.Send(new CreateOwner("Seller Holdings", null, null, null, null, 0m), ct);
+                buyer = await sender.Send(new CreateOwner("Buyer Partners", null, null, null, null, 0m), ct);
+                property = await sender.Send(new CreateProperty(seller, "1 Transfer Way", null, null, null, null), ct);
+                (await sender.Send(new TransferPropertyOwnership(property, buyer, new DateOnly(2026, 2, 10), Key()), ct))
+                    .ShouldNotBeNull();
+            }, ct);
+        }
+
+        object Body(Guid owner, DateOnly date, decimal amount = 300m, Guid? propertyId = null) => new
+        {
+            kind = "owner-contribution",
+            amount,
+            date,
+            ownerId = owner,
+            propertyId = propertyId ?? property,
+            sourceRef = Key(),
+        };
+
+        await PostOkAsync<PostResult>(client, url, Body(seller, feb5), ct);
+        await PostOkAsync<PostResult>(client, url, Body(buyer, feb12, 200m), ct);
+
+        foreach (var (owner, date) in new[] { (seller, feb12), (buyer, feb5) })
+        {
+            await ShouldBeProblemAsync(await client.PostAsJsonAsync(url, Body(owner, date), ct),
+                HttpStatusCode.UnprocessableEntity, "property_not_owned",
+                "This property does not belong to this owner on that date. Choose one of the owner's properties.", ct);
+        }
+
+        foreach (var bank in new[] { setup.DepositBankId, setup.OperatingBankId })
+        {
+            await ShouldBeProblemAsync(
+                await client.PostAsJsonAsync($"/api/accounting/banks/{bank}/adjustments", Body(seller, feb5), ct),
+                HttpStatusCode.UnprocessableEntity, "contribution_bank_not_operating_trust",
+                "An owner contribution is paid into an operating trust account, and this account is not one.", ct);
+        }
+
+        var future = await client.PostAsJsonAsync(url, Body(buyer, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3)), ct);
+        future.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        using (var problem = System.Text.Json.JsonDocument.Parse(await future.Content.ReadAsStringAsync(ct)))
+        {
+            problem.RootElement.GetProperty("code").GetString().ShouldBe("posting_date_in_future");
+        }
+
+        var noProperty = await client.PostAsJsonAsync(url,
+            new { kind = "owner-contribution", amount = 5m, date = feb5, ownerId = seller, sourceRef = Key() }, ct);
+        noProperty.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        register.Totals.Book.ShouldBe(500m);
+        var sellerDetail = await GetAsync<OwnerDetail>(client, $"/api/directory/owners/{seller}", ct);
+        var buyerDetail = await GetAsync<OwnerDetail>(client, $"/api/directory/owners/{buyer}", ct);
+        (sellerDetail.Operating, buyerDetail.Operating).ShouldBe((300m, 200m));
+
+        // Each lands in the Contributions section of its owner's statement and of the property's.
+        foreach (var (owner, amount) in new[] { (seller, 300m), (buyer, 200m) })
+        {
+            foreach (var scope in new[] { "", $"&propertyId={property}" })
+            {
+                var body = await client.GetStringAsync($"/api/statements/{owner}?year=2026&month=2{scope}", ct);
+                using var statement = System.Text.Json.JsonDocument.Parse(body);
+                ContributionsSubtotal(statement.RootElement).ShouldBe(amount, body);
+            }
+        }
+    }
+
+    /// <summary>The subtotal of the statement's "Owner contributions" section, wherever the view nests it.</summary>
+    private static decimal? ContributionsSubtotal(System.Text.Json.JsonElement element)
+    {
+        if (element.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("title", out var title) && title.ValueKind == System.Text.Json.JsonValueKind.String
+                && title.GetString() == "Owner contributions" && element.TryGetProperty("subtotal", out var subtotal))
+            {
+                return subtotal.GetDecimal();
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                if (ContributionsSubtotal(property.Value) is { } found)
+                {
+                    return found;
+                }
+            }
+        }
+        else if (element.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                if (ContributionsSubtotal(item) is { } found)
+                {
+                    return found;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static async Task ShouldBeProblemAsync(

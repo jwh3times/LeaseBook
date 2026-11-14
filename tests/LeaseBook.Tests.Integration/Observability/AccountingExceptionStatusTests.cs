@@ -54,6 +54,8 @@ public sealed class AccountingExceptionStatusTests
         (new TransferBankNotTrustException(Guid.NewGuid(), TransferEnd.Source), StatusCodes.Status422UnprocessableEntity),
         (new TransferBankNotTrustException(Guid.NewGuid(), TransferEnd.Destination), StatusCodes.Status422UnprocessableEntity),
         (new ContributionBankNotTrustException(Guid.NewGuid()), StatusCodes.Status422UnprocessableEntity),
+        (new ContributionBankNotOperatingTrustException(Guid.NewGuid()), StatusCodes.Status422UnprocessableEntity),
+        (new PropertyNotOwnedException(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 2, 5)), StatusCodes.Status422UnprocessableEntity),
         (new PmFeesInsufficientException(25m, 0m, Guid.NewGuid(), HeldFeesCharge.Sweep), StatusCodes.Status409Conflict),
         (new SweepBankInvalidException(Guid.NewGuid(), TransferEnd.Source), StatusCodes.Status422UnprocessableEntity),
         (new SweepBankInvalidException(Guid.NewGuid(), TransferEnd.Destination), StatusCodes.Status422UnprocessableEntity),

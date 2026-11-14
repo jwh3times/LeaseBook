@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-05
+- **Last reviewed:** 2026-11-14
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -45,8 +45,12 @@ A module **never reads another module's tables or types directly**. A cross-modu
 a **consumer-owned port** — an interface declared in the _consuming_ module's `Contracts` — that a
 thin **host adapter** implements by delegating to the producing module via `ISender`, on the same
 ambient row-level-security transaction. Ports expose **batch** reads (they return a map), never
-per-id reads. This keeps every module independently extractable and keeps the boundary visible. The
-one sanctioned exception is a dedicated reporting/read layer, which may read across the schema on
+per-id reads, except where a posting reads the one entity it names: Accounting reads a tenant's
+posting dimensions (`ITenantPostingDimensions`) and a property's owner on a date
+(`IPropertyOwnership`) one at a time, and which banks are operating trust (`IBankAccountPurposes`)
+as a map, all from Directory
+([ADR-014 addendum of 2026-11-14](adr/ADR-014-reconciliation-engine-and-lock.md)). This keeps every
+module independently extractable and keeps the boundary visible. The one sanctioned exception is a dedicated reporting/read layer, which may read across the schema on
 purpose and records its own ADR. See [ADR-007](adr/ADR-007-cross-module-read-contracts.md).
 
 Cross-module writes use the same visible composition seam: the consuming module owns a narrow port,

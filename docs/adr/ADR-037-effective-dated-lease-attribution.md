@@ -87,6 +87,14 @@ same bank-register dialog, and it is refused the same way when dated after the o
 [ADR-014 addendum of 2026-11-13](ADR-014-reconciliation-engine-and-lock.md); this addendum only adds it
 to the list.
 
+## Addendum (2026-11-14, #744): an owner contribution is money moving in
+
+An owner's contribution into an operating trust account is recorded from the same bank-register
+dialog, and it is refused the same way when dated after the organization's today:
+`posting_date_in_future` (422). The contribution itself is decided in the
+[ADR-014 addendum of 2026-11-14](ADR-014-reconciliation-engine-and-lock.md); this addendum only adds it
+to the list.
+
 ## Consequences
 
 Sequential rows may both retain the `active` lifecycle status without competing on any date, and an

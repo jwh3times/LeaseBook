@@ -125,6 +125,27 @@ internal static class AccountingTestHarness
         await tx.CommitAsync(ct);
     }
 
+    /// <summary>
+    /// A second operating trust bank in <paramref name="scope"/>'s org, with its chart account and its
+    /// directory row, for a test that needs an owner's money in another bank that can hold it (#744).
+    /// </summary>
+    public static async Task<Guid> AddOperatingTrustAsync(PostgresFixture fixture, OrgScope scope, CancellationToken ct)
+    {
+        var bankId = UuidV7.NewId();
+        await using (var conn = new NpgsqlConnection(fixture.MigratorConnectionString))
+        {
+            await conn.OpenAsync(ct);
+            await using var tx = await conn.BeginTransactionAsync(ct);
+            await RlsProbe.SetOrgAsync(conn, tx, scope.OrgId, ct);
+            await UpsertAsync(conn, tx, scope.OrgId, ct, "bank_accounts", "name, purpose", (bankId, "'Second Trust', 'trust'"));
+            await tx.CommitAsync(ct);
+        }
+
+        await scope.RunAsync(() => new ChartOfAccounts(scope.Db).ProvisionAsync(
+            [new BankAccountSpec(bankId, "Second Trust", BankPurpose.Trust)], ct), ct);
+        return bankId;
+    }
+
     /// <summary>Inserts each row into <paramref name="orgId"/> with the given extra columns, skipping existing PKs.</summary>
     private static async Task UpsertAsync(
         NpgsqlConnection conn, NpgsqlTransaction tx, Guid orgId, CancellationToken ct, string table, string columns,
@@ -165,7 +186,7 @@ internal static class AccountingTestHarness
     }
 
     public static AccountingEventService Events(OrgScope scope) =>
-        new(scope.Db, Posting(scope), new PostingLock(scope.Db, scope.Tenant));
+        new(scope.Db, Posting(scope), new PostingLock(scope.Db, scope.Tenant), new DirectoryBankPurposes(scope.Db));
 
     /// <summary>A posted line projected to its resolved account code + amounts/basis/dims, for exact assertions.</summary>
     public sealed record LineView(

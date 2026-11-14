@@ -269,7 +269,9 @@ internal sealed class BankClearingAdapter(ISender sender) : IBankClearing
 - Interface goes in consuming module's `Contracts/` folder
 - Adapter goes in `LeaseBook.Web/Adapters/`
 - Adapter delegates via `ISender` to the producing module's command
-- Ports expose **batch** reads (return a dictionary/collection), never per-ID reads
+- Ports expose **batch** reads (return a dictionary/collection), never per-ID reads, except a
+  posting's read of the one tenant or property it names (`ITenantPostingDimensions`,
+  `IPropertyOwnership`; ADR-014 addendum of 2026-11-14)
 - The exception is the dedicated reporting read-layer (ADR-016) — it reads across modules on purpose
 
 ---

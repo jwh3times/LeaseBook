@@ -257,11 +257,12 @@ export async function unlockReconciliation(
 
 /**
  * The adjustments the register offers: a bank fee, a transfer between trust accounts (#553), a PM
- * contribution into a trust account (#720), and a sweep of the PM's held fees to the PM operating
- * account (#743). The server also takes `interest`, which no screen offers until #307 settles who
- * interest belongs to.
+ * contribution into a trust account (#720), a sweep of the PM's held fees to the PM operating
+ * account (#743), and an owner's contribution into an operating trust account (#744). The server also
+ * takes `interest`, which no screen offers until #307 settles who interest belongs to.
  */
-export type BankAdjustmentKind = 'fee' | 'transfer' | 'contribution' | 'sweep';
+export type BankAdjustmentKind =
+  'fee' | 'transfer' | 'contribution' | 'sweep' | 'owner-contribution';
 
 /** Records a bank adjustment the register offers; the one caller path for the route. */
 export async function recordBankAdjustment(
@@ -275,6 +276,9 @@ export async function recordBankAdjustment(
     sourceRef: string;
     /** Staff-only (#468); never on a statement. */
     internalNote?: string | null;
+    /** An owner contribution's owner and property (#744); null for every other kind. */
+    ownerId?: string | null;
+    propertyId?: string | null;
   },
 ): Promise<{ entryId: string }> {
   return unwrap(
@@ -289,6 +293,8 @@ export async function recordBankAdjustment(
         toBankAccountId: input.toBankAccountId ?? null,
         sourceRef: input.sourceRef,
         internalNote: input.internalNote ?? null,
+        ownerId: input.ownerId ?? null,
+        propertyId: input.propertyId ?? null,
       },
     }),
     'Failed to record the adjustment',

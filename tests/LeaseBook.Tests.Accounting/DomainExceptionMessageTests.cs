@@ -248,6 +248,10 @@ public sealed class DomainExceptionMessageTests
             "A fee sweep moves management fees into the PM operating account, and the account it goes to is not one.");
         yield return (new ContributionBankNotTrustException(SampleId), "contribution_bank_not_trust",
             "A PM contribution is paid into a trust account, and this account is not a trust account.");
+        yield return (new ContributionBankNotOperatingTrustException(SampleId), "contribution_bank_not_operating_trust",
+            "An owner contribution is paid into an operating trust account, and this account is not one.");
+        yield return (new PropertyNotOwnedException(SampleId, SampleId, new DateOnly(2026, 2, 5)), "property_not_owned",
+            "This property does not belong to this owner on that date. Choose one of the owner's properties.");
         yield return (new PmFeesInsufficientException(30m, 10m, SampleId, (HeldFeesCharge)99), "pm_fees_insufficient",
             "The management fees held in this account do not cover the processor fee shortfall. A PM contribution to this account dated on or before the payout covers it.");
         yield return (new TransferBankNotTrustException(SampleId, TransferEnd.Source), "transfer_bank_not_trust",

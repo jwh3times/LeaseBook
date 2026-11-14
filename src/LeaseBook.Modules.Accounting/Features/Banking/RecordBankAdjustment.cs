@@ -13,10 +13,12 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 
 /// <summary>
 /// Records a bank-only adjustment from the register (P65): a service fee, interest, a transfer between
-/// two of the org's bank accounts, a PM contribution into a trust bank (#720), or a sweep of the PM's
-/// held fees from a trust bank to the PM operating bank (#743). The <c>Kind</c> selects the posting
-/// template; all five route through the existing engine — no new journal write path. A transfer and a
-/// sweep name where the money goes in <c>ToBankAccountId</c>.
+/// two of the org's bank accounts, a PM contribution into a trust bank (#720), a sweep of the PM's
+/// held fees from a trust bank to the PM operating bank (#743), or an owner's contribution into an
+/// operating trust bank (#744). The <c>Kind</c> selects the posting template; all six route through the
+/// existing engine — no new journal write path. A transfer and a sweep name where the money goes in
+/// <c>ToBankAccountId</c>; an owner contribution names the owner and the property in <c>OwnerId</c> and
+/// <c>PropertyId</c>, and the property must belong to that owner on the contribution's date.
 /// <para>
 /// <c>Description</c> is the entry's register/ledger text; <c>InternalNote</c> is staff-only (#468).
 /// </para>
@@ -25,12 +27,13 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record RecordBankAdjustment(
     string Kind, decimal Amount, DateOnly Date, Guid BankAccountId, Guid? ToBankAccountId,
-    string? Description, string SourceRef, string? InternalNote = null) : ICommand<PostResult>;
+    string? Description, string SourceRef, string? InternalNote = null,
+    Guid? OwnerId = null, Guid? PropertyId = null) : ICommand<PostResult>;
 
 public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBankAdjustment>
 {
     // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
-    public static readonly string[] Kinds = ["fee", "interest", "transfer", "contribution", "sweep"];
+    public static readonly string[] Kinds = ["fee", "interest", "transfer", "contribution", "sweep", "owner-contribution"];
 
     public RecordBankAdjustmentValidator()
     {
@@ -66,9 +69,29 @@ public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBank
             RuleFor(x => x.ToBankAccountId).Null()
                 .WithMessage("Only a transfer or a sweep names a destination bank account.");
         });
+
+        // An owner contribution is an owner's money for one of their properties (#744); the other kinds
+        // are the PM's own and carry neither, since their handlers would drop them.
+        When(x => IsKind(x, OwnerContributionKind), () =>
+        {
+            RuleFor(x => x.OwnerId)
+                .NotNull().WithMessage("An owner contribution names the owner it comes from.")
+                .NotEqual(Guid.Empty).WithMessage("An owner contribution names the owner it comes from.");
+            RuleFor(x => x.PropertyId)
+                .NotNull().WithMessage("An owner contribution names the property it is for.")
+                .NotEqual(Guid.Empty).WithMessage("An owner contribution names the property it is for.");
+        });
+
+        When(x => !IsKind(x, OwnerContributionKind), () =>
+        {
+            RuleFor(x => x.OwnerId).Null().WithMessage("Only an owner contribution names an owner or a property.");
+            RuleFor(x => x.PropertyId).Null().WithMessage("Only an owner contribution names an owner or a property.");
+        });
     }
 
-    private static bool IsKind(RecordBankAdjustment command, string kind) =>
+    internal const string OwnerContributionKind = "owner-contribution";
+
+    internal static bool IsKind(RecordBankAdjustment command, string kind) =>
         string.Equals(command.Kind, kind, StringComparison.OrdinalIgnoreCase);
 }
 
@@ -76,13 +99,14 @@ internal sealed class RecordBankAdjustmentHandler(
     IAccountingEvents events,
     PostingCalendar calendar,
     IAccountingPeriods periods,
-    IReconciliationLock reconciliationLock)
+    IReconciliationLock reconciliationLock,
+    IPropertyOwnership ownership)
     : ICommandHandler<RecordBankAdjustment, PostResult>
 {
     public async Task<PostResult> Handle(RecordBankAdjustment command, CancellationToken ct)
     {
-        // A bank fee, interest, transfer, PM contribution or sweep appears on the bank's statement by the day
-        // it is recorded (#642).
+        // A bank fee, interest, transfer, PM contribution, sweep or owner contribution appears on the bank's
+        // statement by the day it is recorded (#642).
         await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
 
         // A closed period or a reconciled month refuses the posting whatever the PM's held fees are, so
@@ -100,6 +124,17 @@ internal sealed class RecordBankAdjustmentHandler(
         if (command.ToBankAccountId is { } destination)
         {
             await reconciliationLock.EnsureOpenAsync(destination, command.Date, ct);
+        }
+
+        // An owner contribution lands on the statement of the owner the property belonged to on its date,
+        // after any ownership transfer; naming anyone else would put it on the wrong statement (#744).
+        if (RecordBankAdjustmentValidator.IsKind(command, RecordBankAdjustmentValidator.OwnerContributionKind))
+        {
+            var owner = await ownership.GetOwnerOnAsync(command.PropertyId!.Value, command.Date, ct);
+            if (owner != command.OwnerId)
+            {
+                throw new PropertyNotOwnedException(command.PropertyId.Value, command.OwnerId!.Value, command.Date);
+            }
         }
 
         var money = new Money(command.Amount);
@@ -120,6 +155,10 @@ internal sealed class RecordBankAdjustmentHandler(
             "sweep" => await events.PostAsync(
                 new PMFeesSwept(money, command.Date, command.BankAccountId, command.ToBankAccountId!.Value,
                     command.Description ?? "PM fee sweep", command.SourceRef, command.InternalNote), ct),
+            RecordBankAdjustmentValidator.OwnerContributionKind => await events.PostAsync(
+                new OwnerContribution(command.OwnerId!.Value, command.PropertyId!.Value, money, command.Date,
+                    command.BankAccountId, command.Description ?? "Owner contribution", command.SourceRef,
+                    command.InternalNote), ct),
             _ => throw new ValidationException("Unknown bank-adjustment kind."), // unreachable past the validator
         };
         return new PostResult(id);

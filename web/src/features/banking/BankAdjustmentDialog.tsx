@@ -6,9 +6,10 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { ErrorAction } from '@/components/ErrorAction';
 import { AudienceHint } from '@/components/InternalNote';
 import { Modal } from '@/components/Modal';
-import { num } from '@/lib/directory';
+import { num, useOwners, useProperties } from '@/lib/directory';
 import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
+import { useBankAccounts } from '@/lib/settings';
 import { useLockedPeriodMessage } from '@/features/tenants/ledgerMutations';
 import { centsToAmount, newIssueKey, parseAmountCents } from '@/features/refundChecks/refundChecks';
 import {
@@ -38,7 +39,7 @@ export interface BankAdjustmentDialogProps {
   }) => void;
 }
 
-type FieldName = 'amount' | 'date' | 'to';
+type FieldName = 'owner' | 'property' | 'amount' | 'date' | 'to';
 
 interface FormError extends ApiError {
   field?: FieldName;
@@ -75,7 +76,17 @@ const KINDS: Record<
     action: 'Record sweep',
     placeholder: 'PM fee sweep',
   },
+  'owner-contribution': {
+    label: 'Owner contribution',
+    title: 'Record an owner contribution',
+    action: 'Record owner contribution',
+    placeholder: 'Owner contribution',
+  },
 };
+
+/** The kinds a trust account offers; an operating trust account also takes an owner's money (#744). */
+const TRUST_KINDS: BankAdjustmentKind[] = ['fee', 'transfer', 'contribution', 'sweep'];
+const OPERATING_TRUST_KINDS: BankAdjustmentKind[] = [...TRUST_KINDS, 'owner-contribution'];
 
 /**
  * Records a bank fee, or a transfer to another trust account, from the bank register (#553). Both are
@@ -85,7 +96,10 @@ const KINDS: Record<
  * is the property manager's own money paid into a trust account to join those held fees. A sweep (#743)
  * moves those held fees out of trust into the PM operating account: its amount starts at the most the
  * server will accept on its date, the lowest the fees held there are from that date on, and follows the
- * date until the operator types one. Interest is not offered until #307 settles who it belongs to.
+ * date until the operator types one. An owner contribution (#744) is an owner's own money paid into an
+ * operating trust account for one of their properties: it names the owner and the property, which
+ * defaults when the owner has only one, and the server refuses a property the owner did not hold on the
+ * date (`property_not_owned`). Interest is not offered until #307 settles who it belongs to.
  * <para>
  * It moves money, so like the other money dialogs it has no form and saves only from its button, never
  * from Enter, and the button runs each field's own constraints before anything is sent (#711). One
@@ -115,6 +129,8 @@ export function BankAdjustmentDialog({
   const [dateEdit, setDate] = useState<string | null>(null);
   const date = dateEdit ?? (orgToday.status === 'ready' ? orgToday.today : '');
   const [toChoice, setTo] = useState('');
+  const [ownerChoice, setOwner] = useState('');
+  const [propertyChoice, setProperty] = useState('');
   const [description, setDescription] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [error, setError] = useState<FormError | null>(null);
@@ -122,6 +138,42 @@ export function BankAdjustmentDialog({
   const transfer = kind === 'transfer';
   const sweep = kind === 'sweep';
   const namesDestination = transfer || sweep;
+  const ownerContribution = kind === 'owner-contribution';
+  // The register's balances say only trust or not; whether this trust account is operating trust, the
+  // one that takes an owner's contribution (#744), is its purpose in Settings. Until that is read the
+  // owner contribution is not offered, and the fieldset says why; the PM's own kinds need no read.
+  const purposes = useBankAccounts(false, { enabled: isTrust });
+  const isOperatingTrust =
+    purposes.data?.some((bank) => bank.id === bankAccountId && bank.purpose === 'trust') ?? false;
+  const kinds = isOperatingTrust ? OPERATING_TRUST_KINDS : TRUST_KINDS;
+
+  // An owner contribution names an owner and one of their properties. The lists show today's owners;
+  // the server checks the owner on the contribution's date, after any ownership transfer.
+  const owners = useOwners({ enabled: ownerContribution });
+  const properties = useProperties({ enabled: ownerContribution });
+  const ownerOptions = useMemo(
+    () =>
+      owners.isSuccess ? [...owners.data.items].sort((a, b) => a.name.localeCompare(b.name)) : [],
+    [owners.isSuccess, owners.data],
+  );
+  const ownerProperties = useMemo(
+    () =>
+      properties.isSuccess && ownerChoice !== ''
+        ? properties.data.items
+            .filter((p) => p.ownerId === ownerChoice)
+            .sort((a, b) => a.address.localeCompare(b.address))
+        : [],
+    [properties.isSuccess, properties.data, ownerChoice],
+  );
+  // One property needs no choosing; several start unchosen, so the money never lands on one by default.
+  const chosenProperty = ownerProperties.some((p) => p.id === propertyChoice) ? propertyChoice : '';
+  const property =
+    chosenProperty || (ownerProperties.length === 1 ? (ownerProperties[0]?.id ?? '') : '');
+  const ownerChoicesUnavailable =
+    ownerContribution &&
+    (owners.isPending || owners.isError || properties.isPending || properties.isError);
+  const ownerHasNoProperty =
+    ownerContribution && properties.isSuccess && ownerChoice !== '' && ownerProperties.length === 0;
 
   // A transfer goes to another trust account; a sweep to a PM operating account, never a trust one.
   const destinations = useMemo(
@@ -156,7 +208,12 @@ export function BankAdjustmentDialog({
   const heldFeesUnavailable =
     sweep && (heldFees.isError || (heldFees.fetchStatus === 'fetching' && !heldFees.isSuccess));
   const blocked =
-    orgToday.status !== 'ready' || destinationsUnavailable || noDestination || heldFeesUnavailable;
+    orgToday.status !== 'ready' ||
+    destinationsUnavailable ||
+    noDestination ||
+    heldFeesUnavailable ||
+    ownerChoicesUnavailable ||
+    ownerHasNoProperty;
 
   const amountValue = centsToAmount(parseAmountCents(shownAmount) ?? 0);
 
@@ -170,6 +227,8 @@ export function BankAdjustmentDialog({
         toBankAccountId: namesDestination ? to : null,
         sourceRef: sourceRef.current,
         internalNote: internalNote.trim() === '' ? null : internalNote.trim(),
+        ownerId: ownerContribution ? ownerChoice : null,
+        propertyId: ownerContribution ? property : null,
       }),
     onSuccess: () => posted(),
     onError: (err) => {
@@ -184,6 +243,9 @@ export function BankAdjustmentDialog({
         case 'transfer_bank_not_trust':
         case 'sweep_bank_invalid':
           setError({ ...err, field: 'to' });
+          break;
+        case 'property_not_owned':
+          setError({ ...err, field: 'property' });
           break;
         case 'account_period_locked':
           setError({ ...err, field: 'date', message: lockedMessage });
@@ -213,6 +275,11 @@ export function BankAdjustmentDialog({
     // Each field's own constraints first, in order: the browser names the first that fails.
     if (!reportFirstInvalidField(bodyRef.current)) return;
     if (orgToday.status !== 'ready') return fail('date', orgTodayUnavailableMessage(orgToday));
+    if (ownerContribution && ownerChoice === '')
+      return fail('owner', 'Choose the owner it comes from.');
+    if (ownerContribution && property === '') {
+      return fail('property', 'Choose the property it is for.');
+    }
     const cents = parseAmountCents(shownAmount);
     if (cents === null || cents <= 0) {
       return fail('amount', 'Enter an amount greater than zero, with at most two decimal places.');
@@ -251,7 +318,14 @@ export function BankAdjustmentDialog({
       }
     >
       <div ref={bodyRef} className="pf-modal-body col gap12">
-        {kind === 'contribution' ? (
+        {ownerContribution ? (
+          <p className="t3 fs13">
+            An owner’s own money paid into <b>{bankName}</b>, such as a float for a repair or to
+            cover a negative balance. It is added to that owner’s balance for the property, and
+            shows on the owner’s and the property’s statements. Money the property manager pays in
+            is a PM contribution instead.
+          </p>
+        ) : kind === 'contribution' ? (
           <p className="t3 fs13">
             The property manager’s own money paid into <b>{bankName}</b>. It joins the management
             fees held there, so a bank fee or a transfer dated on or after it can be paid from it.
@@ -273,7 +347,7 @@ export function BankAdjustmentDialog({
         {isTrust && (
           <fieldset className="pf-adjust-kinds">
             <legend className="pf-eyebrow">What to record</legend>
-            {(Object.keys(KINDS) as BankAdjustmentKind[]).map((choice) => (
+            {kinds.map((choice) => (
               <label key={choice} className="row gap6">
                 <input
                   type="radio"
@@ -290,8 +364,114 @@ export function BankAdjustmentDialog({
                 {KINDS[choice].label}
               </label>
             ))}
+            {purposes.isPending && (
+              <span className="t3 fs12" role="status">
+                Checking whether this account takes owner contributions…
+              </span>
+            )}
+            {purposes.isError && (
+              <div className="col gap6">
+                <ApiErrorNotice
+                  error={purposes.error}
+                  fallback="Couldn’t check whether this account takes owner contributions."
+                  kind="read"
+                />
+                <ErrorAction
+                  error={purposes.error}
+                  onRetry={() => void purposes.refetch()}
+                  retrying={purposes.isFetching}
+                />
+              </div>
+            )}
           </fieldset>
         )}
+
+        {ownerContribution &&
+          (owners.isError || properties.isError ? (
+            <div className="col gap6">
+              <ApiErrorNotice
+                error={owners.error ?? properties.error}
+                fallback="Couldn’t load the owners and their properties."
+                kind="read"
+              />
+              <ErrorAction
+                error={owners.error ?? properties.error}
+                onRetry={() => {
+                  if (owners.isError) void owners.refetch();
+                  if (properties.isError) void properties.refetch();
+                }}
+                retrying={owners.isFetching || properties.isFetching}
+              />
+            </div>
+          ) : owners.isPending || properties.isPending ? (
+            <div className="col gap6">
+              <span className="t3 fs12" role="status">
+                Loading the owners and their properties…
+              </span>
+              <div className="pf-skeleton" style={{ height: 20 }} />
+            </div>
+          ) : (
+            <div className="pf-adjust-grid">
+              <div className="col gap6">
+                <label className="pf-eyebrow" htmlFor={`${fieldId}-owner`}>
+                  Owner
+                </label>
+                <Select
+                  id={`${fieldId}-owner`}
+                  required
+                  value={ownerChoice}
+                  aria-invalid={error?.field === 'owner' || undefined}
+                  aria-describedby={describedBy('owner')}
+                  onChange={(e) => {
+                    setOwner(e.target.value);
+                    setProperty('');
+                    if (error?.field === 'owner' || error?.field === 'property') setError(null);
+                  }}
+                >
+                  <option value="">Choose an owner</option>
+                  {ownerOptions.map((owner) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="col gap6">
+                <label className="pf-eyebrow" htmlFor={`${fieldId}-property`}>
+                  Property
+                </label>
+                {ownerHasNoProperty ? (
+                  <p className="t3 fs13" role="status">
+                    This owner has no properties, so there is nothing to record it against.
+                  </p>
+                ) : (
+                  <Select
+                    id={`${fieldId}-property`}
+                    required
+                    disabled={ownerChoice === ''}
+                    value={property}
+                    aria-invalid={error?.field === 'property' || undefined}
+                    aria-describedby={describedBy('property')}
+                    onChange={(e) => {
+                      setProperty(e.target.value);
+                      if (error?.field === 'property') setError(null);
+                    }}
+                  >
+                    {ownerProperties.length !== 1 && (
+                      <option value="">
+                        {ownerChoice === '' ? 'Choose an owner first' : 'Choose a property'}
+                      </option>
+                    )}
+                    {ownerProperties.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.address}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </div>
+            </div>
+          ))}
 
         <div className="pf-adjust-grid">
           <div className="col gap6">

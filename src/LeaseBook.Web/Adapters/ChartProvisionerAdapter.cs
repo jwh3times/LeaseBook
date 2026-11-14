@@ -16,7 +16,8 @@ internal sealed class ChartProvisionerAdapter(AccountingContracts.IChartOfAccoun
     public Task ProvisionBankAccountAsync(Guid bankAccountId, string name, DirBankPurpose purpose, CancellationToken ct) =>
         chartOfAccounts.ProvisionAsync([new AccountingContracts.BankAccountSpec(bankAccountId, name, Map(purpose))], ct);
 
-    private static AccountingContracts.BankPurpose Map(DirBankPurpose purpose) => purpose switch
+    /// <summary>Directory's bank purpose as Accounting's (shared with <see cref="BankAccountPurposesAdapter"/>).</summary>
+    internal static AccountingContracts.BankPurpose Map(DirBankPurpose purpose) => purpose switch
     {
         DirBankPurpose.Trust => AccountingContracts.BankPurpose.Trust,
         DirBankPurpose.Deposit => AccountingContracts.BankPurpose.Deposit,

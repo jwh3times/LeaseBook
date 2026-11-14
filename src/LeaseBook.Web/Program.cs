@@ -242,6 +242,10 @@ builder.Services.AddScoped<LeaseBook.Modules.Directory.Contracts.IBankClearanceS
 // The reverse seam (M3 / P58): the Accounting ledger composer resolves a tenant's owner/property/unit
 // from the active lease through Directory. Accounting owns the port; the host adapter delegates via ISender.
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.ITenantPostingDimensions, TenantPostingDimensionsAdapter>();
+// An owner contribution's property and bank (#744): the property's owner on the posting date, and which
+// banks are operating trust, both read from Directory, which keeps them.
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IPropertyOwnership, PropertyOwnershipAdapter>();
+builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IBankAccountPurposes, BankAccountPurposesAdapter>();
 // The organization's time zone (#642): one adapter, one Directory read, behind each module's own port.
 builder.Services.AddScoped<LeaseBook.Web.Calendar.HostOrgCalendar>();
 builder.Services.AddScoped<LeaseBook.Modules.Accounting.Contracts.IOrgTimeZone>(sp => sp.GetRequiredService<LeaseBook.Web.Calendar.HostOrgCalendar>());

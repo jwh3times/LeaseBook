@@ -3,8 +3,9 @@ import { SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
 // A bank fee and a transfer between trust accounts, recorded from the bank register (#553), a PM
-// contribution (#720) and a sweep of the held fees to the PM operating account (#743), in the
-// scenario organization (`seed --org scenario`, ADR-056) as a staff member.
+// contribution (#720), a sweep of the held fees to the PM operating account (#743) and an owner's
+// contribution into the operating trust (#744), in the scenario organization
+// (`seed --org scenario`, ADR-056) as a staff member.
 //
 // A fee, a transfer and a sweep are paid from the management fees the PM holds in the account, and
 // the server refuses one past them. The scenario seed ends with 368.74 held in the operating trust and none in the deposit
@@ -16,6 +17,9 @@ import { test } from './test';
 const OPERATING_TRUST = 'Scenario Operating Trust';
 const DEPOSIT_TRUST = 'Scenario Deposit Trust';
 const PM_OPERATING = 'Scenario PM Operating';
+// A scenario owner and one of their properties (ScenarioSeeder), for the owner contribution (#744).
+const OWNER = 'Harborview Holdings';
+const PROPERTY = '14 Harborview Ln';
 
 /** A small amount with random cents, so a run's rows are its own. */
 function randomAmount(wholeDollars: number): string {
@@ -62,7 +66,7 @@ async function tabTo(page: Page, target: Locator, max = 12): Promise<void> {
 const registerRow = (page: Page, description: string) =>
   page.getByRole('table').getByRole('row').filter({ hasText: description });
 
-test.describe('bank fee, trust transfer, PM contribution and fee sweep from the register', () => {
+test.describe('bank fee, trust transfer, PM contribution, fee sweep and owner contribution from the register', () => {
   test('records a bank fee by keyboard, and shows a fee past the held fees refused in place @scenario:bank-fee-from-register', async ({
     page,
   }) => {
@@ -260,5 +264,54 @@ test.describe('bank fee, trust transfer, PM contribution and fee sweep from the 
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
     await openRegister(page, PM_OPERATING);
     await expect(registerRow(page, description)).toContainText(`$${swept}`);
+  });
+
+  test('records an owner contribution into the operating trust by keyboard, on the owner and property chosen @scenario:owner-contribution-from-register', async ({
+    page,
+  }) => {
+    await signIn(page, SCENARIO_STAFF);
+    await openRegister(page, OPERATING_TRUST);
+
+    // The owner contribution, by keyboard: arrow from "Bank fee" past the other four kinds to it.
+    // The choice appears once the account's purpose is read; arrowing before then would stop short.
+    await expect(
+      (await openDialog(page)).getByRole('radio', { name: 'Owner contribution' }),
+    ).toBeVisible();
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown');
+    const dialog = page.getByRole('dialog', { name: 'Record an owner contribution' });
+    await expect(dialog.getByRole('radio', { name: 'Owner contribution' })).toBeChecked();
+    // Each list is chosen by typing on it, as a keyboard user picks from a closed select.
+    const owner = dialog.getByLabel('Owner', { exact: true });
+    await tabTo(page, owner);
+    await page.keyboard.type(OWNER);
+    await expect(owner.locator('option:checked')).toHaveText(OWNER);
+    const property = dialog.getByLabel('Property', { exact: true });
+    await tabTo(page, property);
+    await page.keyboard.type(PROPERTY);
+    await expect(property.locator('option:checked')).toHaveText(PROPERTY);
+    const amount = randomAmount(1);
+    await tabTo(page, dialog.getByLabel('Amount'));
+    await page.keyboard.type(amount);
+    const description = describeRun('owner contribution');
+    await tabTo(page, dialog.getByLabel('Description'));
+    await page.keyboard.type(description);
+    await tabTo(page, dialog.getByRole('button', { name: 'Record owner contribution' }));
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(`Owner contribution of $${amount} recorded.`)).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(registerRow(page, description)).toContainText(`$${amount}`);
+    await expect(registerRow(page, description)).toContainText('Uncleared');
+
+    // A security-deposit trust account never takes an owner's money.
+    await openRegister(page, DEPOSIT_TRUST);
+    await openDialog(page);
+    await expect(
+      page.getByRole('dialog').getByRole('radio', { name: 'PM contribution' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('dialog').getByRole('radio', { name: 'Owner contribution' }),
+    ).toHaveCount(0);
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
   });
 });

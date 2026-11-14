@@ -20,6 +20,14 @@ const row = (bank: { bankAccountId: string; name: string; isTrust: boolean }) =>
   unclearedCount: 0,
 });
 
+// Each account's purpose in Settings: only an operating trust account takes an owner contribution.
+const PURPOSES = [
+  { id: 'trust1', purpose: 'trust' },
+  { id: 'res1', purpose: 'trust' },
+  { id: 'dep1', purpose: 'deposit' },
+  { id: 'op1', purpose: 'operating' },
+].map((bank) => ({ ...bank, name: bank.id, institution: null, mask: null, isActive: true }));
+
 const REFERENCE = '0123456789abcdef0123456789abcdef';
 const problem = (status: number, code: string, detail: string) =>
   HttpResponse.json(
@@ -45,6 +53,7 @@ function serve(
       if (floor instanceof Response) return floor;
       return HttpResponse.json({ bankAccountId: params.id, from, held: 368.74, floor });
     }),
+    http.get('/api/settings/banks', () => HttpResponse.json(PURPOSES)),
     http.get('/api/accounting/banks/balances', () =>
       HttpResponse.json({ rows: (opts.banks ?? [TRUST, DEPOSIT, OPERATING]).map(row) }),
     ),
@@ -109,6 +118,8 @@ describe('BankAdjustmentDialog', () => {
       description: 'Wire fee',
       toBankAccountId: null,
       internalNote: 'per the June statement',
+      ownerId: null,
+      propertyId: null,
     });
     expect(sourceRef).toMatch(/^bank-adjustment:[0-9a-f-]{36}$/);
   });
@@ -337,6 +348,8 @@ describe('BankAdjustmentDialog', () => {
       description: null,
       toBankAccountId: null,
       internalNote: 'bank charged the fee on the 3rd',
+      ownerId: null,
+      propertyId: null,
     });
   });
 
@@ -411,6 +424,8 @@ describe('BankAdjustmentDialog', () => {
       description: null,
       toBankAccountId: 'op1',
       internalNote: null,
+      ownerId: null,
+      propertyId: null,
     });
   });
 
@@ -557,5 +572,247 @@ describe('BankAdjustmentDialog', () => {
     expect(await screen.findByText(REFERENCE, { exact: false })).toBeInTheDocument();
     expect(saveFee()).toBeDisabled();
     expect(screen.getByLabelText('Date')).toHaveValue('');
+  });
+
+  // ---- an owner contribution (#744) ----
+
+  const OWNERS = [
+    { id: 'o-b', name: 'Birch Lane LLC' },
+    { id: 'o-a', name: 'Ashby Holdings' },
+  ].map((owner) => ({
+    ...owner,
+    initials: null,
+    units: 1,
+    properties: 1,
+    operating: 0,
+    deposits: 0,
+    total: 0,
+  }));
+  const PROPERTIES = [
+    { id: 'p-a1', address: '12 Ashby Rd', ownerId: 'o-a' },
+    { id: 'p-b2', address: '9 Birch Ln', ownerId: 'o-b' },
+    { id: 'p-b1', address: '3 Birch Ln', ownerId: 'o-b' },
+  ].map((p) => ({ ...p, city: null, ownerName: '', units: 1, occupied: 1 }));
+  const paged = <T,>(items: T[]) => ({ items, total: items.length, page: 1, pageSize: 200 });
+
+  /** The owner and property lists; each answers with its response once `ready` resolves, if given. */
+  function serveOwners(
+    opts: { owners?: () => Response; properties?: () => Response; ready?: Promise<void> } = {},
+  ) {
+    server.use(
+      http.get('/api/directory/owners', async () => {
+        await opts.ready;
+        return opts.owners?.() ?? HttpResponse.json(paged(OWNERS));
+      }),
+      http.get('/api/directory/properties', async () => {
+        await opts.ready;
+        return opts.properties?.() ?? HttpResponse.json(paged(PROPERTIES));
+      }),
+    );
+  }
+
+  const saveOwnerContribution = () =>
+    screen.getByRole('button', { name: 'Record owner contribution' });
+  const ownerField = () => screen.getByLabelText('Owner');
+  const propertyField = () => screen.getByLabelText('Property');
+
+  it('offers an owner contribution only on an operating trust account', async () => {
+    serve();
+    renderDialog({ bankAccountId: 'dep1', bankName: 'Deposit Trust' });
+    await screen.findByDisplayValue(orgToday());
+    // The purposes are read, so the choice is absent because of this account's, not for want of them.
+    await vi.waitFor(() =>
+      expect(screen.queryByText(/Checking whether this account/)).not.toBeInTheDocument(),
+    );
+
+    expect(screen.queryByRole('radio', { name: 'Owner contribution' })).not.toBeInTheDocument();
+    // The PM's own money keeps its own name.
+    expect(screen.getByRole('radio', { name: 'PM contribution' })).toBeInTheDocument();
+  });
+
+  it('records an owner contribution by keyboard, its property chosen when the owner has only one', async () => {
+    const posted = serve();
+    serveOwners();
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    // The kind choice is a radio group: arrow from "Bank fee" past the other four.
+    await screen.findByRole('radio', { name: 'Owner contribution' });
+    screen.getByRole('radio', { name: 'Bank fee' }).focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(screen.getByRole('radio', { name: 'Owner contribution' })).toBeChecked();
+    expect(
+      screen.getByRole('dialog', { name: 'Record an owner contribution' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/An owner’s own money paid into/)).toHaveTextContent('Operating Trust');
+    // Owners in name order; the property waits for one.
+    await screen.findByLabelText('Owner');
+    expect(Array.from(ownerField().querySelectorAll('option'), (o) => o.textContent)).toEqual([
+      'Choose an owner',
+      'Ashby Holdings',
+      'Birch Lane LLC',
+    ]);
+    expect(propertyField()).toBeDisabled();
+
+    await user.tab();
+    await user.selectOptions(ownerField(), 'o-a');
+    expect(propertyField()).toHaveValue('p-a1');
+    expect(Array.from(propertyField().querySelectorAll('option'), (o) => o.textContent)).toEqual([
+      '12 Ashby Rd',
+    ]);
+    await user.type(amountField(), '400');
+    expect(screen.getByLabelText('Description')).toHaveAttribute(
+      'placeholder',
+      'Owner contribution',
+    );
+    saveOwnerContribution().focus();
+    await user.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledTimes(1));
+    expect(onPosted).toHaveBeenCalledWith({
+      kind: 'owner-contribution',
+      amount: 400,
+      toBankAccountId: null,
+    });
+    const { sourceRef, ...body } = posted[0]?.body ?? {};
+    expect(sourceRef).toMatch(/^bank-adjustment:[0-9a-f-]{36}$/);
+    expect(body).toEqual({
+      bankAccountId: 'trust1',
+      kind: 'owner-contribution',
+      amount: 400,
+      date: orgToday(),
+      description: null,
+      toBankAccountId: null,
+      internalNote: null,
+      ownerId: 'o-a',
+      propertyId: 'p-a1',
+    });
+  });
+
+  it('asks which property when the owner has several, and sends nothing until one is chosen', async () => {
+    const posted = serve();
+    serveOwners();
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await user.click(await screen.findByRole('radio', { name: 'Owner contribution' }));
+    await screen.findByLabelText('Owner');
+
+    await user.selectOptions(ownerField(), 'o-b');
+    expect(propertyField()).toHaveValue('');
+    expect(Array.from(propertyField().querySelectorAll('option'), (o) => o.textContent)).toEqual([
+      'Choose a property',
+      '3 Birch Ln',
+      '9 Birch Ln',
+    ]);
+    await user.type(amountField(), '50');
+    await user.click(saveOwnerContribution());
+
+    expect(document.activeElement).toBe(propertyField());
+    expect(posted).toHaveLength(0);
+
+    await user.selectOptions(propertyField(), 'p-b2');
+    await user.click(saveOwnerContribution());
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]?.body).toMatchObject({ ownerId: 'o-b', propertyId: 'p-b2' });
+  });
+
+  it('shows a property the owner did not hold on the date against the property, in the server’s words', async () => {
+    const detail =
+      "This property does not belong to this owner on that date. Choose one of the owner's properties.";
+    serve({ respond: () => problem(422, 'property_not_owned', detail) });
+    serveOwners();
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await user.click(await screen.findByRole('radio', { name: 'Owner contribution' }));
+    await screen.findByLabelText('Owner');
+
+    await user.selectOptions(ownerField(), 'o-a');
+    await user.type(amountField(), '75');
+    await user.click(saveOwnerContribution());
+
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+    expect(propertyField()).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    expect(onPosted).not.toHaveBeenCalled();
+  });
+
+  it('shows the owners loading, then a failed read with its reference and a retry, and blocks the write', async () => {
+    let fail = true;
+    let answer = () => {};
+    const ready = new Promise<void>((resolve) => (answer = resolve));
+    serve();
+    serveOwners({
+      ready,
+      owners: () =>
+        fail
+          ? problem(500, 'internal_error', 'The owners could not be read.')
+          : HttpResponse.json(paged(OWNERS)),
+    });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await user.click(await screen.findByRole('radio', { name: 'Owner contribution' }));
+    expect(await screen.findByText('Loading the owners and their properties…')).toBeInTheDocument();
+    expect(saveOwnerContribution()).toBeDisabled();
+    answer();
+    expect(await screen.findByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    expect(saveOwnerContribution()).toBeDisabled();
+
+    fail = false;
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(await screen.findByLabelText('Owner')).toBeInTheDocument();
+    expect(saveOwnerContribution()).toBeEnabled();
+  });
+
+  it('says it is checking the account, then shows a failed check with a retry, leaving the other kinds usable', async () => {
+    let fail = true;
+    let answer = () => {};
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    serve();
+    server.use(
+      http.get('/api/settings/banks', async () => {
+        await answered;
+        return fail
+          ? problem(500, 'internal_error', 'The bank accounts could not be read.')
+          : HttpResponse.json(PURPOSES);
+      }),
+    );
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    expect(
+      screen.getByText('Checking whether this account takes owner contributions…'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Owner contribution' })).not.toBeInTheDocument();
+    answer();
+    expect(await screen.findByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Owner contribution' })).not.toBeInTheDocument();
+    // A fee is the PM's own money: it needs no purpose to be recorded.
+    await user.type(amountField(), '5');
+    expect(saveFee()).toBeEnabled();
+
+    fail = false;
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(await screen.findByRole('radio', { name: 'Owner contribution' })).toBeInTheDocument();
+  });
+
+  it('says so, and blocks the write, when the owner has no properties', async () => {
+    serve();
+    serveOwners({ properties: () => HttpResponse.json(paged([])) });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await user.click(await screen.findByRole('radio', { name: 'Owner contribution' }));
+    await screen.findByLabelText('Owner');
+
+    await user.selectOptions(ownerField(), 'o-a');
+
+    expect(screen.getByText(/This owner has no properties/)).toBeInTheDocument();
+    expect(saveOwnerContribution()).toBeDisabled();
   });
 });
