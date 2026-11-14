@@ -258,11 +258,12 @@ export async function unlockReconciliation(
 /**
  * The adjustments the register offers: a bank fee, a transfer between trust accounts (#553), a PM
  * contribution into a trust account (#720), a sweep of the PM's held fees to the PM operating
- * account (#743), and an owner's contribution into an operating trust account (#744). The server also
- * takes `interest`, which no screen offers until #307 settles who interest belongs to.
+ * account (#743), an owner's contribution into an operating trust account (#744), and a vendor payment
+ * from an owner's money in an operating trust account (#745). The server also takes `interest`, which
+ * no screen offers until #307 settles who interest belongs to.
  */
 export type BankAdjustmentKind =
-  'fee' | 'transfer' | 'contribution' | 'sweep' | 'owner-contribution';
+  'fee' | 'transfer' | 'contribution' | 'sweep' | 'owner-contribution' | 'vendor-payment';
 
 /** Records a bank adjustment the register offers; the one caller path for the route. */
 export async function recordBankAdjustment(
@@ -276,9 +277,16 @@ export async function recordBankAdjustment(
     sourceRef: string;
     /** Staff-only (#468); never on a statement. */
     internalNote?: string | null;
-    /** An owner contribution's owner and property (#744); null for every other kind. */
+    /** An owner contribution's owner (#744); null for every other kind, a vendor payment's too. */
     ownerId?: string | null;
+    /** The property an owner contribution or a vendor payment (#745) is for; null otherwise. */
     propertyId?: string | null;
+    /**
+     * A vendor payment's payee and its optional plain-text reference, such as a check number (#745);
+     * null for every other kind. The server charges whoever owns the property on the date.
+     */
+    payee?: string | null;
+    reference?: string | null;
   },
 ): Promise<{ entryId: string }> {
   return unwrap(
@@ -295,6 +303,8 @@ export async function recordBankAdjustment(
         internalNote: input.internalNote ?? null,
         ownerId: input.ownerId ?? null,
         propertyId: input.propertyId ?? null,
+        payee: input.payee ?? null,
+        reference: input.reference ?? null,
       },
     }),
     'Failed to record the adjustment',

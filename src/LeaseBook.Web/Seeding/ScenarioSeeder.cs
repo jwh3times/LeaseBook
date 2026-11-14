@@ -42,9 +42,11 @@ namespace LeaseBook.Web.Seeding;
 /// every figure here is a hand-authored literal and every posting goes through the engine: the
 /// real M7 import path provisions the org (including an accrual≠cash opening delta, a
 /// pre-sign-off supersede, and a held-PM-fees opening position), the M6 <see cref="RunEngine"/>
-/// drives rent/late-fee/disbursement, <see cref="ISender"/> commands drive everything a command
-/// exists for, and <see cref="IAccountingEvents"/> covers only the four commandless events
-/// (<c>PMFeesSwept</c>, <c>OwnerContribution</c>, <c>VendorPaid</c>, <c>RefundIssued</c>).
+/// drives rent/late-fee/disbursement, <see cref="ISender"/> commands drive everything else, and
+/// <see cref="IAccountingEvents"/> posts four events directly as literals
+/// (<c>PMFeesSwept</c>, <c>OwnerContribution</c>, <c>VendorPaid</c>, <c>RefundIssued</c>). The first three
+/// have since gained a register command (#743-#745); posting them directly keeps the golden literals,
+/// such as the vendor payment's reserve, exactly as authored.
 /// Maintained fixture contract: <c>docs/runbooks/local-dev.md</c>, "Seeded fixture organizations".
 /// </para>
 ///

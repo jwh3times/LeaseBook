@@ -96,7 +96,9 @@ public sealed class ReturnTenantPaymentTests(PostgresFixture fixture)
         await Charge(scope, 600m, ct);
         var receipt = await Post(scope, Receipt(scope, 600m), ct);
         // This bank still holds the 600, so the per-bank read passes; the owner as a whole holds nothing.
-        await Post(scope, new VendorPaid(_owner, _property, new Money(600m), ReceiptDate, scope.DepositBankId,
+        // A vendor is paid from an operating trust only (#745), so the other bank is a second one.
+        var elsewhere = await AddOperatingTrustAsync(fixture, scope, ct);
+        await Post(scope, new VendorPaid(_owner, _property, new Money(600m), ReceiptDate, elsewhere,
             "Plumber", "repair"), ct);
 
         var error = await Should.ThrowAsync<PaymentReturnBlockedException>(() => Return(scope, receipt, ReturnDate, ct));

@@ -308,25 +308,142 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
             {
                 var body = await client.GetStringAsync($"/api/statements/{owner}?year=2026&month=2{scope}", ct);
                 using var statement = System.Text.Json.JsonDocument.Parse(body);
-                ContributionsSubtotal(statement.RootElement).ShouldBe(amount, body);
+                SectionSubtotal(statement.RootElement, "Owner contributions").ShouldBe(amount, body);
             }
         }
     }
 
-    /// <summary>The subtotal of the statement's "Owner contributions" section, wherever the view nests it.</summary>
-    private static decimal? ContributionsSubtotal(System.Text.Json.JsonElement element)
+    /// <summary>
+    /// A vendor payment from the register (#745) is charged to whoever owned the property on its date, may
+    /// spend the owner's whole balance whatever their reserve, and lands under Operating expenses on the
+    /// owner's statement and the property's. A payment past zero, from a bank that is not operating trust,
+    /// for a property that is not the org's, naming an owner, or dated in the future is refused.
+    /// </summary>
+    [Fact]
+    public async Task A_vendor_payment_is_charged_to_the_owner_of_the_property_on_its_date()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var url = $"/api/accounting/banks/{setup.TrustBankId}/adjustments";
+        var feb3 = new DateOnly(2026, 2, 3);
+        var feb5 = new DateOnly(2026, 2, 5);
+        var feb12 = new DateOnly(2026, 2, 12);
+
+        Guid seller = default, buyer = default, property = default;
+        await using (var scope = fixture.Api.Services.CreateAsyncScope())
+        {
+            var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
+            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+            await executor.RunAsSystemAsync(setup.OrgId, "test-harness", async () =>
+            {
+                // The seller keeps a 500 reserve; a repair may still spend into it.
+                seller = await sender.Send(new CreateOwner("Seller Holdings", null, null, null, null, 500m), ct);
+                buyer = await sender.Send(new CreateOwner("Buyer Partners", null, null, null, null, 0m), ct);
+                property = await sender.Send(new CreateProperty(seller, "2 Transfer Way", null, null, null, null), ct);
+                (await sender.Send(new TransferPropertyOwnership(property, buyer, new DateOnly(2026, 2, 10), Key()), ct))
+                    .ShouldNotBeNull();
+            }, ct);
+        }
+
+        object Contribution(Guid owner, DateOnly date, decimal amount) => new
+        {
+            kind = "owner-contribution",
+            amount,
+            date,
+            ownerId = owner,
+            propertyId = property,
+            sourceRef = Key(),
+        };
+        object Payment(DateOnly date, decimal amount, Guid? propertyId = null, string? reference = null) => new
+        {
+            kind = "vendor-payment",
+            amount,
+            date,
+            propertyId = propertyId ?? property,
+            payee = "Acme Plumbing",
+            description = "Leak repair",
+            reference,
+            sourceRef = Key(),
+        };
+
+        await PostOkAsync<PostResult>(client, url, Contribution(seller, feb3, 1000m), ct);
+        await PostOkAsync<PostResult>(client, url, Contribution(buyer, feb12, 400m), ct);
+        // Before the transfer: the seller's, leaving 100, inside their 500 reserve.
+        await PostOkAsync<PostResult>(client, url, Payment(feb5, 900m, reference: "1042"), ct);
+        // After it: the buyer's, down to exactly zero.
+        await PostOkAsync<PostResult>(client, url, Payment(feb12, 400m), ct);
+
+        await ShouldBeProblemAsync(await client.PostAsJsonAsync(url, Payment(feb12, 0.01m), ct),
+            HttpStatusCode.Conflict, "reserve_floor",
+            "This vendor payment of 0.01 would take the owner's balance from 0.00 below zero. " +
+            "Record an owner contribution first to cover it.", ct);
+
+        foreach (var bank in new[] { setup.DepositBankId, setup.OperatingBankId })
+        {
+            await ShouldBeProblemAsync(
+                await client.PostAsJsonAsync($"/api/accounting/banks/{bank}/adjustments", Payment(feb5, 5m), ct),
+                HttpStatusCode.UnprocessableEntity, "vendor_payment_bank_not_operating_trust",
+                "A vendor payment is paid from an operating trust account, and this account is not one.", ct);
+        }
+
+        await ShouldBeProblemAsync(await client.PostAsJsonAsync(url, Payment(feb5, 5m, UuidV7.NewId()), ct),
+            HttpStatusCode.UnprocessableEntity, "property_not_found",
+            "This property is not one of the organization's properties. Choose another property.", ct);
+
+        var future = await client.PostAsJsonAsync(url, Payment(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3), 5m), ct);
+        future.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        using (var problem = System.Text.Json.JsonDocument.Parse(await future.Content.ReadAsStringAsync(ct)))
+        {
+            problem.RootElement.GetProperty("code").GetString().ShouldBe("posting_date_in_future");
+        }
+
+        var namingAnOwner = await client.PostAsJsonAsync(url, new
+        {
+            kind = "vendor-payment",
+            amount = 5m,
+            date = feb5,
+            propertyId = property,
+            ownerId = buyer,
+            payee = "Acme Plumbing",
+            description = "Leak repair",
+            sourceRef = Key(),
+        }, ct);
+        namingAnOwner.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var register = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        register.Totals.Book.ShouldBe(100m);
+        register.Rows.ShouldContain(r => r.Withdrawal == 900m
+            && r.Description == "Vendor payment to Acme Plumbing — Leak repair · ref 1042");
+        var sellerDetail = await GetAsync<OwnerDetail>(client, $"/api/directory/owners/{seller}", ct);
+        var buyerDetail = await GetAsync<OwnerDetail>(client, $"/api/directory/owners/{buyer}", ct);
+        (sellerDetail.Operating, buyerDetail.Operating).ShouldBe((100m, 0m));
+
+        foreach (var (owner, amount) in new[] { (seller, -900m), (buyer, -400m) })
+        {
+            foreach (var scope in new[] { "", $"&propertyId={property}" })
+            {
+                var body = await client.GetStringAsync($"/api/statements/{owner}?year=2026&month=2{scope}", ct);
+                using var statement = System.Text.Json.JsonDocument.Parse(body);
+                SectionSubtotal(statement.RootElement, "Operating expenses").ShouldBe(amount, body);
+            }
+        }
+    }
+
+    /// <summary>The subtotal of the statement section with this title, wherever the view nests it.</summary>
+    private static decimal? SectionSubtotal(System.Text.Json.JsonElement element, string sectionTitle)
     {
         if (element.ValueKind == System.Text.Json.JsonValueKind.Object)
         {
             if (element.TryGetProperty("title", out var title) && title.ValueKind == System.Text.Json.JsonValueKind.String
-                && title.GetString() == "Owner contributions" && element.TryGetProperty("subtotal", out var subtotal))
+                && title.GetString() == sectionTitle && element.TryGetProperty("subtotal", out var subtotal))
             {
                 return subtotal.GetDecimal();
             }
 
             foreach (var property in element.EnumerateObject())
             {
-                if (ContributionsSubtotal(property.Value) is { } found)
+                if (SectionSubtotal(property.Value, sectionTitle) is { } found)
                 {
                     return found;
                 }
@@ -336,7 +453,7 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
         {
             foreach (var item in element.EnumerateArray())
             {
-                if (ContributionsSubtotal(item) is { } found)
+                if (SectionSubtotal(item, sectionTitle) is { } found)
                 {
                     return found;
                 }

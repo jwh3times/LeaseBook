@@ -983,6 +983,8 @@ export type RecordBankAdjustment = {
     internalNote?: null | string;
     ownerId?: null | string;
     propertyId?: null | string;
+    payee?: null | string;
+    reference?: null | string;
 };
 
 export type RecordPayment = {

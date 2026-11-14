@@ -141,7 +141,7 @@ public sealed class OwnerContributionCommandTests(PostgresFixture fixture)
 
     private const string NoOwner = "An owner contribution names the owner it comes from.";
     private const string NoProperty = "An owner contribution names the property it is for.";
-    private const string NotAnOwnerContribution = "Only an owner contribution names an owner or a property.";
+    private const string NotAnOwnerContribution = "Only an owner contribution names an owner.";
 
     private static readonly RecordBankAdjustment Valid = Contribution(UuidV7.NewId(), UuidV7.NewId(), UuidV7.NewId());
 
@@ -155,7 +155,8 @@ public sealed class OwnerContributionCommandTests(PostgresFixture fixture)
         ["ToBankAccountId"] = (Valid with { ToBankAccountId = UuidV7.NewId() }, ["ToBankAccountId"],
             "Only a transfer or a sweep names a destination bank account."),
         ["Fee.OwnerId"] = (Valid with { Kind = "fee", PropertyId = null }, ["OwnerId"], NotAnOwnerContribution),
-        ["Fee.PropertyId"] = (Valid with { Kind = "contribution", OwnerId = null }, ["PropertyId"], NotAnOwnerContribution),
+        ["Fee.PropertyId"] = (Valid with { Kind = "contribution", OwnerId = null }, ["PropertyId"],
+            "Only an owner contribution or a vendor payment names a property."),
     };
 
     public static TheoryData<string> Refusals() => new(Cases.Keys);

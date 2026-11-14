@@ -120,6 +120,8 @@ describe('BankAdjustmentDialog', () => {
       internalNote: 'per the June statement',
       ownerId: null,
       propertyId: null,
+      payee: null,
+      reference: null,
     });
     expect(sourceRef).toMatch(/^bank-adjustment:[0-9a-f-]{36}$/);
   });
@@ -350,6 +352,8 @@ describe('BankAdjustmentDialog', () => {
       internalNote: 'bank charged the fee on the 3rd',
       ownerId: null,
       propertyId: null,
+      payee: null,
+      reference: null,
     });
   });
 
@@ -426,6 +430,8 @@ describe('BankAdjustmentDialog', () => {
       internalNote: null,
       ownerId: null,
       propertyId: null,
+      payee: null,
+      reference: null,
     });
   });
 
@@ -687,6 +693,8 @@ describe('BankAdjustmentDialog', () => {
       internalNote: null,
       ownerId: 'o-a',
       propertyId: 'p-a1',
+      payee: null,
+      reference: null,
     });
   });
 
@@ -786,7 +794,7 @@ describe('BankAdjustmentDialog', () => {
     await screen.findByDisplayValue(orgToday());
 
     expect(
-      screen.getByText('Checking whether this account takes owner contributions…'),
+      screen.getByText('Checking whether this account holds owners’ operating funds…'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: 'Owner contribution' })).not.toBeInTheDocument();
     answer();
@@ -814,5 +822,246 @@ describe('BankAdjustmentDialog', () => {
 
     expect(screen.getByText(/This owner has no properties/)).toBeInTheDocument();
     expect(saveOwnerContribution()).toBeDisabled();
+  });
+
+  // ---- a vendor payment (#745) ----
+
+  const saveVendorPayment = () => screen.getByRole('button', { name: 'Record vendor payment' });
+  const payeeField = () => screen.getByLabelText('Payee');
+  const descriptionField = () => screen.getByLabelText('Description');
+  const chooseVendorPayment = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('radio', { name: 'Vendor payment' }));
+    await screen.findByLabelText('Payee');
+  };
+
+  it('offers a vendor payment only on an operating trust account', async () => {
+    serve();
+    renderDialog({ bankAccountId: 'dep1', bankName: 'Deposit Trust' });
+    await screen.findByDisplayValue(orgToday());
+    // The purposes are read, so the choice is absent because of this account's, not for want of them.
+    await vi.waitFor(() =>
+      expect(screen.queryByText(/Checking whether this account/)).not.toBeInTheDocument(),
+    );
+
+    expect(screen.queryByRole('radio', { name: 'Vendor payment' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'PM contribution' })).toBeInTheDocument();
+  });
+
+  it('offers no vendor payment on the PM operating account', async () => {
+    serve();
+    renderDialog({ bankAccountId: 'op1', bankName: 'Management Operating', isTrust: false });
+    await screen.findByDisplayValue(orgToday());
+
+    expect(screen.queryByRole('radio', { name: 'Vendor payment' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Record a bank fee' })).toBeInTheDocument();
+  });
+
+  it('records a vendor payment by keyboard against a property, naming no owner', async () => {
+    const posted = serve();
+    serveOwners();
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    // The kind choice is a radio group: arrow from "Bank fee" past the other five.
+    await screen.findByRole('radio', { name: 'Vendor payment' });
+    screen.getByRole('radio', { name: 'Bank fee' }).focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(screen.getByRole('radio', { name: 'Vendor payment' })).toBeChecked();
+    expect(screen.getByRole('dialog', { name: 'Record a vendor payment' })).toBeInTheDocument();
+    expect(screen.getByText(/paid to someone who worked on one of their/)).toHaveTextContent(
+      'Operating Trust',
+    );
+    // Every property, in address order, none chosen; no owner is asked for.
+    await screen.findByLabelText('Payee');
+    expect(Array.from(propertyField().querySelectorAll('option'), (o) => o.textContent)).toEqual([
+      'Choose a property',
+      '12 Ashby Rd',
+      '3 Birch Ln',
+      '9 Birch Ln',
+    ]);
+    expect(propertyField()).toHaveValue('');
+    expect(propertyField()).toHaveAccessibleDescription(
+      'Charged to the owner of this property on the payment date.',
+    );
+    expect(screen.queryByLabelText('Owner')).not.toBeInTheDocument();
+    expect(payeeField()).toHaveAttribute('maxLength', '200');
+    expect(screen.getByLabelText('Reference')).toHaveAttribute('maxLength', '100');
+
+    await user.tab();
+    expect(propertyField()).toHaveFocus();
+    await user.selectOptions(propertyField(), 'p-b2');
+    await user.tab();
+    expect(payeeField()).toHaveFocus();
+    await user.keyboard('  Ace Plumbing ');
+    await user.tab();
+    await user.keyboard('185.40');
+    descriptionField().focus();
+    await user.keyboard('Kitchen leak repair');
+    await user.tab();
+    expect(screen.getByLabelText('Reference')).toHaveFocus();
+    await user.keyboard('Check 1042');
+    saveVendorPayment().focus();
+    await user.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledTimes(1));
+    expect(onPosted).toHaveBeenCalledWith({
+      kind: 'vendor-payment',
+      amount: 185.4,
+      toBankAccountId: null,
+    });
+    const { sourceRef, ...body } = posted[0]?.body ?? {};
+    expect(sourceRef).toMatch(/^bank-adjustment:[0-9a-f-]{36}$/);
+    expect(body).toEqual({
+      bankAccountId: 'trust1',
+      kind: 'vendor-payment',
+      amount: 185.4,
+      date: orgToday(),
+      description: 'Kitchen leak repair',
+      toBankAccountId: null,
+      internalNote: null,
+      ownerId: null,
+      propertyId: 'p-b2',
+      payee: 'Ace Plumbing',
+      reference: 'Check 1042',
+    });
+  });
+
+  it('asks for the property, the payee and what it paid for, and sends nothing until each is given', async () => {
+    const posted = serve();
+    serveOwners();
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await chooseVendorPayment(user);
+
+    await user.click(saveVendorPayment());
+    expect(document.activeElement).toBe(propertyField());
+
+    await user.selectOptions(propertyField(), 'p-a1');
+    await user.click(saveVendorPayment());
+    expect(document.activeElement).toBe(payeeField());
+
+    // Blanks satisfy the browser's own `required`, so the dialog names them itself.
+    await user.type(payeeField(), '   ');
+    await user.type(amountField(), '120');
+    await user.type(descriptionField(), '   ');
+    await user.click(saveVendorPayment());
+    expect(document.activeElement).toBe(payeeField());
+    expect(screen.getByText('Enter who was paid.')).toBeInTheDocument();
+    expect(payeeField()).toHaveAttribute('aria-invalid', 'true');
+
+    await user.type(payeeField(), 'Ace Plumbing');
+    await user.click(saveVendorPayment());
+    expect(document.activeElement).toBe(descriptionField());
+    expect(screen.getByText('Say what the payment was for.')).toBeInTheDocument();
+    expect(descriptionField()).toHaveAttribute('aria-invalid', 'true');
+    expect(posted).toHaveLength(0);
+
+    await user.type(descriptionField(), 'Gutter cleaning');
+    await user.click(saveVendorPayment());
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    // No reference typed: none is sent.
+    expect(posted[0]?.body).toMatchObject({
+      propertyId: 'p-a1',
+      payee: 'Ace Plumbing',
+      description: 'Gutter cleaning',
+      reference: null,
+      ownerId: null,
+    });
+  });
+
+  it('shows a payment past the owner’s balance beside the amount, in the server’s words', async () => {
+    const detail =
+      "This vendor payment of 900.00 would take the owner's balance from 500.00 below zero. Record an owner contribution first to cover it.";
+    serve({ respond: () => problem(409, 'reserve_floor', detail) });
+    serveOwners();
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await chooseVendorPayment(user);
+
+    await user.selectOptions(propertyField(), 'p-a1');
+    await user.type(payeeField(), 'Ace Plumbing');
+    await user.type(amountField(), '900');
+    await user.type(descriptionField(), 'Roof repair');
+    await user.click(saveVendorPayment());
+
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+    expect(amountField()).toHaveAttribute('aria-invalid', 'true');
+    expect(amountField()).toHaveAccessibleDescription(expect.stringContaining(detail));
+    expect(screen.getByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    expect(onPosted).not.toHaveBeenCalled();
+  });
+
+  it('shows a property the server cannot find against the property, and a wrong account generally', async () => {
+    let respond = () => problem(422, 'property_not_found', 'The property was not found.');
+    serve({ respond: () => respond() });
+    serveOwners();
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await chooseVendorPayment(user);
+
+    await user.selectOptions(propertyField(), 'p-a1');
+    await user.type(payeeField(), 'Ace Plumbing');
+    await user.type(amountField(), '40');
+    await user.type(descriptionField(), 'Lock change');
+    await user.click(saveVendorPayment());
+
+    expect(await screen.findByText('The property was not found.')).toBeInTheDocument();
+    expect(propertyField()).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(REFERENCE, { exact: false })).toBeInTheDocument();
+
+    const wrongBank = 'A vendor payment is paid from an operating trust account.';
+    respond = () => problem(422, 'vendor_payment_bank_not_operating_trust', wrongBank);
+    await user.click(saveVendorPayment());
+    expect(await screen.findByText(wrongBank)).toBeInTheDocument();
+    expect(propertyField()).not.toHaveAttribute('aria-invalid');
+    expect(amountField()).not.toHaveAttribute('aria-invalid');
+    expect(onPosted).not.toHaveBeenCalled();
+  });
+
+  it('shows the properties loading, then a failed read with its reference and a retry, and blocks the write', async () => {
+    let fail = true;
+    let answer = () => {};
+    const ready = new Promise<void>((resolve) => (answer = resolve));
+    serve();
+    serveOwners({
+      ready,
+      properties: () =>
+        fail
+          ? problem(500, 'directory_unavailable', 'The properties could not be read.')
+          : HttpResponse.json(paged(PROPERTIES)),
+    });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await user.click(await screen.findByRole('radio', { name: 'Vendor payment' }));
+    expect(await screen.findByText('Loading the properties…')).toBeInTheDocument();
+    expect(saveVendorPayment()).toBeDisabled();
+    answer();
+    expect(await screen.findByText('The properties could not be read.')).toBeInTheDocument();
+    expect(screen.getByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Property')).not.toBeInTheDocument();
+    expect(saveVendorPayment()).toBeDisabled();
+
+    fail = false;
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(await screen.findByLabelText('Property')).toBeInTheDocument();
+    expect(saveVendorPayment()).toBeEnabled();
+  });
+
+  it('says so, and blocks the write, when the organization has no properties', async () => {
+    serve();
+    serveOwners({ properties: () => HttpResponse.json(paged([])) });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await user.click(await screen.findByRole('radio', { name: 'Vendor payment' }));
+
+    expect(await screen.findByText(/There are no properties to charge it to/)).toBeInTheDocument();
+    expect(saveVendorPayment()).toBeDisabled();
   });
 });

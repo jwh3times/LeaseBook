@@ -915,7 +915,7 @@ describe('BankingPage bank fee or transfer (#553)', () => {
     expect(queryClient.getQueryState(['dashboard'])?.isInvalidated).toBe(true);
   });
 
-  it('offers no owner contribution on a security-deposit trust account (#744)', async () => {
+  it('offers no owner contribution or vendor payment on a security-deposit trust account (#744, #745)', async () => {
     server.use(
       http.get('/api/accounting/banks/balances', () => HttpResponse.json(TRUSTS)),
       ...baseHandlers(),
@@ -938,6 +938,62 @@ describe('BankingPage bank fee or transfer (#553)', () => {
     expect(
       within(dialog).queryByRole('radio', { name: 'Owner contribution' }),
     ).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('radio', { name: 'Vendor payment' })).not.toBeInTheDocument();
+  });
+
+  it('records a vendor payment from the operating trust and refreshes the owners’ balances and statements (#745)', async () => {
+    const posted: Record<string, unknown>[] = [];
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TRUSTS)),
+      http.post('/api/accounting/banks/:id/adjustments', async ({ request }) => {
+        posted.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ entryId: 'e1' });
+      }),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'p1',
+              address: '12 Ashby Rd',
+              city: null,
+              ownerId: 'o1',
+              ownerName: 'Ashby Holdings',
+              units: 1,
+              occupied: 1,
+            },
+          ],
+          page: 1,
+          pageSize: 200,
+          total: 1,
+        }),
+      ),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    const queryClient = renderPage();
+    // The reads a vendor payment changes: the owner list, an owner, a statement and the dashboard.
+    const changed = [['owners'], ['owner', 'o1'], ['statement', 'o1', 2026, 11], ['dashboard']];
+    for (const key of changed) {
+      queryClient.setQueryData(key, key[0] === 'owners' ? { items: [], total: 0 } : {});
+    }
+    const user = userEvent.setup();
+    await screen.findByText('Rent deposit');
+
+    await user.click(screen.getByRole('button', { name: 'Fee or transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByDisplayValue(/^\d{4}-\d{2}-\d{2}$/);
+    await user.click(await within(dialog).findByRole('radio', { name: 'Vendor payment' }));
+    // The organization's only property needs no choosing.
+    expect(await within(dialog).findByLabelText('Property')).toHaveValue('p1');
+    await user.type(within(dialog).getByLabelText('Payee'), 'Ace Plumbing');
+    await user.type(within(dialog).getByLabelText('Amount'), '185.40');
+    await user.type(within(dialog).getByLabelText('Description'), 'Kitchen leak repair');
+    await user.click(within(dialog).getByRole('button', { name: 'Record vendor payment' }));
+
+    expect(await screen.findByText('Vendor payment of $185.40 recorded.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(posted[0]).toMatchObject({ kind: 'vendor-payment', propertyId: 'p1', ownerId: null });
+    for (const key of changed) expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
   });
 
   it('offers only a bank fee on an account that is not a trust account', async () => {

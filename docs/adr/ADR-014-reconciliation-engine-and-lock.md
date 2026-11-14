@@ -314,3 +314,49 @@ call can still post the seller's.
 
 The seeders' existing contributions were already into operating trust accounts, so no seeded figure
 moves.
+
+## Addendum — a vendor payment spends an owner's money down to zero, from operating trust only, and staff record one from the register (2026-11-14)
+
+`VendorPaid` (`DR owner_equity / CR trust bank`, both bases, tagged with the owner, the property and
+the bank, guarded by the owner's reserve floor) has been in the catalog since M1, but only the scenario
+seeder posted one (#745). A property manager who paid a plumber from an owner's trust funds could not
+record it, so the expense was missing from the owner statement and the bank month could not reconcile
+once the payment cleared. This is the narrow Phase 1 piece; the vendor directory, work orders and
+invoice approval stay in Phase 4.
+
+**Operating trust only.** The template refuses a bank that is not an operating trust account with
+`vendor_payment_bank_not_operating_trust` (422), through the same `IBankAccountPurposes` port as the
+owner contribution. The owner's money it spends is held in operating trust: a security-deposit trust
+account holds tenants' deposits, and the PM operating account is outside trust altogether. The refusal
+is in the template, so a direct call or a seeder meets it too.
+
+**The owner comes from the property.** The bank-adjustment command gains a `vendor-payment` kind
+carrying the property, the payee's name (typed: there is no vendor directory), a description and an
+optional reference. It never carries an owner, and a request naming one is refused (400). The command
+reads the property's owner on the payment's date through `IPropertyOwnership`, after any ownership
+transfer, so a payment dated before a transfer charges the owner of that time. A property with no
+owner on that date is not one of the organization's properties, and is refused with
+`property_not_found` (422).
+
+**Down to zero, never below.** The command posts with a reserve of zero. An owner's reserve is what the
+property manager leaves in trust so that repairs can be paid; it limits what is disbursed to the owner,
+and it does not block the repair it exists for. A payment larger than the owner's operating balance is
+refused with `reserve_floor` (409), as a disbursement is, in a message that names a vendor payment and
+says that an owner contribution recorded first covers it. The balance is the owner's across the
+organization, as a disbursement's is. Until multi-trust routing exists (#304) an organization holds
+owner money in one operating trust, so that balance is the owner's money in the bank the payment is
+drawn on.
+
+**The reference is plain text.** A hand-written check number or an ACH trace helps match the bank
+line. It is added to the posted description (`Vendor payment to {payee} — {description} · ref
+{reference}`), so the register shows and searches it. LeaseBook enforces no uniqueness on it, and it
+is no part of the refund-check numbering (ADR-050). Printing vendor checks is out of scope.
+
+**Staff record it.** The bank register's dialog on an operating trust account offers **Vendor
+payment**, never on a security-deposit trust account or the PM operating account. It asks for the
+property, the payee, a description, the amount, the date (the organization's today, never later) and
+an optional reference. Staff (`RequirePMStaff`) may record one, as they may any other bank-register
+write. The payment lands under Operating expenses on the owner's statement and the property's, and in
+the owner portal, which already showed the event.
+
+The scenario seeder's vendor payment was already from the operating trust, so no seeded figure moves.

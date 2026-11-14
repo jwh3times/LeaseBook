@@ -158,6 +158,10 @@ public sealed class DomainExceptionMessageTests
 
         yield return (new ReserveFloorException(500m, 1200m, 800m, SampleId), "reserve_floor",
             "This disbursement of 500.00 would take the owner's equity from 1200.00 below their 800.00 reserve floor.");
+        yield return (new ReserveFloorException(500m, 400m, 0m, SampleId, ReserveFloorPayment.VendorPayment), "reserve_floor",
+            "This vendor payment of 500.00 would take the owner's balance from 400.00 below zero. Record an owner contribution first to cover it.");
+        yield return (new ReserveFloorException(500m, 1200m, 800m, SampleId, ReserveFloorPayment.VendorPayment), "reserve_floor",
+            "This vendor payment of 500.00 would take the owner's balance from 1200.00 below their 800.00 reserve floor. Record an owner contribution first to cover it.");
 
         yield return (new AlreadyReversedException(SampleId, AlreadyReversedReason.AlreadyReversed), "already_reversed",
             "This entry has already been voided.");
@@ -252,6 +256,10 @@ public sealed class DomainExceptionMessageTests
             "An owner contribution is paid into an operating trust account, and this account is not one.");
         yield return (new PropertyNotOwnedException(SampleId, SampleId, new DateOnly(2026, 2, 5)), "property_not_owned",
             "This property does not belong to this owner on that date. Choose one of the owner's properties.");
+        yield return (new VendorPaymentBankNotOperatingTrustException(SampleId), "vendor_payment_bank_not_operating_trust",
+            "A vendor payment is paid from an operating trust account, and this account is not one.");
+        yield return (new PropertyNotFoundException(SampleId), "property_not_found",
+            "This property is not one of the organization's properties. Choose another property.");
         yield return (new PmFeesInsufficientException(30m, 10m, SampleId, (HeldFeesCharge)99), "pm_fees_insufficient",
             "The management fees held in this account do not cover the processor fee shortfall. A PM contribution to this account dated on or before the payout covers it.");
         yield return (new TransferBankNotTrustException(SampleId, TransferEnd.Source), "transfer_bank_not_trust",

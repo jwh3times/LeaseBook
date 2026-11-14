@@ -39,7 +39,7 @@ export interface BankAdjustmentDialogProps {
   }) => void;
 }
 
-type FieldName = 'owner' | 'property' | 'amount' | 'date' | 'to';
+type FieldName = 'owner' | 'property' | 'payee' | 'amount' | 'date' | 'to' | 'description';
 
 interface FormError extends ApiError {
   field?: FieldName;
@@ -82,11 +82,24 @@ const KINDS: Record<
     action: 'Record owner contribution',
     placeholder: 'Owner contribution',
   },
+  'vendor-payment': {
+    label: 'Vendor payment',
+    title: 'Record a vendor payment',
+    action: 'Record vendor payment',
+    placeholder: 'What it paid for, such as a plumbing repair',
+  },
 };
 
-/** The kinds a trust account offers; an operating trust account also takes an owner's money (#744). */
+/**
+ * The kinds a trust account offers. An operating trust account also takes an owner's money (#744) and
+ * pays a vendor from it (#745): both are an owner's funds, which only operating trust holds.
+ */
 const TRUST_KINDS: BankAdjustmentKind[] = ['fee', 'transfer', 'contribution', 'sweep'];
-const OPERATING_TRUST_KINDS: BankAdjustmentKind[] = [...TRUST_KINDS, 'owner-contribution'];
+const OPERATING_TRUST_KINDS: BankAdjustmentKind[] = [
+  ...TRUST_KINDS,
+  'owner-contribution',
+  'vendor-payment',
+];
 
 /**
  * Records a bank fee, or a transfer to another trust account, from the bank register (#553). Both are
@@ -99,7 +112,12 @@ const OPERATING_TRUST_KINDS: BankAdjustmentKind[] = [...TRUST_KINDS, 'owner-cont
  * date until the operator types one. An owner contribution (#744) is an owner's own money paid into an
  * operating trust account for one of their properties: it names the owner and the property, which
  * defaults when the owner has only one, and the server refuses a property the owner did not hold on the
- * date (`property_not_owned`). Interest is not offered until #307 settles who it belongs to.
+ * date (`property_not_owned`). A vendor payment (#745) spends an owner's money in an operating trust
+ * account on one of their properties: it names the property, the payee, what it was for and an optional
+ * reference such as a check number, but never the owner, whom the server takes from the property's
+ * ownership on the date. It may take that owner's balance to zero and no further (`reserve_floor`), and
+ * that refusal is shown beside the amount in the server's words, which point to an owner contribution.
+ * Interest is not offered until #307 settles who it belongs to.
  * <para>
  * It moves money, so like the other money dialogs it has no form and saves only from its button, never
  * from Enter, and the button runs each field's own constraints before anything is sent (#711). One
@@ -131,6 +149,8 @@ export function BankAdjustmentDialog({
   const [toChoice, setTo] = useState('');
   const [ownerChoice, setOwner] = useState('');
   const [propertyChoice, setProperty] = useState('');
+  const [payee, setPayee] = useState('');
+  const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [error, setError] = useState<FormError | null>(null);
@@ -139,9 +159,11 @@ export function BankAdjustmentDialog({
   const sweep = kind === 'sweep';
   const namesDestination = transfer || sweep;
   const ownerContribution = kind === 'owner-contribution';
+  const vendorPayment = kind === 'vendor-payment';
   // The register's balances say only trust or not; whether this trust account is operating trust, the
-  // one that takes an owner's contribution (#744), is its purpose in Settings. Until that is read the
-  // owner contribution is not offered, and the fieldset says why; the PM's own kinds need no read.
+  // one that holds owners' money for a contribution (#744) or a vendor payment (#745), is its purpose in
+  // Settings. Until that is read neither is offered, and the fieldset says why; the PM's own kinds need
+  // no read.
   const purposes = useBankAccounts(false, { enabled: isTrust });
   const isOperatingTrust =
     purposes.data?.some((bank) => bank.id === bankAccountId && bank.purpose === 'trust') ?? false;
@@ -150,7 +172,8 @@ export function BankAdjustmentDialog({
   // An owner contribution names an owner and one of their properties. The lists show today's owners;
   // the server checks the owner on the contribution's date, after any ownership transfer.
   const owners = useOwners({ enabled: ownerContribution });
-  const properties = useProperties({ enabled: ownerContribution });
+  // A vendor payment names any of the org's properties; its owner on the date is the server's to find.
+  const properties = useProperties({ enabled: ownerContribution || vendorPayment });
   const ownerOptions = useMemo(
     () =>
       owners.isSuccess ? [...owners.data.items].sort((a, b) => a.name.localeCompare(b.name)) : [],
@@ -165,15 +188,27 @@ export function BankAdjustmentDialog({
         : [],
     [properties.isSuccess, properties.data, ownerChoice],
   );
+  const allProperties = useMemo(
+    () =>
+      properties.isSuccess
+        ? [...properties.data.items].sort((a, b) => a.address.localeCompare(b.address))
+        : [],
+    [properties.isSuccess, properties.data],
+  );
+  const propertyOptions = vendorPayment ? allProperties : ownerProperties;
   // One property needs no choosing; several start unchosen, so the money never lands on one by default.
-  const chosenProperty = ownerProperties.some((p) => p.id === propertyChoice) ? propertyChoice : '';
+  const chosenProperty = propertyOptions.some((p) => p.id === propertyChoice) ? propertyChoice : '';
   const property =
-    chosenProperty || (ownerProperties.length === 1 ? (ownerProperties[0]?.id ?? '') : '');
+    chosenProperty || (propertyOptions.length === 1 ? (propertyOptions[0]?.id ?? '') : '');
   const ownerChoicesUnavailable =
     ownerContribution &&
     (owners.isPending || owners.isError || properties.isPending || properties.isError);
   const ownerHasNoProperty =
     ownerContribution && properties.isSuccess && ownerChoice !== '' && ownerProperties.length === 0;
+  // A failed or pending read of the property list — or a failed refetch still holding rows that may
+  // name a since-removed property — blocks a vendor payment, as does an org with no property at all.
+  const vendorPropertiesUnavailable = vendorPayment && (properties.isPending || properties.isError);
+  const noVendorProperty = vendorPayment && properties.isSuccess && allProperties.length === 0;
 
   // A transfer goes to another trust account; a sweep to a PM operating account, never a trust one.
   const destinations = useMemo(
@@ -213,7 +248,9 @@ export function BankAdjustmentDialog({
     noDestination ||
     heldFeesUnavailable ||
     ownerChoicesUnavailable ||
-    ownerHasNoProperty;
+    ownerHasNoProperty ||
+    vendorPropertiesUnavailable ||
+    noVendorProperty;
 
   const amountValue = centsToAmount(parseAmountCents(shownAmount) ?? 0);
 
@@ -227,8 +264,11 @@ export function BankAdjustmentDialog({
         toBankAccountId: namesDestination ? to : null,
         sourceRef: sourceRef.current,
         internalNote: internalNote.trim() === '' ? null : internalNote.trim(),
+        // A vendor payment never names the owner: the server charges the property's owner on the date.
         ownerId: ownerContribution ? ownerChoice : null,
-        propertyId: ownerContribution ? property : null,
+        propertyId: ownerContribution || vendorPayment ? property : null,
+        payee: vendorPayment ? payee.trim() : null,
+        reference: vendorPayment && reference.trim() !== '' ? reference.trim() : null,
       }),
     onSuccess: () => posted(),
     onError: (err) => {
@@ -237,7 +277,10 @@ export function BankAdjustmentDialog({
         case 'duplicate_source_ref':
           posted();
           break;
+        // Past the PM's held fees, or a vendor payment past the owner's balance, whose words point to
+        // an owner contribution.
         case 'pm_fees_insufficient':
+        case 'reserve_floor':
           setError({ ...err, field: 'amount' });
           break;
         case 'transfer_bank_not_trust':
@@ -245,6 +288,7 @@ export function BankAdjustmentDialog({
           setError({ ...err, field: 'to' });
           break;
         case 'property_not_owned':
+        case 'property_not_found':
           setError({ ...err, field: 'property' });
           break;
         case 'account_period_locked':
@@ -280,9 +324,15 @@ export function BankAdjustmentDialog({
     if (ownerContribution && property === '') {
       return fail('property', 'Choose the property it is for.');
     }
+    if (vendorPayment && property === '')
+      return fail('property', 'Choose the property it was for.');
+    if (vendorPayment && payee.trim() === '') return fail('payee', 'Enter who was paid.');
     const cents = parseAmountCents(shownAmount);
     if (cents === null || cents <= 0) {
       return fail('amount', 'Enter an amount greater than zero, with at most two decimal places.');
+    }
+    if (vendorPayment && description.trim() === '') {
+      return fail('description', 'Say what the payment was for.');
     }
     if (transfer && to === '') return fail('to', 'Choose the trust account it goes to.');
     if (sweep && to === '') return fail('to', 'Choose the PM operating account it goes to.');
@@ -318,7 +368,15 @@ export function BankAdjustmentDialog({
       }
     >
       <div ref={bodyRef} className="pf-modal-body col gap12">
-        {ownerContribution ? (
+        {vendorPayment ? (
+          <p className="t3 fs13">
+            An owner’s money in <b>{bankName}</b> paid to someone who worked on one of their
+            properties, such as a plumber. It is charged to the owner of that property and shows
+            under Operating expenses on the owner’s and the property’s statements. It can take the
+            owner’s balance down to zero, never below. Money an owner pays in is an owner
+            contribution instead.
+          </p>
+        ) : ownerContribution ? (
           <p className="t3 fs13">
             An owner’s own money paid into <b>{bankName}</b>, such as a float for a repair or to
             cover a negative balance. It is added to that owner’s balance for the property, and
@@ -366,14 +424,14 @@ export function BankAdjustmentDialog({
             ))}
             {purposes.isPending && (
               <span className="t3 fs12" role="status">
-                Checking whether this account takes owner contributions…
+                Checking whether this account holds owners’ operating funds…
               </span>
             )}
             {purposes.isError && (
               <div className="col gap6">
                 <ApiErrorNotice
                   error={purposes.error}
-                  fallback="Couldn’t check whether this account takes owner contributions."
+                  fallback="Couldn’t check whether this account holds owners’ operating funds."
                   kind="read"
                 />
                 <ErrorAction
@@ -469,6 +527,81 @@ export function BankAdjustmentDialog({
                     ))}
                   </Select>
                 )}
+              </div>
+            </div>
+          ))}
+
+        {vendorPayment &&
+          (properties.isError ? (
+            <div className="col gap6">
+              <ApiErrorNotice
+                error={properties.error}
+                fallback="Couldn’t load the properties."
+                kind="read"
+              />
+              <ErrorAction
+                error={properties.error}
+                onRetry={() => void properties.refetch()}
+                retrying={properties.isFetching}
+              />
+            </div>
+          ) : properties.isPending ? (
+            <div className="col gap6">
+              <span className="t3 fs12" role="status">
+                Loading the properties…
+              </span>
+              <div className="pf-skeleton" style={{ height: 20 }} />
+            </div>
+          ) : noVendorProperty ? (
+            <p className="t3 fs13" role="status">
+              There are no properties to charge it to. Add one in the Directory first.
+            </p>
+          ) : (
+            <div className="pf-adjust-grid">
+              <div className="col gap6">
+                <label className="pf-eyebrow" htmlFor={`${fieldId}-property`}>
+                  Property
+                </label>
+                <Select
+                  id={`${fieldId}-property`}
+                  required
+                  value={property}
+                  aria-invalid={error?.field === 'property' || undefined}
+                  aria-describedby={describedBy('property', `${fieldId}-property-hint`)}
+                  onChange={(e) => {
+                    setProperty(e.target.value);
+                    if (error?.field === 'property') setError(null);
+                  }}
+                >
+                  {allProperties.length !== 1 && <option value="">Choose a property</option>}
+                  {allProperties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.address}
+                    </option>
+                  ))}
+                </Select>
+                <span id={`${fieldId}-property-hint`} className="t3 fs12">
+                  Charged to the owner of this property on the payment date.
+                </span>
+              </div>
+              <div className="col gap6">
+                <label className="pf-eyebrow" htmlFor={`${fieldId}-payee`}>
+                  Payee
+                </label>
+                <Input
+                  id={`${fieldId}-payee`}
+                  required
+                  maxLength={200}
+                  autoComplete="off"
+                  placeholder="Who was paid"
+                  value={payee}
+                  aria-invalid={error?.field === 'payee' || undefined}
+                  aria-describedby={describedBy('payee')}
+                  onChange={(e) => {
+                    setPayee(e.target.value);
+                    if (error?.field === 'payee') setError(null);
+                  }}
+                />
               </div>
             </div>
           ))}
@@ -638,12 +771,38 @@ export function BankAdjustmentDialog({
           </label>
           <Input
             id={`${fieldId}-description`}
+            // A vendor payment says what it paid for; every other kind has a default description.
+            required={vendorPayment}
             maxLength={200}
             placeholder={KINDS[kind].placeholder}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            aria-invalid={error?.field === 'description' || undefined}
+            aria-describedby={describedBy('description')}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              if (error?.field === 'description') setError(null);
+            }}
           />
         </div>
+        {vendorPayment && (
+          <div className="col gap6">
+            <label className="pf-eyebrow" htmlFor={`${fieldId}-reference`}>
+              Reference
+            </label>
+            <Input
+              id={`${fieldId}-reference`}
+              maxLength={100}
+              autoComplete="off"
+              placeholder="Optional"
+              value={reference}
+              aria-describedby={`${fieldId}-reference-hint`}
+              onChange={(e) => setReference(e.target.value)}
+            />
+            <span id={`${fieldId}-reference-hint`} className="t3 fs12">
+              A check number or ACH trace, to match the bank line. Shown in the register.
+            </span>
+          </div>
+        )}
         <div className="col gap6">
           <span className="pf-field-labelrow">
             <label className="pf-eyebrow" htmlFor={`${fieldId}-internalNote`}>

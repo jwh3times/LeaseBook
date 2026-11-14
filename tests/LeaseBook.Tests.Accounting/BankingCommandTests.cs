@@ -48,7 +48,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     {
         ["BankAccountId"] = (Fee with { BankAccountId = Guid.Empty }, ["BankAccountId"], null),
         ["SourceRef"] = (Fee with { SourceRef = "" }, ["SourceRef"], null),
-        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution, sweep, owner-contribution."),
+        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution, sweep, owner-contribution, vendor-payment."),
         ["Amount"] = (Fee with { Amount = 0m }, ["Amount"], AmountMessage),
         ["Transfer.ToBankAccountId.Null"] = (Transfer with { ToBankAccountId = null }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Upper"] = (

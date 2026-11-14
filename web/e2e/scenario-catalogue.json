@@ -460,6 +460,15 @@
       "routes": []
     },
     {
+      "id": "vendor-payment-from-register",
+      "workflow": "Pay a vendor from an owner's funds in the operating trust account from the register by keyboard, on the property chosen, see a payment past the owner's balance refused in place, and see a security-deposit trust and the PM operating account offer none",
+      "area": "Banking",
+      "spec": "bank-adjustments.spec.ts",
+      "org": "scenario",
+      "events": ["VendorPaid"],
+      "routes": []
+    },
+    {
       "id": "owner-statement-view-export-deliver",
       "workflow": "View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it",
       "area": "Reporting",
@@ -883,12 +892,6 @@
         "reason": "No screen offers interest until #307 settles who interest in a trust account belongs to.",
         "date": "2026-11-06",
         "issue": 307
-      },
-      {
-        "event": "VendorPaid",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 745
       }
     ],
     "routes": [

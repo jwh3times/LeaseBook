@@ -95,6 +95,14 @@ dialog, and it is refused the same way when dated after the organization's today
 [ADR-014 addendum of 2026-11-14](ADR-014-reconciliation-engine-and-lock.md); this addendum only adds it
 to the list.
 
+## Addendum (2026-11-14, #745): a vendor payment is money moving out
+
+A vendor payment from an owner's funds in an operating trust account is recorded from the same
+bank-register dialog, and it is refused the same way when dated after the organization's today:
+`posting_date_in_future` (422). The payment itself is decided in the
+[ADR-014 addendum of 2026-11-14](ADR-014-reconciliation-engine-and-lock.md); this addendum only adds it
+to the list.
+
 ## Consequences
 
 Sequential rows may both retain the `active` lifecycle status without competing on any date, and an

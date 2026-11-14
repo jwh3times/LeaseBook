@@ -16,6 +16,7 @@ import { ReconciliationHistory } from './ReconciliationHistory';
 import { RegisterTable } from './RegisterTable';
 import {
   applyClearances,
+  type BankAdjustmentKind,
   type BankingError,
   bankRegisterKey,
   heldFeesKey,
@@ -29,6 +30,28 @@ import {
   useBankRegister,
 } from './banking';
 import './banking.css';
+
+/** What the register says once a bank adjustment is recorded, naming the account money went to. */
+function recordedNotice(
+  kind: BankAdjustmentKind,
+  money: string,
+  destination: string | undefined,
+): string {
+  switch (kind) {
+    case 'owner-contribution':
+      return `Owner contribution of ${money} recorded.`;
+    case 'vendor-payment':
+      return `Vendor payment of ${money} recorded.`;
+    case 'sweep':
+      return `Sweep of ${money} to ${destination ?? 'the PM operating account'} recorded.`;
+    case 'transfer':
+      return `Transfer of ${money} to ${destination ?? 'the other account'} recorded.`;
+    case 'contribution':
+      return `PM contribution of ${money} recorded.`;
+    case 'fee':
+      return `Bank fee of ${money} recorded.`;
+  }
+}
 
 export function BankingPage() {
   const queryClient = useQueryClient();
@@ -504,23 +527,20 @@ export function BankingPage() {
             setAdjusting(false);
             refreshAccount(acctId);
             if (toBankAccountId) refreshAccount(toBankAccountId);
-            if (kind === 'owner-contribution') {
-              // The owner's money moved: their balances, statements and the dashboard's owner balances.
+            if (kind === 'owner-contribution' || kind === 'vendor-payment') {
+              // The owner's money moved — in, or out to a vendor (#745): their balances, statements
+              // and the dashboard's owner balances.
               void queryClient.invalidateQueries({ queryKey: ['owners'] });
               void queryClient.invalidateQueries({ queryKey: ['owner'] });
               void queryClient.invalidateQueries({ queryKey: ['statement'] });
               void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             }
             setAdjustmentNotice(
-              kind === 'owner-contribution'
-                ? `Owner contribution of ${formatMoney(amount)} recorded.`
-                : kind === 'sweep'
-                  ? `Sweep of ${formatMoney(amount)} to ${findBank(toBankAccountId ?? '')?.name ?? 'the PM operating account'} recorded.`
-                  : toBankAccountId
-                    ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
-                    : kind === 'contribution'
-                      ? `PM contribution of ${formatMoney(amount)} recorded.`
-                      : `Bank fee of ${formatMoney(amount)} recorded.`,
+              recordedNotice(
+                kind,
+                formatMoney(amount),
+                toBankAccountId ? findBank(toBankAccountId)?.name : undefined,
+              ),
             );
           }}
         />
