@@ -18,6 +18,15 @@ next section.
 
 No unreleased changes.
 
+## [0.36.1] - 2026-11-14
+
+### Changed
+
+- The roadmap lists the bank-register workflows shipped in 0.34.0 to 0.36.0: a sweep of the
+  property manager's held fees, an owner's contribution into trust, and a vendor payment from an
+  owner's funds. It also says that a vendor directory, work orders and invoice approval stay in the
+  maintenance phase.
+
 ## [0.36.0] - 2026-11-14
 
 ### Added
@@ -2307,7 +2316,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.36.1...HEAD
+[0.36.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.1
 [0.36.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.0
 [0.35.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.35.0
 [0.34.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.34.0

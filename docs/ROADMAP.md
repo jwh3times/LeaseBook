@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public direction
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-11-14
 
 LeaseBook is pre-release software. This page communicates shipped capabilities and broad product
 direction; it is not an implementation plan or a commitment to specific dates. Detailed sequencing,
@@ -57,6 +57,10 @@ Hardening and beta readiness are in progress. Shipped so far:
 - **Measurement and fixtures.** A documented read-path latency budget measured against a
   design-scale synthetic organization, and an all-scenario fixture organization that exercises every
   posting template, workflow, and report under golden-file lock.
+- **Register workflow gaps.** Staff record from the bank register a sweep of the property manager's
+  held fees, an owner's contribution into trust, and a vendor payment from an owner's funds against
+  a property, so each of those bank lines has an entry to match. A vendor directory, work orders and
+  invoice approval remain maintenance-phase work.
 - **Authored Azure infrastructure.** Environment templates and deployment workflows exist; enabling
   them requires operator-held cloud access.
 
@@ -92,7 +96,8 @@ interaction budgets, and relevant automated gates remain green.
 ## Later Direction
 
 Further product areas include online payments, production tenant and owner enrollment, fuller lease
-management, maintenance workflows, and vacancy/listing workflows. Detailed scope and ordering
+management, maintenance workflows (a vendor directory, work orders and invoice approval), and
+vacancy/listing workflows. Detailed scope and ordering
 will be defined at each phase boundary rather than inferred from this summary.
 
 ## Sources of Truth
