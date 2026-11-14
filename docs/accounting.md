@@ -226,7 +226,7 @@ read for it, and a statement, run or report with no period named opens on its mo
 
 Money that moves in or out cannot be dated after that day: a payment received, a deposit or prepayment
 collected or applied, deposits moved with a sale, a void, a refund check or its void, and a bank fee,
-interest, transfer, PM contribution, fee sweep or owner contribution. Each has happened by the day it is recorded, so a later date is refused
+interest, transfer, PM contribution, fee sweep, owner contribution or vendor payment. Each has happened by the day it is recorded, so a later date is refused
 (`posting_date_in_future`). A charge or a credit may be billed ahead, and so may the rent, late-fee and
 disbursement runs, which date their entries by the period they bill. A processor's settled payment is
 dated by its bank evidence and is not refused this way.
@@ -418,14 +418,13 @@ I12 sweeps the result: every finalized month nets to its statement and stamped n
 **Bank-only adjustments.** Three posting templates cover the statement lines reconciliation needs that are
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`
 (interest credited to the trust), and `TrustTransfer` (moving the PM's held fees between two of the
-org's trust accounts). Each balances per basis and posts through the single journal write path; none
-implies a vendor workflow. A fee, a transfer out of a bank and a fee sweep
+org's trust accounts). Each balances per basis and posts through the single journal write path. A fee, a transfer out of a bank and a fee sweep
 (below) are paid from the PM's held fees there and only from them: each is refused
 (`pm_fees_insufficient`) when it exceeds the lowest fees held in that bank on or after its date, and
 invariant I11 reports any bank whose held fees are below zero. A transfer is refused (`transfer_bank_not_trust`) when either end is the PM
 operating bank ([ADR-014 addendum](adr/ADR-014-reconciliation-engine-and-lock.md)). Staff record a fee,
-a transfer, a PM contribution, a fee sweep or an owner contribution (all three below) from the bank
-register; interest has no screen until #307 settles who it belongs to.
+a transfer, a PM contribution, a fee sweep, an owner contribution or a vendor payment (all four below)
+from the bank register; interest has no screen until #307 settles who it belongs to.
 
 **PM contributions.** When a charge is larger than the PM's held fees in a trust account, the property
 manager covers it with its own money: `PMContribution` (`DR bank / CR pm_income@bank`, both bases)
@@ -462,6 +461,23 @@ statement and the owner's, and in the owner portal. It keeps to the period and r
 and cannot be dated after the organization's today
 ([ADR-014 addendum, #744](adr/ADR-014-reconciliation-engine-and-lock.md)). It is the owner's money,
 never the property manager's: the PM's own money is a PM contribution, above.
+
+**Vendor payments.** `VendorPaid` (`DR owner_equity / CR trust bank`, both bases, tagged with the owner,
+the property and the bank) records a payment to a vendor, such as a plumber, from an owner's money in
+trust, so the owner's balance and the bank fall together. Staff record it from an operating trust
+account's register dialog as **Vendor payment**, naming the property, the payee (typed: there is no
+vendor directory), a description and an optional reference such as a check number; a security-deposit
+trust account and the PM operating account offer no such choice, and the template refuses either
+(`vendor_payment_bank_not_operating_trust`). The owner charged is never named by the client: it is the
+property's owner on the payment's date, after any ownership transfer (`property_not_found` for a
+property that is not the organization's). The payment may spend the owner's whole operating balance,
+reserve included, and never more: past zero it is refused with `reserve_floor`, and an owner
+contribution recorded first covers it. The reference is plain text in the posted description, so the
+register shows and searches it; nothing makes it unique. It appears under Operating expenses on that
+property's statement and the owner's, and in the owner portal, keeps to the period and reconciliation
+locks, and cannot be dated after the organization's today
+([ADR-014 addendum, #745](adr/ADR-014-reconciliation-engine-and-lock.md)). Work orders, invoices and
+their approval are later maintenance work.
 
 **Processor fee differences.** `ProcessorFeeDifference` records the amount by which a payment
 processor's fee differed from the fee quoted to the tenant

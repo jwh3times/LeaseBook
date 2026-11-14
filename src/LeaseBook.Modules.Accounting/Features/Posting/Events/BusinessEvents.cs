@@ -134,10 +134,15 @@ public sealed record OwnerDisbursed(
     Guid OwnerId, Money Amount, DateOnly Date, Guid BankAccountId,
     string Description, string? SourceRef = null, Money Reserve = default) : AccountingEvent;
 
-/// <summary>A vendor payment out of an owner's trust funds (guarded by the reserve floor).</summary>
+/// <summary>
+/// A vendor payment out of an owner's trust funds in an operating trust account (guarded by the reserve
+/// floor). A payment from a security-deposit trust or the PM operating bank is refused (#745).
+/// <paramref name="Reference"/> is plain text (a check number, an ACH trace) added to the description.
+/// </summary>
 public sealed record VendorPaid(
     Guid OwnerId, Guid PropertyId, Money Amount, DateOnly Date, Guid BankAccountId, string Payee,
-    string Description, string? SourceRef = null, Money Reserve = default) : AccountingEvent;
+    string Description, string? SourceRef = null, Money Reserve = default,
+    string? Reference = null, string? InternalNote = null) : AccountingEvent;
 
 /// <summary>A refund of a held prepayment or deposit back to the tenant.</summary>
 /// <remarks>

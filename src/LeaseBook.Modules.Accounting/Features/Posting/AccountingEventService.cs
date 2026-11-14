@@ -349,9 +349,7 @@ internal sealed class AccountingEventService(
         // trust it would sit in the wrong trust, and the PM operating bank is outside trust. The chart
         // calls both trust banks trust_bank, so the purpose comes from Directory. An id no bank account
         // carries stays an unknown account, as it was before the purpose was asked.
-        await BankCodeAsync(e.BankAccountId, ct);
-        var purposes = await bankPurposes.GetAsync([e.BankAccountId], ct);
-        if (purposes.GetValueOrDefault(e.BankAccountId, BankPurpose.Operating) != BankPurpose.Trust)
+        if (!await IsOperatingTrustAsync(e.BankAccountId, ct))
         {
             throw new ContributionBankNotOperatingTrustException(e.BankAccountId);
         }
@@ -368,24 +366,50 @@ internal sealed class AccountingEventService(
     private async Task<Guid> PostOwnerDisbursedAsync(OwnerDisbursed e, CancellationToken ct)
     {
         await postingLock.AcquireAsync(ct);
-        await GuardReserveFloorAsync(e.OwnerId, e.Amount, e.Reserve, ct);
+        await GuardReserveFloorAsync(e.OwnerId, e.Amount, e.Reserve, ReserveFloorPayment.Disbursement, ct);
 
         return await posting.PostAsync(RunEventEntryBuilder.Build(e), ct);
     }
 
     private async Task<Guid> PostVendorPaidAsync(VendorPaid e, CancellationToken ct)
     {
+        // A vendor is paid from the owner's money where it is held, in operating trust (#745, ADR-014
+        // addendum): a security-deposit trust holds tenants' deposits, and the PM operating bank is
+        // outside trust.
+        if (!await IsOperatingTrustAsync(e.BankAccountId, ct))
+        {
+            throw new VendorPaymentBankNotOperatingTrustException(e.BankAccountId);
+        }
+
         await postingLock.AcquireAsync(ct);
-        await GuardReserveFloorAsync(e.OwnerId, e.Amount, e.Reserve, ct);
+        await GuardReserveFloorAsync(e.OwnerId, e.Amount, e.Reserve, ReserveFloorPayment.VendorPayment, ct);
+
+        // The reference (a check number, an ACH trace) is plain text for matching the bank line: it is in
+        // the description so the register shows and searches it, and nothing makes it unique (#745).
+        var description = $"Vendor payment to {e.Payee} — {e.Description}";
+        if (!string.IsNullOrWhiteSpace(e.Reference))
+        {
+            description += $" · ref {e.Reference.Trim()}";
+        }
 
         return await posting.PostAsync(new PostEntryRequest(
-            e.Date, "VendorPaid", null, $"Vendor payment to {e.Payee} — {e.Description}", e.SourceRef,
+            e.Date, "VendorPaid", null, description, e.SourceRef,
             [
                 new(AccountCodes.OwnerEquity, e.Amount, null, EntryBasis.Both,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, BankAccountId: e.BankAccountId),
                 new(AccountCodes.TrustBank(e.BankAccountId), null, e.Amount, EntryBasis.Both,
                     BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
+    }
+
+    // The chart calls both trust banks trust_bank, so whether one is the operating trust comes from
+    // Directory. An id no bank account carries stays an unknown account, as it was before the purpose
+    // was asked.
+    private async Task<bool> IsOperatingTrustAsync(Guid bankAccountId, CancellationToken ct)
+    {
+        await BankCodeAsync(bankAccountId, ct);
+        var purposes = await bankPurposes.GetAsync([bankAccountId], ct);
+        return purposes.GetValueOrDefault(bankAccountId, BankPurpose.Operating) == BankPurpose.Trust;
     }
 
     private async Task<Guid> PostRefundIssuedAsync(RefundIssued e, CancellationToken ct)
@@ -578,12 +602,13 @@ internal sealed class AccountingEventService(
         }
     }
 
-    private async Task GuardReserveFloorAsync(Guid ownerId, Money amount, Money reserve, CancellationToken ct)
+    private async Task GuardReserveFloorAsync(
+        Guid ownerId, Money amount, Money reserve, ReserveFloorPayment payment, CancellationToken ct)
     {
         var equity = await _balances.OwnerEquityCashAsync(ownerId, ct);
         if (equity - amount.Amount < reserve.Amount)
         {
-            throw new ReserveFloorException(amount.Amount, equity, reserve.Amount, ownerId);
+            throw new ReserveFloorException(amount.Amount, equity, reserve.Amount, ownerId, payment);
         }
     }
 

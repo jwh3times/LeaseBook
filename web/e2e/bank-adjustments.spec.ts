@@ -3,9 +3,9 @@ import { SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
 // A bank fee and a transfer between trust accounts, recorded from the bank register (#553), a PM
-// contribution (#720), a sweep of the held fees to the PM operating account (#743) and an owner's
-// contribution into the operating trust (#744), in the scenario organization
-// (`seed --org scenario`, ADR-056) as a staff member.
+// contribution (#720), a sweep of the held fees to the PM operating account (#743), an owner's
+// contribution into the operating trust (#744) and a vendor payment from an owner's money there (#745),
+// in the scenario organization (`seed --org scenario`, ADR-056) as a staff member.
 //
 // A fee, a transfer and a sweep are paid from the management fees the PM holds in the account, and
 // the server refuses one past them. The scenario seed ends with 368.74 held in the operating trust and none in the deposit
@@ -17,7 +17,10 @@ import { test } from './test';
 const OPERATING_TRUST = 'Scenario Operating Trust';
 const DEPOSIT_TRUST = 'Scenario Deposit Trust';
 const PM_OPERATING = 'Scenario PM Operating';
-// A scenario owner and one of their properties (ScenarioSeeder), for the owner contribution (#744).
+// A scenario owner and one of their properties (ScenarioSeeder), for the owner contribution (#744)
+// and the vendor payment (#745). The seed leaves the owner 500.00 in the operating trust. A run
+// contributes under a dollar and pays a vendor under two, so that balance covers hundreds of reruns
+// in any order.
 const OWNER = 'Harborview Holdings';
 const PROPERTY = '14 Harborview Ln';
 
@@ -66,7 +69,7 @@ async function tabTo(page: Page, target: Locator, max = 12): Promise<void> {
 const registerRow = (page: Page, description: string) =>
   page.getByRole('table').getByRole('row').filter({ hasText: description });
 
-test.describe('bank fee, trust transfer, PM contribution, fee sweep and owner contribution from the register', () => {
+test.describe('bank fee, trust transfer, PM contribution, fee sweep, owner contribution and vendor payment from the register', () => {
   test('records a bank fee by keyboard, and shows a fee past the held fees refused in place @scenario:bank-fee-from-register', async ({
     page,
   }) => {
@@ -313,5 +316,72 @@ test.describe('bank fee, trust transfer, PM contribution, fee sweep and owner co
       page.getByRole('dialog').getByRole('radio', { name: 'Owner contribution' }),
     ).toHaveCount(0);
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+  });
+
+  test('pays a vendor from an owner’s funds in the operating trust by keyboard, refusing one past the owner’s balance in place @scenario:vendor-payment-from-register', async ({
+    page,
+  }) => {
+    await signIn(page, SCENARIO_STAFF);
+    await openRegister(page, OPERATING_TRUST);
+
+    // The vendor payment, by keyboard: arrow from "Bank fee" past the other five kinds to it. The
+    // choice appears once the account's purpose is read; arrowing before then would stop short.
+    await expect(
+      (await openDialog(page)).getByRole('radio', { name: 'Vendor payment' }),
+    ).toBeVisible();
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowDown');
+    const dialog = page.getByRole('dialog', { name: 'Record a vendor payment' });
+    await expect(dialog.getByRole('radio', { name: 'Vendor payment' })).toBeChecked();
+    // No owner is asked for: the property's owner on the date is charged.
+    await expect(dialog.getByLabel('Owner', { exact: true })).toHaveCount(0);
+    const property = dialog.getByLabel('Property', { exact: true });
+    await tabTo(page, property);
+    await page.keyboard.type(PROPERTY);
+    await expect(property.locator('option:checked')).toHaveText(PROPERTY);
+    const payee = `e2e Plumbing ${Math.random().toString(36).slice(2, 6)}`;
+    await tabTo(page, dialog.getByLabel('Payee'));
+    await page.keyboard.type(payee);
+    // No owner holds a million dollars: refused beside the amount, pointing to an owner contribution.
+    await tabTo(page, dialog.getByLabel('Amount'));
+    await page.keyboard.type('999999');
+    const description = describeRun('vendor payment');
+    await tabTo(page, dialog.getByLabel('Description'));
+    await page.keyboard.type(description);
+    const reference = `Check ${1000 + Math.floor(Math.random() * 9000)}`;
+    await tabTo(page, dialog.getByLabel('Reference'));
+    await page.keyboard.type(reference);
+    const save = dialog.getByRole('button', { name: 'Record vendor payment' });
+    await tabTo(page, save);
+    await page.keyboard.press('Enter');
+    await expect(dialog.getByText(/Record an owner contribution first/)).toBeVisible();
+    await expect(dialog.getByLabel('Amount')).toHaveAttribute('aria-invalid', 'true');
+
+    // One the owner's balance covers posts, closes the dialog, and lands on the register with its ref.
+    const amount = randomAmount(1);
+    await dialog.getByLabel('Amount').fill(amount);
+    await save.focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(`Vendor payment of $${amount} recorded.`)).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const row = registerRow(page, description);
+    await expect(row).toContainText(
+      `Vendor payment to ${payee} — ${description} · ref ${reference}`,
+    );
+    await expect(row).toContainText(`$${amount}`);
+    await expect(row).toContainText('Uncleared');
+
+    // Neither a security-deposit trust account nor the PM operating account pays a vendor.
+    await openRegister(page, DEPOSIT_TRUST);
+    await openDialog(page);
+    await expect(
+      page.getByRole('dialog').getByRole('radio', { name: 'PM contribution' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('dialog').getByRole('radio', { name: 'Vendor payment' }),
+    ).toHaveCount(0);
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+    await openRegister(page, PM_OPERATING);
+    await expect(page.getByRole('button', { name: 'Fee or transfer' })).toHaveCount(0);
   });
 });

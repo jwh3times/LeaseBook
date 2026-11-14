@@ -157,13 +157,35 @@ public sealed class InsufficientReceivableException(
     };
 }
 
-/// <summary>A disbursement would take owner equity below its reserve floor (409).</summary>
-public sealed class ReserveFloorException(decimal amount, decimal equity, decimal reserve, Guid ownerId)
-    : AccountingDomainException(
-        "reserve_floor",
-        $"This disbursement of {amount:0.00} would take the owner's equity from {equity:0.00} " +
-        $"below their {reserve:0.00} reserve floor.")
+/// <summary>What a reserve-floor refusal was paying out, which its message names.</summary>
+public enum ReserveFloorPayment
 {
+    Disbursement,
+    VendorPayment,
+}
+
+/// <summary>
+/// A disbursement or a vendor payment would take owner equity below its reserve floor (409). A vendor
+/// payment from the register is guarded at zero (#745), and its message says how to cover it.
+/// </summary>
+public sealed class ReserveFloorException(
+    decimal amount, decimal equity, decimal reserve, Guid ownerId,
+    ReserveFloorPayment payment = ReserveFloorPayment.Disbursement)
+    : AccountingDomainException("reserve_floor", MessageFor(amount, equity, reserve, payment))
+{
+    private static string MessageFor(decimal amount, decimal equity, decimal reserve, ReserveFloorPayment payment) =>
+        payment switch
+        {
+            ReserveFloorPayment.VendorPayment =>
+                $"This vendor payment of {amount:0.00} would take the owner's balance from {equity:0.00} " +
+                (reserve == 0m ? "below zero. " : $"below their {reserve:0.00} reserve floor. ") +
+                "Record an owner contribution first to cover it.",
+            _ => $"This disbursement of {amount:0.00} would take the owner's equity from {equity:0.00} " +
+                 $"below their {reserve:0.00} reserve floor.",
+        };
+
+    public ReserveFloorPayment Payment { get; } = payment;
+
     public decimal Amount { get; } = amount;
 
     public decimal Equity { get; } = equity;
@@ -594,6 +616,31 @@ public sealed class ContributionBankNotOperatingTrustException(Guid bankAccountI
         "An owner contribution is paid into an operating trust account, and this account is not one.")
 {
     public Guid BankAccountId { get; } = bankAccountId;
+}
+
+/// <summary>
+/// A vendor payment names a bank that is not an operating trust account (422, #745). The owner's money it
+/// spends is held in operating trust: a security-deposit trust account holds tenants' deposits, and the
+/// PM operating account is outside trust altogether. Nothing is posted.
+/// </summary>
+public sealed class VendorPaymentBankNotOperatingTrustException(Guid bankAccountId)
+    : AccountingDomainException(
+        "vendor_payment_bank_not_operating_trust",
+        "A vendor payment is paid from an operating trust account, and this account is not one.")
+{
+    public Guid BankAccountId { get; } = bankAccountId;
+}
+
+/// <summary>
+/// A posting names a property that is not one of the organization's properties (422, #745). Nothing is
+/// posted.
+/// </summary>
+public sealed class PropertyNotFoundException(Guid propertyId)
+    : AccountingDomainException(
+        "property_not_found",
+        "This property is not one of the organization's properties. Choose another property.")
+{
+    public Guid PropertyId { get; } = propertyId;
 }
 
 /// <summary>

@@ -3,7 +3,7 @@
 - **Audience:** Evaluators, contributors, and maintainers
 - **Status:** Living public scope
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-10-11
+- **Last reviewed:** 2026-11-14
 
 LeaseBook is property-management software for small residential property managers. Its defining
 requirement is correct trust accounting with low interaction cost for recurring operational work.
@@ -18,6 +18,10 @@ Phase 1 supports property-management staff operating a single organization with:
 - A double-entry, dual-basis trust-accounting journal with append-only corrections.
 - Tenant charges, payments, credits, deposits, prepayments, and applications.
 - Bank registers, statement import, matching, reconciliation, and accounting-period locks.
+- Bank-register entries for fees, interest, transfers, the property manager's own contributions and fee
+  sweeps, owner contributions into trust, and vendor payments from an owner's funds in trust,
+  recorded against a property with the payee typed in. A vendor directory, work orders and invoice
+  approval belong to the later maintenance phase.
 - Owner statements, operational reports, PDF/CSV output, and an append-only statement delivery
   history.
 - Preview-confirm-post bulk runs for rent, late fees, and owner disbursements.
@@ -70,7 +74,8 @@ seams may exist without making the external product itself part of LeaseBook.
 ## Later Product Areas
 
 Further planned areas include online payments, production tenant and owner enrollment, fuller lease
-management, maintenance workflows, and vacancy/listing workflows. The
+management, maintenance workflows (a vendor directory, work orders and invoice approval), and
+vacancy/listing workflows. The
 [roadmap](ROADMAP.md) communicates direction only; detailed scope is defined at each phase boundary.
 
 ## Public Contribution Boundary
