@@ -16,7 +16,7 @@ internal sealed class Lane(PostgresFixture fixture, Guid orgId) : OrgLane<Lane>(
     public PostingService Posting =>
         new(Db, Org, new AccountingPeriods(Db), Actor, reconciliationLock: new ReconciliationLock(Db));
 
-    public AccountingEventService Events => new(Db, Posting, new PostingLock(Db, Org));
+    public AccountingEventService Events => new(Db, Posting, new PostingLock(Db, Org), new DirectoryBankPurposes(Db));
 
     public ReversalService Reversal => new(Db, Org, Posting);
 

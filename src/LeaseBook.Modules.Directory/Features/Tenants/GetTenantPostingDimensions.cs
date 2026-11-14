@@ -41,28 +41,11 @@ internal sealed class GetTenantPostingDimensionsHandler(DbContext db)
             return null;
         }
 
-        // Hold a shared property-row lock until this posting transaction commits. Ownership transfer
-        // takes the matching exclusive lock, so attribution is resolved wholly before or wholly after
-        // the transfer instead of racing its current-owner/history write.
-        await db.Database.SqlQuery<Guid>(
-                $"""SELECT id AS "Value" FROM properties WHERE id = {effectiveDimensions.PropertyId} FOR SHARE""")
-            .SingleAsync(ct);
+        // The owner on the posting date, after any ownership transfer, read under the property-row lock
+        // a transfer also takes, so attribution resolves wholly before or after a concurrent transfer.
+        var effectiveOwner = await PropertyOwnerHistory.OwnerOnAsync(
+            db, effectiveDimensions.PropertyId, query.Date, effectiveDimensions.OwnerId, ct);
 
-        var effectiveOwner = await db.Set<PropertyOwnershipTransfer>().AsNoTracking()
-            .Where(transfer => transfer.PropertyId == effectiveDimensions.PropertyId
-                && transfer.EffectiveDate <= query.Date)
-            .OrderByDescending(transfer => transfer.EffectiveDate)
-            .Select(transfer => (Guid?)transfer.ToOwnerId)
-            .FirstOrDefaultAsync(ct);
-        if (effectiveOwner is null)
-        {
-            effectiveOwner = await db.Set<PropertyOwnershipTransfer>().AsNoTracking()
-                .Where(transfer => transfer.PropertyId == effectiveDimensions.PropertyId)
-                .OrderBy(transfer => transfer.EffectiveDate)
-                .Select(transfer => (Guid?)transfer.FromOwnerId)
-                .FirstOrDefaultAsync(ct);
-        }
-
-        return effectiveDimensions with { OwnerId = effectiveOwner ?? effectiveDimensions.OwnerId };
+        return effectiveDimensions with { OwnerId = effectiveOwner };
     }
 }

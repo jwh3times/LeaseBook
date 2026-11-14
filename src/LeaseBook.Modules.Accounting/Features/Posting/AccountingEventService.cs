@@ -15,7 +15,8 @@ namespace LeaseBook.Modules.Accounting.Features.Posting;
 /// and the held-fees floor under a processor fee shortfall, a bank fee and a transfer out of a bank.
 /// Every entry balances per basis <i>by construction</i> (proven by the catalog property test).
 /// </summary>
-internal sealed class AccountingEventService(DbContext db, IPostingService posting, IPostingLock postingLock)
+internal sealed class AccountingEventService(
+    DbContext db, IPostingService posting, IPostingLock postingLock, IBankAccountPurposes bankPurposes)
     : IAccountingEvents, IBalanceForward
 {
     private readonly BalanceReader _balances = new(db);
@@ -342,14 +343,27 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
 
     // ----- Owner cash movements -------------------------------------------------------------------
 
-    private Task<Guid> PostOwnerContributionAsync(OwnerContribution e, CancellationToken ct) =>
-        posting.PostAsync(new PostEntryRequest(e.Date, "OwnerContribution", null, e.Description, e.SourceRef,
+    private async Task<Guid> PostOwnerContributionAsync(OwnerContribution e, CancellationToken ct)
+    {
+        // An owner's money is held in operating trust (#744, ADR-014 addendum): in a security-deposit
+        // trust it would sit in the wrong trust, and the PM operating bank is outside trust. The chart
+        // calls both trust banks trust_bank, so the purpose comes from Directory. An id no bank account
+        // carries stays an unknown account, as it was before the purpose was asked.
+        await BankCodeAsync(e.BankAccountId, ct);
+        var purposes = await bankPurposes.GetAsync([e.BankAccountId], ct);
+        if (purposes.GetValueOrDefault(e.BankAccountId, BankPurpose.Operating) != BankPurpose.Trust)
+        {
+            throw new ContributionBankNotOperatingTrustException(e.BankAccountId);
+        }
+
+        return await posting.PostAsync(new PostEntryRequest(e.Date, "OwnerContribution", null, e.Description, e.SourceRef,
             [
                 new(AccountCodes.TrustBank(e.BankAccountId), e.Amount, null, EntryBasis.Both,
                     BankAccountId: e.BankAccountId),
                 new(AccountCodes.OwnerEquity, null, e.Amount, EntryBasis.Both,
                     PropertyId: e.PropertyId, OwnerId: e.OwnerId, BankAccountId: e.BankAccountId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
+    }
 
     private async Task<Guid> PostOwnerDisbursedAsync(OwnerDisbursed e, CancellationToken ct)
     {

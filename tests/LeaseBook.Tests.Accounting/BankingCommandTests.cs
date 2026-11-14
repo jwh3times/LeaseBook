@@ -48,7 +48,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     {
         ["BankAccountId"] = (Fee with { BankAccountId = Guid.Empty }, ["BankAccountId"], null),
         ["SourceRef"] = (Fee with { SourceRef = "" }, ["SourceRef"], null),
-        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution, sweep."),
+        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution, sweep, owner-contribution."),
         ["Amount"] = (Fee with { Amount = 0m }, ["Amount"], AmountMessage),
         ["Transfer.ToBankAccountId.Null"] = (Transfer with { ToBankAccountId = null }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Upper"] = (
@@ -94,7 +94,8 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         // Unreachable past the validator; the handler still refuses rather than posting nothing.
         var refused = await Should.ThrowAsync<ValidationException>(() =>
             new RecordBankAdjustmentHandler(
-                new NoEvents(), new PostingCalendar(new FixedOrgTimeZone(), TimeProvider.System), new OpenPeriods(), new NoLocks())
+                new NoEvents(), new PostingCalendar(new FixedOrgTimeZone(), TimeProvider.System), new OpenPeriods(), new NoLocks(),
+                new PropertyOwners(new Dictionary<Guid, Guid>()))
                 .Handle(Fee with { Kind = "wire" }, TestContext.Current.CancellationToken));
 
         refused.Message.ShouldBe("Unknown bank-adjustment kind.");

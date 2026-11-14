@@ -60,8 +60,37 @@ function baseHandlers() {
       HttpResponse.json({ items: [], page: 1, pageSize: 200, total: 0 }),
     ),
     http.get('/api/accounting/reconciliations', () => HttpResponse.json({ rows: [] })),
+    http.get('/api/settings/banks', () => HttpResponse.json(BANK_ACCOUNTS)),
   ];
 }
+
+// Each account's purpose in Settings: only the operating trust takes an owner's contribution (#744).
+const BANK_ACCOUNTS = [
+  {
+    id: 'acct1',
+    name: 'Operating Trust',
+    institution: null,
+    mask: null,
+    purpose: 'trust',
+    isActive: true,
+  },
+  {
+    id: 'acct2',
+    name: 'Security Deposits',
+    institution: null,
+    mask: null,
+    purpose: 'deposit',
+    isActive: true,
+  },
+  {
+    id: 'acct3',
+    name: 'Management Operating',
+    institution: null,
+    mask: null,
+    purpose: 'operating',
+    isActive: true,
+  },
+];
 
 const RECON_IN_PROGRESS = {
   id: 'rec1',
@@ -819,6 +848,96 @@ describe('BankingPage bank fee or transfer (#553)', () => {
     expect(
       queryClient.getQueryCache().findAll({ queryKey: heldFeesKey('acct1') }),
     ).not.toHaveLength(0);
+  });
+
+  it('records an owner contribution into the operating trust and refreshes the owners’ balances (#744)', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TRUSTS)),
+      http.get('/api/directory/owners', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'o1',
+              name: 'Ashby Holdings',
+              initials: null,
+              units: 1,
+              properties: 1,
+              operating: 0,
+              deposits: 0,
+              total: 0,
+            },
+          ],
+          page: 1,
+          pageSize: 200,
+          total: 1,
+        }),
+      ),
+      http.post('/api/accounting/banks/:id/adjustments', () =>
+        HttpResponse.json({ entryId: 'e1' }),
+      ),
+      http.get('/api/directory/properties', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'p1',
+              address: '12 Ashby Rd',
+              city: null,
+              ownerId: 'o1',
+              ownerName: 'Ashby Holdings',
+              units: 1,
+              occupied: 1,
+            },
+          ],
+          page: 1,
+          pageSize: 200,
+          total: 1,
+        }),
+      ),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    const queryClient = renderPage();
+    queryClient.setQueryData(['owners'], { items: [], page: 1, pageSize: 200, total: 0 });
+    queryClient.setQueryData(['dashboard'], {});
+    const user = userEvent.setup();
+    await screen.findByText('Rent deposit');
+
+    await user.click(screen.getByRole('button', { name: 'Fee or transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByDisplayValue(/^\d{4}-\d{2}-\d{2}$/);
+    await user.click(await within(dialog).findByRole('radio', { name: 'Owner contribution' }));
+    await user.selectOptions(await within(dialog).findByLabelText('Owner'), 'o1');
+    expect(within(dialog).getByLabelText('Property')).toHaveValue('p1');
+    await user.type(within(dialog).getByLabelText('Amount'), '400');
+    await user.click(within(dialog).getByRole('button', { name: 'Record owner contribution' }));
+
+    expect(await screen.findByText('Owner contribution of $400.00 recorded.')).toBeInTheDocument();
+    expect(queryClient.getQueryState(['dashboard'])?.isInvalidated).toBe(true);
+  });
+
+  it('offers no owner contribution on a security-deposit trust account (#744)', async () => {
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TRUSTS)),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    const queryClient = renderPage('/banking?account=acct2');
+    const user = userEvent.setup();
+    await screen.findByText('Rent deposit');
+
+    await user.click(screen.getByRole('button', { name: 'Fee or transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByDisplayValue(/^\d{4}-\d{2}-\d{2}$/);
+    // The purposes are read, so the choice is absent because of this account's, not for want of them.
+    await vi.waitFor(() =>
+      expect(queryClient.getQueryState(['bank-accounts', { activeOnly: false }])?.status).toBe(
+        'success',
+      ),
+    );
+    expect(within(dialog).getByRole('radio', { name: 'PM contribution' })).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('radio', { name: 'Owner contribution' }),
+    ).not.toBeInTheDocument();
   });
 
   it('offers only a bank fee on an account that is not a trust account', async () => {

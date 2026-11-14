@@ -129,6 +129,7 @@ internal sealed class PaymentsHarness : IAsyncDisposable
     {
         var services = new ServiceCollection().AddAccountingModule();
         services.AddSingleton(db);
+        services.AddSingleton<LeaseBook.Modules.Accounting.Contracts.IBankAccountPurposes>(new DirectoryBankPurposes(db));
         services.AddSingleton(org);
         services.AddSingleton(actor);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = false });

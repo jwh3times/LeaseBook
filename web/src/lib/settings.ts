@@ -39,9 +39,13 @@ export function useUpdateOrgSettings() {
   });
 }
 
-export function useBankAccounts(activeOnly = false): UseQueryResult<BankAccount[]> {
+export function useBankAccounts(
+  activeOnly = false,
+  opts: { enabled?: boolean } = {},
+): UseQueryResult<BankAccount[]> {
   return useQuery({
     queryKey: ['bank-accounts', { activeOnly }],
+    enabled: opts.enabled ?? true,
     queryFn: () =>
       unwrap(
         getApiSettingsBanks({ query: activeOnly ? { activeOnly: true } : {} }),

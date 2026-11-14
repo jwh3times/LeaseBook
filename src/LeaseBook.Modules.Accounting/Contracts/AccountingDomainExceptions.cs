@@ -583,6 +583,36 @@ public sealed class ContributionBankNotTrustException(Guid bankAccountId)
     public Guid BankAccountId { get; } = bankAccountId;
 }
 
+/// <summary>
+/// An owner contribution names a bank that is not an operating trust account (422, #744). An owner's
+/// money is held in operating trust: in a security-deposit trust account it sits in the wrong trust, and
+/// the PM operating account is outside trust altogether. Nothing is posted.
+/// </summary>
+public sealed class ContributionBankNotOperatingTrustException(Guid bankAccountId)
+    : AccountingDomainException(
+        "contribution_bank_not_operating_trust",
+        "An owner contribution is paid into an operating trust account, and this account is not one.")
+{
+    public Guid BankAccountId { get; } = bankAccountId;
+}
+
+/// <summary>
+/// A posting names a property that does not belong to the owner it names on the posting's date (422,
+/// #744). The property's owner is the one effective on that date, after any ownership transfer, so the
+/// entry would land on the wrong owner's statement. Nothing is posted.
+/// </summary>
+public sealed class PropertyNotOwnedException(Guid propertyId, Guid ownerId, DateOnly date)
+    : AccountingDomainException(
+        "property_not_owned",
+        "This property does not belong to this owner on that date. Choose one of the owner's properties.")
+{
+    public Guid PropertyId { get; } = propertyId;
+
+    public Guid OwnerId { get; } = ownerId;
+
+    public DateOnly Date { get; } = date;
+}
+
 public enum PaymentReturnBlock
 {
     PrepaymentConsumed,

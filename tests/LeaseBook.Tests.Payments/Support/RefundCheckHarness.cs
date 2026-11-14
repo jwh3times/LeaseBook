@@ -112,6 +112,7 @@ internal sealed class RefundCheckHarness : IAsyncDisposable
         services.AddLeaseBookCqrs(typeof(AccountingModuleServiceCollectionExtensions).Assembly,
             typeof(LeaseBook.Modules.Payments.ModuleMarker).Assembly);
         services.AddSingleton(db);
+        services.AddSingleton<LeaseBook.Modules.Accounting.Contracts.IBankAccountPurposes>(new DirectoryBankPurposes(db));
         services.AddSingleton(org);
         services.AddSingleton(actor);
         services.AddSingleton(clock);

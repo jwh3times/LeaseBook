@@ -981,6 +981,8 @@ export type RecordBankAdjustment = {
     description: null | string;
     sourceRef: string;
     internalNote?: null | string;
+    ownerId?: null | string;
+    propertyId?: null | string;
 };
 
 export type RecordPayment = {

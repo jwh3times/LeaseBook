@@ -264,3 +264,53 @@ floor together and changes nothing; the posting guard, not the prefill, is the c
 
 A schedule, a cap, or any rule on how often fees must leave trust is not decided here: that is for the
 compliance review. I11 still reads today's balance; the floor is enforced at posting time.
+
+## Addendum — an owner contribution goes into operating trust only, and staff record one from the register (2026-11-14)
+
+`OwnerContribution` (`DR trust bank / CR owner_equity`, both bases, tagged with the owner, the property
+and the bank) has been in the catalog since M1, but only the seeders posted one (#744). An owner who
+sends money into trust to cover a repair or a negative balance could not be recorded, so the deposit had
+nothing to match on the bank statement and the month could not reconcile.
+
+**Operating trust only.** The template refuses a bank that is not an operating trust account with
+`contribution_bank_not_operating_trust` (422). Owner money in a security-deposit trust account sits in
+the wrong trust, and the PM operating account is outside trust altogether. The chart of accounts gives
+both trust accounts the class `trust_bank`, so the template asks Directory for the bank's purpose
+through a consumer-owned port (`IBankAccountPurposes`, ADR-007) filled by a host adapter. The refusal is
+in the template, not the command, so a direct API call or a seeder meets it too. An id that is no bank
+account at all stays an unknown account. The PM contribution keeps its own rule and code:
+`contribution_bank_not_trust`, into either trust account.
+
+**The owner of the property on the date.** The bank-adjustment command gains an `owner-contribution`
+kind carrying an owner and a property, both required. The property must belong to that owner on the
+contribution's date, after any ownership transfer; otherwise the command refuses it with
+`property_not_owned` (422), since the money would land on the wrong owner's statement. The owner is
+read through a second port (`IPropertyOwnership`), whose Directory query holds the property-row lock an
+ownership transfer also takes, the same way a tenant posting's attribution is read. A contribution with
+no property is not offered: the property is what puts it on that property's statement as well as the
+owner's.
+
+`IPropertyOwnership` reads one property on one date, an exception to ADR-007's batch-maps rule taken
+on the same footing as `ITenantPostingDimensions`: that rule governs list and roster reads, where a
+per-id port invites N+1 queries, and a posting names exactly one property. A batch shape would add
+nothing but a one-entry map. `IBankAccountPurposes` keeps the batch shape.
+
+**Staff record it.** The bank register's dialog on an operating trust account offers **Owner
+contribution**, never on a security-deposit trust account or the PM operating account. It asks for the
+owner, the property (chosen already when the owner has only one), the amount, the date (the
+organization's today, never later) and a description, and its wording keeps it apart from the PM
+contribution, which is the property manager's own money. Staff (`RequirePMStaff`) may record one, as
+they may any other bank-register write.
+
+The property is chosen already when the owner has exactly one. The issue asked for the default when
+the owner has one property _whose money that bank holds_, but a property names no bank: until
+multi-trust routing exists, every property's owner money is held in the organization's operating
+trust, so the two rules give the same answer. When properties gain a bank, the default narrows with
+them. The dialog lists each owner's properties as they are owned today; the server checks the owner on
+the contribution's date. A contribution backdated before an ownership transfer, for the seller, is
+therefore accepted by the server but not offered on the screen, and one for the buyer is offered and
+refused with `property_not_owned`. That is a rare correction rather than the daily path, and a direct
+call can still post the seller's.
+
+The seeders' existing contributions were already into operating trust accounts, so no seeded figure
+moves.
