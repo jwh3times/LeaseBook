@@ -37,16 +37,18 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
     private static readonly Guid Other = UuidV7.NewId();
     private const string AmountMessage = "Amount must be a positive value with at most 2 decimal places.";
     private const string NoDestination = "A transfer requires a destination bank account.";
-    private const string NotATransfer = "Only a transfer names a destination bank account.";
+    private const string NotATransfer = "Only a transfer or a sweep names a destination bank account.";
+    private const string NoPmOperating = "A sweep requires the PM operating account it goes to.";
 
     private static readonly RecordBankAdjustment Fee = new("fee", 25m, Feb5, Some, null, null, "adj:1");
     private static readonly RecordBankAdjustment Transfer = new("transfer", 25m, Feb5, Some, Other, null, "adj:1");
+    private static readonly RecordBankAdjustment Sweep = new("sweep", 25m, Feb5, Some, Other, null, "adj:1");
 
     private static readonly Dictionary<string, (RecordBankAdjustment Command, string[] Properties, string? Message)> Cases = new()
     {
         ["BankAccountId"] = (Fee with { BankAccountId = Guid.Empty }, ["BankAccountId"], null),
         ["SourceRef"] = (Fee with { SourceRef = "" }, ["SourceRef"], null),
-        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution."),
+        ["Kind"] = (Fee with { Kind = "wire" }, ["Kind"], "Kind must be one of: fee, interest, transfer, contribution, sweep."),
         ["Amount"] = (Fee with { Amount = 0m }, ["Amount"], AmountMessage),
         ["Transfer.ToBankAccountId.Null"] = (Transfer with { ToBankAccountId = null }, ["ToBankAccountId"], NoDestination),
         ["Transfer.ToBankAccountId.Upper"] = (
@@ -61,6 +63,11 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         ["Contribution.ToBankAccountId"] = (
             Fee with { Kind = "contribution", ToBankAccountId = Other }, ["ToBankAccountId"], NotATransfer),
         ["Fee.ToBankAccountId.Empty"] = (Fee with { ToBankAccountId = Guid.Empty }, ["ToBankAccountId"], NotATransfer),
+        // A sweep names the PM operating account it goes to (#743).
+        ["Sweep.ToBankAccountId.Null"] = (Sweep with { ToBankAccountId = null }, ["ToBankAccountId"], NoPmOperating),
+        ["Sweep.ToBankAccountId.Upper"] = (
+            Sweep with { Kind = "SWEEP", ToBankAccountId = null }, ["ToBankAccountId"], NoPmOperating),
+        ["Sweep.ToBankAccountId.Empty"] = (Sweep with { ToBankAccountId = Guid.Empty }, ["ToBankAccountId"], NoPmOperating),
     };
 
     public static TheoryData<string> Refusals() => new(Cases.Keys);
@@ -101,6 +108,7 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         { "Interest", "InterestEarned", "Interest" },
         { "transfer", "TrustTransfer", "Transfer" },
         { "contribution", "PMContribution", "PM contribution" },
+        { "sweep", "PMFeesSwept", "PM fee sweep" },
     };
 
     [Theory]
@@ -114,8 +122,13 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
         await scope.RunAsync(() => Events(scope).PostAsync(
             new InterestEarned(new Money(500m), Feb5, scope.TrustBankId, "seed", "seed:1"), ct), ct);
 
-        // Only a transfer names a destination; the validator refuses one on the other kinds.
-        Guid? to = eventType == "TrustTransfer" ? scope.DepositBankId : null;
+        // Only a transfer or a sweep names a destination; the validator refuses one on the other kinds.
+        Guid? to = eventType switch
+        {
+            "TrustTransfer" => scope.DepositBankId,
+            "PMFeesSwept" => scope.OperatingBankId,
+            _ => null,
+        };
         var plain = await SendAsync(scope, new RecordBankAdjustment(
             kind, 25m, Feb5, scope.TrustBankId, to, null, $"adj:{kind}", "staff only"), ct);
         var named = await SendAsync(scope, new RecordBankAdjustment(
@@ -144,6 +157,14 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
             [
                 new(trust, 25m, null, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
                 new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+            ],
+            "PMFeesSwept" =>
+            [
+                new(AccountCodes.PmOperatingBank(scope.OperatingBankId), 25m, null, EntryBasis.Both,
+                    null, null, null, null, scope.OperatingBankId),
+                new(trust, null, 25m, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+                new(AccountCodes.PmIncome, 25m, null, EntryBasis.Both, null, null, null, null, scope.TrustBankId),
+                new(AccountCodes.PmIncome, null, 25m, EntryBasis.Both, null, null, null, null, scope.OperatingBankId),
             ],
             _ =>
             [
@@ -189,6 +210,75 @@ public sealed class BankingCommandTests(PostgresFixture fixture)
 
         refused.Code.ShouldBe("account_period_locked");
         await scope.RunAsync(async () => (await scope.Db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0), ct);
+    }
+
+    // ---- a sweep is refused by a lock before its held fees are read (#743) ----
+
+    [Fact]
+    public async Task A_sweep_into_a_closed_period_is_refused_as_closed_even_with_no_fees_held()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await scope.RunAsync(() => Periods(scope).CloseAsync(2026, 2, ct), ct);
+
+        var refused = await Should.ThrowAsync<PeriodClosedException>(() => SendAsync(scope,
+            new RecordBankAdjustment("sweep", 25m, Feb5, scope.TrustBankId, scope.OperatingBankId, null, "adj:closed"), ct));
+
+        refused.Code.ShouldBe("period_closed");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_sweep_into_a_reconciled_month_at_either_end_is_refused_as_locked(bool lockDestination)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        var locked = lockDestination ? scope.OperatingBankId : scope.TrustBankId;
+        await scope.RunAsync(async () =>
+        {
+            var reconciliation = await new StartReconciliationHandler(scope.Db, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
+                .Handle(new StartReconciliation(locked, 2026, 2, 0m), ct);
+            await new FinalizeReconciliationHandler(scope.Db, scope.Actor, scope.Tenant, Calendar(new DateOnly(2026, 2, 28)), Lock(scope))
+                .Handle(new FinalizeReconciliation(reconciliation.Id), ct);
+        }, ct);
+
+        // No fees are held either, so the lock is what refuses it, ahead of the held-fees floor.
+        var refused = await Should.ThrowAsync<AccountPeriodLockedException>(() => SendAsync(scope,
+            new RecordBankAdjustment("sweep", 25m, Feb5, scope.TrustBankId, scope.OperatingBankId, null, "adj:locked"), ct));
+
+        refused.Code.ShouldBe("account_period_locked");
+        await scope.RunAsync(async () => (await scope.Db.Set<JournalEntry>().CountAsync(ct)).ShouldBe(0), ct);
+    }
+
+    // ---- the held fees a sweep may take (#743) ----
+
+    [Theory]
+    [InlineData(5, 50, 0)]   // the day the fees came in: the 80.00 all went on the 15th
+    [InlineData(20, 50, 0)]  // between the fee and the next interest: still nothing held
+    [InlineData(25, 50, 50)] // the day the 50.00 came in, and every day after
+    public async Task The_held_fees_read_answers_todays_balance_and_the_floor_from_a_date(
+        int fromDay, int held, int floor)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await scope.RunAsync(async () =>
+        {
+            await Events(scope).PostAsync(new InterestEarned(new Money(80m), Feb5, scope.TrustBankId, "in", "in:1"), ct);
+            await Events(scope).PostAsync(
+                new BankFeeCharged(new Money(80m), new DateOnly(2026, 2, 15), scope.TrustBankId, "fee", "fee:1"), ct);
+            await Events(scope).PostAsync(
+                new InterestEarned(new Money(50m), new DateOnly(2026, 2, 25), scope.TrustBankId, "in", "in:2"), ct);
+            // Fees held in another bank are not this one's.
+            await Events(scope).PostAsync(new InterestEarned(new Money(999m), Feb5, scope.DepositBankId, "in", "in:3"), ct);
+        }, ct);
+        var from = new DateOnly(2026, 2, fromDay);
+
+        HeldFeesView view = null!;
+        await scope.RunAsync(async () => view = await AccountingSender.Create(scope, NoLeases)
+            .Query(new GetHeldFees(scope.TrustBankId, from), ct), ct);
+
+        view.ShouldBe(new HeldFeesView(scope.TrustBankId, from, held, floor));
     }
 
     // ---- the guards on clearing ----

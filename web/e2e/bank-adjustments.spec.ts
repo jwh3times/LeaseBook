@@ -2,11 +2,12 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
-// A bank fee and a transfer between trust accounts, recorded from the bank register (#553), in the
+// A bank fee and a transfer between trust accounts, recorded from the bank register (#553), a PM
+// contribution (#720) and a sweep of the held fees to the PM operating account (#743), in the
 // scenario organization (`seed --org scenario`, ADR-056) as a staff member.
 //
-// Both are paid from the management fees the PM holds in the account, and the server refuses one
-// past them. The scenario seed ends with 368.74 held in the operating trust and none in the deposit
+// A fee, a transfer and a sweep are paid from the management fees the PM holds in the account, and
+// the server refuses one past them. The scenario seed ends with 368.74 held in the operating trust and none in the deposit
 // trust. Each run spends under a dollar of that on its fee, and its transfer goes out and comes back,
 // so the account keeps covering reruns, and CI's retries against the journal a first attempt left.
 //
@@ -14,6 +15,7 @@ import { test } from './test';
 // are March to May 2026, so today is always in an open month.
 const OPERATING_TRUST = 'Scenario Operating Trust';
 const DEPOSIT_TRUST = 'Scenario Deposit Trust';
+const PM_OPERATING = 'Scenario PM Operating';
 
 /** A small amount with random cents, so a run's rows are its own. */
 function randomAmount(wholeDollars: number): string {
@@ -60,7 +62,7 @@ async function tabTo(page: Page, target: Locator, max = 12): Promise<void> {
 const registerRow = (page: Page, description: string) =>
   page.getByRole('table').getByRole('row').filter({ hasText: description });
 
-test.describe('bank fee, trust transfer and PM contribution from the register', () => {
+test.describe('bank fee, trust transfer, PM contribution and fee sweep from the register', () => {
   test('records a bank fee by keyboard, and shows a fee past the held fees refused in place @scenario:bank-fee-from-register', async ({
     page,
   }) => {
@@ -199,5 +201,64 @@ test.describe('bank fee, trust transfer and PM contribution from the register', 
 
     await expect(page.getByText(`Bank fee of $${fee} recorded.`)).toBeVisible();
     await expect(registerRow(page, charged)).toContainText(`$${fee}`);
+  });
+
+  test('sweeps the held fees to the PM operating account by keyboard, prefilled with what the floor allows @scenario:pm-fee-sweep-from-register', async ({
+    page,
+  }) => {
+    await signIn(page, SCENARIO_STAFF);
+    // In the deposit trust, which holds no fees at rest, so the operating trust keeps covering the
+    // other tests' fees. A contribution puts some there, and the sweep takes everything held, which
+    // leaves the account as it was found, whatever an earlier attempt left behind.
+    await openRegister(page, DEPOSIT_TRUST);
+    const contribution = randomAmount(0);
+    let dialog = await openDialog(page);
+    await dialog.getByRole('radio', { name: 'PM contribution' }).check();
+    dialog = page.getByRole('dialog', { name: 'Record a PM contribution' });
+    await dialog.getByLabel('Amount').fill(contribution);
+    await dialog.getByLabel('Description').fill(describeRun('contribution to sweep'));
+    await dialog.getByRole('button', { name: 'Record contribution' }).click();
+    await expect(page.getByText(`PM contribution of $${contribution} recorded.`)).toBeVisible();
+
+    // The sweep, by keyboard: arrow from "Bank fee" past the transfer and the contribution to it.
+    await openDialog(page);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    dialog = page.getByRole('dialog', { name: 'Sweep PM fees to the PM operating account' });
+    await expect(dialog.getByRole('radio', { name: 'Sweep PM fees' })).toBeChecked();
+    // The amount starts at the most the server accepts today: at least this run's contribution.
+    await expect(dialog.getByText(/can be swept on this date/)).toBeVisible();
+    const amountField = dialog.getByLabel('Amount');
+    await expect(amountField).toHaveValue(/^\d+\.\d{2}$/);
+    const swept = await amountField.inputValue();
+    expect(Number(swept)).toBeGreaterThanOrEqual(Number(contribution));
+    // Only the PM operating account is offered, and as the only one it is chosen already.
+    await expect(dialog.getByLabel('To account').locator('option:checked')).toHaveText(
+      PM_OPERATING,
+    );
+    await expect(
+      dialog.getByLabel('To account').locator('option', { hasText: OPERATING_TRUST }),
+    ).toHaveCount(0);
+    const description = describeRun('fee sweep');
+    await tabTo(page, dialog.getByLabel('Description'));
+    await page.keyboard.type(description);
+    await tabTo(page, dialog.getByRole('button', { name: 'Record sweep' }));
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByText(`Sweep of $${swept} to ${PM_OPERATING} recorded.`)).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(registerRow(page, description)).toContainText(`$${swept}`);
+    await expect(registerRow(page, description)).toContainText('Uncleared');
+
+    // Nothing is left to sweep from today on, and the PM operating account's register shows it in.
+    await openDialog(page);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('dialog').getByText(/nothing to sweep/)).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+    await openRegister(page, PM_OPERATING);
+    await expect(registerRow(page, description)).toContainText(`$${swept}`);
   });
 });

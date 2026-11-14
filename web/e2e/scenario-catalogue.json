@@ -442,6 +442,15 @@
       "routes": []
     },
     {
+      "id": "pm-fee-sweep-from-register",
+      "workflow": "Sweep the PM's held fees from a trust account to the PM operating account by keyboard, the amount prefilled with the most the held-fees floor allows",
+      "area": "Banking",
+      "spec": "bank-adjustments.spec.ts",
+      "org": "scenario",
+      "events": ["PMFeesSwept"],
+      "routes": ["GET /api/accounting/banks/{bankAccountId}/held-fees"]
+    },
+    {
       "id": "owner-statement-view-export-deliver",
       "workflow": "View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it",
       "area": "Reporting",
@@ -871,12 +880,6 @@
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 744
-      },
-      {
-        "event": "PMFeesSwept",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 743
       },
       {
         "event": "VendorPaid",

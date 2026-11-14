@@ -113,8 +113,8 @@ public sealed class PostingConcurrencyTests(PostgresFixture fixture)
             lane => lane.Events.PostAsync(Sweep(scope), ct),
             lane => lane.Events.PostAsync(Sweep(scope), ct), ct);
 
-        var refused = race.SecondError.ShouldBeOfType<InsufficientLiabilityException>();
-        (refused.Kind, refused.Requested, refused.Held).ShouldBe((LiabilityKind.FeeSweep, 200m, 100m));
+        var refused = race.SecondError.ShouldBeOfType<PmFeesInsufficientException>();
+        (refused.Charge, refused.Shortfall, refused.Held).ShouldBe((HeldFeesCharge.Sweep, 200m, 100m));
         (await BalanceAsync(scope, b => b.HeldFeesAsync(scope.TrustBankId, ct), ct)).ShouldBe(100m);
     }
 

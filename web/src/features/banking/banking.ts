@@ -2,6 +2,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   download,
   getApiAccountingBanksBalances,
+  getApiAccountingBanksByBankAccountIdHeldFees,
   getApiAccountingBanksByBankAccountIdRegister,
   getApiAccountingReconciliations,
   getApiAccountingReconciliationsByIdLines,
@@ -23,6 +24,7 @@ import {
   type ColumnMap,
   type ColumnMappingView,
   type ConfirmMatchesResult,
+  type HeldFeesView,
   type ImportResult,
   type MatchPreviewResponse,
   type MatchPreviewRow,
@@ -41,6 +43,7 @@ export type {
   BankBalanceRow,
   ColumnMap,
   ColumnMappingView,
+  HeldFeesView,
   ImportResult,
   MatchPreviewResponse,
   MatchPreviewRow,
@@ -86,6 +89,31 @@ export function useBankBalances(
     enabled: opts.enabled ?? true,
     queryFn: async () =>
       (await unwrap(getApiAccountingBanksBalances(), 'Failed to load bank balances')).rows,
+  });
+}
+
+export const heldFeesKey = (bankAccountId: string) => ['held-fees', bankAccountId] as const;
+
+/**
+ * The management fees held in one bank today, and the lowest they are on or after `from` (#743): the
+ * most a sweep, a bank fee or a transfer dated `from` may take, which the server's guard reads too.
+ */
+export function useHeldFees(
+  bankAccountId: string,
+  from: string,
+  opts: { enabled?: boolean } = {},
+): UseQueryResult<HeldFeesView> {
+  return useQuery({
+    queryKey: [...heldFeesKey(bankAccountId), from],
+    enabled: (opts.enabled ?? true) && bankAccountId !== '' && /^\d{4}-\d{2}-\d{2}$/.test(from),
+    queryFn: () =>
+      unwrap(
+        getApiAccountingBanksByBankAccountIdHeldFees({
+          path: { bankAccountId },
+          query: { from },
+        }),
+        'Failed to load the fees held in this account',
+      ),
   });
 }
 
@@ -228,11 +256,12 @@ export async function unlockReconciliation(
 }
 
 /**
- * The adjustments the register offers: a bank fee, a transfer between trust accounts (#553), and a PM
- * contribution into a trust account (#720). The server also takes `interest`, which no screen offers
- * until #307 settles who interest belongs to.
+ * The adjustments the register offers: a bank fee, a transfer between trust accounts (#553), a PM
+ * contribution into a trust account (#720), and a sweep of the PM's held fees to the PM operating
+ * account (#743). The server also takes `interest`, which no screen offers until #307 settles who
+ * interest belongs to.
  */
-export type BankAdjustmentKind = 'fee' | 'transfer' | 'contribution';
+export type BankAdjustmentKind = 'fee' | 'transfer' | 'contribution' | 'sweep';
 
 /** Records a bank adjustment the register offers; the one caller path for the route. */
 export async function recordBankAdjustment(

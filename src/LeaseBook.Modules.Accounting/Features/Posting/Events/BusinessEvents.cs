@@ -112,10 +112,13 @@ public sealed record ManagementFeeAssessed(
     Guid OwnerId, Guid? PropertyId,
     Money Amount, DateOnly Date, Guid OperatingBankId, string Description, string? SourceRef = null) : AccountingEvent;
 
-/// <summary>Sweeps held PM fees from the operating trust bank to the PM's own operating bank.</summary>
+/// <summary>
+/// Sweeps held PM fees from a trust bank (<c>OperatingBankId</c>: the operating or the security-deposit
+/// trust account) to the PM's own operating bank, guarded by the held-fees floor (#743).
+/// </summary>
 public sealed record PMFeesSwept(
     Money Amount, DateOnly Date, Guid OperatingBankId, Guid PmBankId,
-    string Description, string? SourceRef = null) : AccountingEvent;
+    string Description, string? SourceRef = null, string? InternalNote = null) : AccountingEvent;
 
 /// <summary>An owner deposits their own funds into a trust bank.</summary>
 public sealed record OwnerContribution(

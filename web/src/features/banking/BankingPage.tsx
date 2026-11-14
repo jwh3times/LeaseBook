@@ -18,6 +18,7 @@ import {
   applyClearances,
   type BankingError,
   bankRegisterKey,
+  heldFeesKey,
   finalizeReconciliation,
   reconciliationHistoryKey,
   type RegisterRow,
@@ -164,6 +165,7 @@ export function BankingPage() {
     void queryClient.invalidateQueries({ queryKey: bankRegisterKey(accountId) });
     void queryClient.invalidateQueries({ queryKey: ['bank-balances'] });
     void queryClient.invalidateQueries({ queryKey: reconciliationHistoryKey(accountId) });
+    void queryClient.invalidateQueries({ queryKey: heldFeesKey(accountId) });
   };
 
   // The month reconciled is the organization's current month, taken from the zone its books keep: the
@@ -503,11 +505,13 @@ export function BankingPage() {
             refreshAccount(acctId);
             if (toBankAccountId) refreshAccount(toBankAccountId);
             setAdjustmentNotice(
-              toBankAccountId
-                ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
-                : kind === 'contribution'
-                  ? `PM contribution of ${formatMoney(amount)} recorded.`
-                  : `Bank fee of ${formatMoney(amount)} recorded.`,
+              kind === 'sweep'
+                ? `Sweep of ${formatMoney(amount)} to ${findBank(toBankAccountId ?? '')?.name ?? 'the PM operating account'} recorded.`
+                : toBankAccountId
+                  ? `Transfer of ${formatMoney(amount)} to ${findBank(toBankAccountId)?.name ?? 'the other account'} recorded.`
+                  : kind === 'contribution'
+                    ? `PM contribution of ${formatMoney(amount)} recorded.`
+                    : `Bank fee of ${formatMoney(amount)} recorded.`,
             );
           }}
         />

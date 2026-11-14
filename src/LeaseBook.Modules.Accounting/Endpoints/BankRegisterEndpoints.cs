@@ -35,6 +35,12 @@ public sealed class BankRegisterEndpoints : IEndpointModule
                 })
             .Produces<RegisterResponse>();
 
+        // The held fees a sweep dated `from` may take (#743): the register's sweep prefills from it.
+        group.MapGet("/banks/{bankAccountId:guid}/held-fees",
+                async (Guid bankAccountId, DateOnly from, ISender sender, CancellationToken ct) =>
+                    TypedResults.Ok(await sender.Query(new GetHeldFees(bankAccountId, from), ct)))
+            .Produces<HeldFeesView>();
+
         group.MapPost("/banks/{bankAccountId:guid}/adjustments",
                 async (Guid bankAccountId, RecordBankAdjustment body, ISender sender, CancellationToken ct) =>
                     TypedResults.Ok(await sender.Send(body with { BankAccountId = bankAccountId }, ct)))

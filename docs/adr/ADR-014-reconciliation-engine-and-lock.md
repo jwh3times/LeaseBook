@@ -232,3 +232,35 @@ moves does so deliberately, in the same change. Replaying them found one excepti
 organization's finalized April 2026 Operating Trust row was written directly by its seeder and stamped
 no lines, so I12 reported it. The seeder now stamps the four cleared lines dated through April with it,
 which nets April to its 250,450.14 statement; no posted figure moves, only those lines' status.
+
+## Addendum — a fee sweep keeps to the held-fees floor, and staff record one from the register (2026-11-13)
+
+Since a transfer cannot go into the PM operating bank (the first addendum), `PMFeesSwept` is the only
+way the property manager's earned fees leave trust, and only the seeders posted one (#743). Its guard
+also predated the floor: it refused a sweep larger than the fees held in the bank **today**, with
+`insufficient_liability`, so a backdated sweep could take an earlier day's held fees below zero while
+today's balance had since recovered. Invariant I11 reads today's balance only, so nothing reported it.
+
+**The floor rule names the sweep.** `PMFeesSwept` is refused with `pm_fees_insufficient` (409) when its
+amount exceeds the lowest PM fees held in its source bank on or after its date, read under the posting
+lock: the same floor, code and lock as a bank fee and a transfer out of a bank. Its message says how
+much was held and that a smaller sweep from that date on posts; it offers no contribution, since
+sweeping a contribution straight back out would be pointless. `insufficient_liability` no longer
+answers a sweep. A sweep into a closed period or a reconciled month of either bank is refused as that
+first, before the floor is read, as a bank fee is.
+
+**A sweep leaves trust for the PM operating bank.** Its source is a trust bank, operating or
+security-deposit, and its destination a PM operating bank; anything else is refused with
+`sweep_bank_invalid` (422) naming the end at fault. Between two trust banks it is a transfer, and the
+PM operating bank holds no fees for a sweep to take. Before, a wrong bank at either end failed as an
+unknown account, because the template named the two account codes outright.
+
+**Staff record it.** The bank register's dialog on a trust bank offers **Sweep PM fees**, never on the
+PM operating bank. It defaults the PM operating account when the organization has one, dates the sweep
+the organization's today, and prefills the amount with the floor at the chosen date, read from
+`GET /api/accounting/banks/{bankAccountId}/held-fees`. That read returns today's held fees and the
+floor together and changes nothing; the posting guard, not the prefill, is the control. Staff
+(`RequirePMStaff`) may sweep, as they may record any other bank-register write.
+
+A schedule, a cap, or any rule on how often fees must leave trust is not decided here: that is for the
+compliance review. I11 still reads today's balance; the floor is enforced at posting time.

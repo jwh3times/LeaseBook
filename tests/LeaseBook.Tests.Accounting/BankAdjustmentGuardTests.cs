@@ -211,6 +211,97 @@ public sealed class BankAdjustmentGuardTests(PostgresFixture fixture)
         (await EntryCountAsync(scope, ct)).ShouldBe(before);
     }
 
+    // ---- a PM fee sweep (#743) ----
+
+    [Fact]
+    public async Task A_backdated_sweep_is_refused_when_held_fees_dipped_below_it_since_even_though_today_covers_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        // 80.00 held on the sweep's date, all of it gone ten days later, 50.00 earned after that. Today's
+        // 50.00 covers a 25.00 sweep, but dated back here it would leave -25.00 in between. Before the
+        // floor the sweep read today's balance alone and posted.
+        await PostAsync(scope, Interest(scope.TrustBankId, 80m, Date), ct);
+        await PostAsync(scope, Fee(scope.TrustBankId, 80m, Date.AddDays(10)), ct);
+        await PostAsync(scope, Interest(scope.TrustBankId, 50m, Date.AddDays(20)), ct);
+        var before = await EntryCountAsync(scope, ct);
+
+        var error = await Should.ThrowAsync<PmFeesInsufficientException>(
+            () => PostAsync(scope, Sweep(scope.TrustBankId, scope.OperatingBankId, 25m, Date), ct));
+
+        (error.Code, error.Shortfall, error.Held, error.BankAccountId, error.Charge)
+            .ShouldBe(("pm_fees_insufficient", 25m, 0m, scope.TrustBankId, HeldFeesCharge.Sweep));
+        (await EntryCountAsync(scope, ct)).ShouldBe(before);
+        (await HeldFeesAsync(scope, scope.TrustBankId, ct)).ShouldBe(50m);
+    }
+
+    [Fact]
+    public async Task A_sweep_beyond_the_held_fees_is_refused_with_the_held_fees_code()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await PostAsync(scope, Interest(scope.TrustBankId, 99.99m, Date), ct);
+
+        var error = await Should.ThrowAsync<PmFeesInsufficientException>(
+            () => PostAsync(scope, Sweep(scope.TrustBankId, scope.OperatingBankId, 100m, Date), ct));
+
+        (error.Code, error.Shortfall, error.Held).ShouldBe(("pm_fees_insufficient", 100m, 99.99m));
+        error.Message.ShouldContain("sweep");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_sweep_within_the_floor_moves_the_held_fees_to_the_pm_operating_bank(bool fromDepositBank)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        var source = fromDepositBank ? scope.DepositBankId : scope.TrustBankId;
+        await PostAsync(scope, Interest(source, 120m, Date), ct);
+
+        await PostAsync(scope, Sweep(source, scope.OperatingBankId, 120m, Date), ct);
+
+        (await HeldFeesAsync(scope, source, ct)).ShouldBe(0m);
+        (await HeldFeesAsync(scope, scope.OperatingBankId, ct)).ShouldBe(120m);
+        await AssertCleanAsync(scope, ct);
+    }
+
+    [Fact]
+    public async Task A_sweep_into_a_trust_bank_is_refused_and_posts_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        await PostAsync(scope, Interest(scope.TrustBankId, 500m, Date), ct);
+        var before = await EntryCountAsync(scope, ct);
+
+        var error = await Should.ThrowAsync<SweepBankInvalidException>(
+            () => PostAsync(scope, Sweep(scope.TrustBankId, scope.DepositBankId, 100m, Date), ct));
+
+        (error.Code, error.End, error.BankAccountId)
+            .ShouldBe(("sweep_bank_invalid", TransferEnd.Destination, scope.DepositBankId));
+        (await EntryCountAsync(scope, ct)).ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task A_sweep_out_of_the_pm_operating_bank_is_refused_and_posts_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct);
+        // Fees are held there, so the floor guard alone would let it through.
+        await PostAsync(scope, Interest(scope.OperatingBankId, 500m, Date), ct);
+        var before = await EntryCountAsync(scope, ct);
+
+        var error = await Should.ThrowAsync<SweepBankInvalidException>(
+            () => PostAsync(scope, Sweep(scope.OperatingBankId, scope.OperatingBankId, 100m, Date), ct));
+
+        (error.Code, error.End, error.BankAccountId)
+            .ShouldBe(("sweep_bank_invalid", TransferEnd.Source, scope.OperatingBankId));
+        (await EntryCountAsync(scope, ct)).ShouldBe(before);
+    }
+
+    private static PMFeesSwept Sweep(Guid from, Guid to, decimal amount, DateOnly date) =>
+        new(new Money(amount), date, from, to, "PM fee sweep");
+
     private static PMContribution Contribution(Guid bank, decimal amount, DateOnly date) =>
         new(new Money(amount), date, bank, "PM contribution");
 

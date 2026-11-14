@@ -145,6 +145,84 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
         (after.Rows.Count, after.Totals.Book).ShouldBe((2, 0m));
     }
 
+    /// <summary>
+    /// A fee sweep over HTTP (#743): the held-fees read gives the most a sweep dated then may take, a sweep
+    /// of exactly that posts to both banks, and a sweep past it, into a trust account or dated after today
+    /// is refused with its own code.
+    /// </summary>
+    [Fact]
+    public async Task A_sweep_takes_up_to_the_held_fees_floor_into_the_pm_operating_account()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var setup = await SetupAsync(ct);
+        var client = await LoggedInClientAsync(setup, ct);
+        var url = $"/api/accounting/banks/{setup.TrustBankId}/adjustments";
+        var feb10 = new DateOnly(2026, 2, 10);
+        // 60.00 held from Feb 1, 40.00 of it gone on Feb 10, 100.00 more earned on Feb 20: 120.00 today,
+        // but a sweep dated Feb 1 may take only the 20.00 held on Feb 10.
+        await PostOkAsync<PostResult>(client, url, new { kind = "interest", amount = 60m, date = Feb1, sourceRef = Key() }, ct);
+        await PostOkAsync<PostResult>(client, url, new { kind = "fee", amount = 40m, date = feb10, sourceRef = Key() }, ct);
+        await PostOkAsync<PostResult>(client, url,
+            new { kind = "interest", amount = 100m, date = new DateOnly(2026, 2, 20), sourceRef = Key() }, ct);
+
+        var held = await GetAsync<HeldFeesView>(
+            client, $"/api/accounting/banks/{setup.TrustBankId}/held-fees?from=2026-02-01", ct);
+        (held.Held, held.Floor).ShouldBe((120m, 20m));
+
+        var over = await client.PostAsJsonAsync(url, new
+        {
+            kind = "sweep",
+            amount = 20.01m,
+            date = Feb1,
+            toBankAccountId = setup.OperatingBankId,
+            sourceRef = Key(),
+        }, ct);
+        await ShouldBeProblemAsync(over, HttpStatusCode.Conflict, "pm_fees_insufficient",
+            "This account holds only 20.00 in management fees on or after the sweep's date, less than the 20.01 sweep, so nothing was posted. Sweep no more than the fees held here from that date on.", ct);
+
+        var intoTrust = await client.PostAsJsonAsync($"/api/accounting/banks/{setup.TrustBankId}/adjustments", new
+        {
+            kind = "sweep",
+            amount = 5m,
+            date = Feb1,
+            toBankAccountId = setup.DepositBankId,
+            sourceRef = Key(),
+        }, ct);
+        await ShouldBeProblemAsync(intoTrust, HttpStatusCode.UnprocessableEntity, "sweep_bank_invalid",
+            "A fee sweep moves management fees into the PM operating account, and the account it goes to is not one.", ct);
+
+        var future = await client.PostAsJsonAsync(url, new
+        {
+            kind = "sweep",
+            amount = 5m,
+            date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(3),
+            toBankAccountId = setup.OperatingBankId,
+            sourceRef = Key(),
+        }, ct);
+        future.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        using (var problem = System.Text.Json.JsonDocument.Parse(await future.Content.ReadAsStringAsync(ct)))
+        {
+            problem.RootElement.GetProperty("code").GetString().ShouldBe("posting_date_in_future");
+        }
+
+        await PostOkAsync<PostResult>(client, url, new
+        {
+            kind = "sweep",
+            amount = 20m,
+            date = Feb1,
+            toBankAccountId = setup.OperatingBankId,
+            sourceRef = Key(),
+        }, ct);
+
+        var trust = await GetAsync<RegisterResponse>(client, $"/api/accounting/banks/{setup.TrustBankId}/register", ct);
+        var operating = await GetAsync<RegisterResponse>(
+            client, $"/api/accounting/banks/{setup.OperatingBankId}/register", ct);
+        (trust.Totals.Book, operating.Totals.Book).ShouldBe((100m, 20m));
+        var after = await GetAsync<HeldFeesView>(
+            client, $"/api/accounting/banks/{setup.TrustBankId}/held-fees?from=2026-02-01", ct);
+        (after.Held, after.Floor).ShouldBe((100m, 0m));
+    }
+
     private static async Task ShouldBeProblemAsync(
         HttpResponseMessage response, HttpStatusCode status, string code, string detail, CancellationToken ct)
     {
@@ -155,7 +233,7 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
             .ShouldBe((code, detail));
     }
 
-    private sealed record Setup(Guid OrgId, string Email, Guid TrustBankId, Guid OperatingBankId);
+    private sealed record Setup(Guid OrgId, string Email, Guid TrustBankId, Guid OperatingBankId, Guid DepositBankId);
 
     private static string Key() => UuidV7.NewId().ToString();
 
@@ -187,6 +265,7 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
 
         Guid trustBankId = default;
         Guid operatingBankId = default;
+        Guid depositBankId = default;
         await using (var scope = fixture.Api.Services.CreateAsyncScope())
         {
             var executor = scope.ServiceProvider.GetRequiredService<OrgScopedExecutor>();
@@ -196,10 +275,11 @@ public sealed class BankRegisterHttpTests(PostgresFixture fixture)
                 trustBankId = (await sender.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct)).Id;
                 operatingBankId = (await sender.Send(
                     new CreateBankAccount("Management Operating", null, null, "operating"), ct)).Id;
+                depositBankId = (await sender.Send(new CreateBankAccount("Deposit Trust", null, null, "deposit"), ct)).Id;
             }, ct);
         }
 
-        return new Setup(orgId, email, trustBankId, operatingBankId);
+        return new Setup(orgId, email, trustBankId, operatingBankId, depositBankId);
     }
 
     private async Task<HttpClient> LoggedInClientAsync(Setup setup, CancellationToken ct)

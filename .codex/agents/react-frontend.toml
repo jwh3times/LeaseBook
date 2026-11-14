@@ -395,7 +395,7 @@ actually goes red with the branch reverted.
   sending anything, so the fields' own constraints still run: the first failing field shows the
   browser's message, takes focus, and nothing is sent. Enter on the focused button is the keyboard
   path. The money dialogs are refund check, apply, late-fee override, transfer of ownership, and bank
-  adjustment (a bank fee, a transfer or a PM contribution); a new one follows the same rule and adds no `onKeyDown` handler that saves. The
+  adjustment (a bank fee, a transfer, a PM contribution or a fee sweep); a new one follows the same rule and adds no `onKeyDown` handler that saves. The
   rule is for dialogs, not the ledger composer: recording a payment there submits on Enter in the
   amount by design, because that Enter is the third interaction of the record-payment budget
 

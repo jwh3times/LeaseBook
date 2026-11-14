@@ -11,20 +11,25 @@ import { reportFirstInvalidField } from '@/lib/fieldConstraints';
 import { orgTodayUnavailableMessage, useOrgToday } from '@/lib/orgCalendar';
 import { useLockedPeriodMessage } from '@/features/tenants/ledgerMutations';
 import { centsToAmount, newIssueKey, parseAmountCents } from '@/features/refundChecks/refundChecks';
-import { type BankAdjustmentKind, recordBankAdjustment, useBankBalances } from './banking';
+import {
+  type BankAdjustmentKind,
+  recordBankAdjustment,
+  useBankBalances,
+  useHeldFees,
+} from './banking';
 
 export interface BankAdjustmentDialogProps {
   bankAccountId: string;
   bankName: string;
   /**
-   * Whether the open account is a trust bank: only a trust bank offers a transfer (#553) or a PM
-   * contribution (#720).
+   * Whether the open account is a trust bank: only a trust bank offers a transfer (#553), a PM
+   * contribution (#720) or a sweep of its held fees (#743).
    */
   isTrust: boolean;
   onClose: () => void;
   /**
-   * Posted: the page refreshes the open account, and a transfer's destination, and says what was
-   * recorded. `toBankAccountId` is null for anything but a transfer.
+   * Posted: the page refreshes the open account, and a transfer's or a sweep's destination, and says
+   * what was recorded. `toBankAccountId` is null for anything but a transfer or a sweep.
    */
   onPosted: (posted: {
     kind: BankAdjustmentKind;
@@ -64,6 +69,12 @@ const KINDS: Record<
     action: 'Record contribution',
     placeholder: 'PM contribution',
   },
+  sweep: {
+    label: 'Sweep PM fees',
+    title: 'Sweep PM fees to the PM operating account',
+    action: 'Record sweep',
+    placeholder: 'PM fee sweep',
+  },
 };
 
 /**
@@ -71,8 +82,10 @@ const KINDS: Record<
  * paid from the PM's management fees held in the account, and the server refuses one that would take
  * them below zero (`pm_fees_insufficient`), so that refusal is shown beside the amount in the server's
  * own words, which say how much is held and that a PM contribution covers it. A PM contribution (#720)
- * is the property manager's own money paid into a trust account to join those held fees. Interest is
- * not offered until #307 settles who it belongs to.
+ * is the property manager's own money paid into a trust account to join those held fees. A sweep (#743)
+ * moves those held fees out of trust into the PM operating account: its amount starts at the most the
+ * server will accept on its date, the lowest the fees held there are from that date on, and follows the
+ * date until the operator types one. Interest is not offered until #307 settles who it belongs to.
  * <para>
  * It moves money, so like the other money dialogs it has no form and saves only from its button, never
  * from Enter, and the button runs each field's own constraints before anything is sent (#711). One
@@ -96,6 +109,8 @@ export function BankAdjustmentDialog({
 
   const [kind, setKind] = useState<BankAdjustmentKind>('fee');
   const [amount, setAmount] = useState('');
+  // False until the operator types an amount: a sweep's amount is the held-fees floor at its date.
+  const [amountEdited, setAmountEdited] = useState(false);
   // null until the operator types one: the entry is dated the organization's today (#642).
   const [dateEdit, setDate] = useState<string | null>(null);
   const date = dateEdit ?? (orgToday.status === 'ready' ? orgToday.today : '');
@@ -104,24 +119,46 @@ export function BankAdjustmentDialog({
   const [internalNote, setInternalNote] = useState('');
   const [error, setError] = useState<FormError | null>(null);
 
+  const transfer = kind === 'transfer';
+  const sweep = kind === 'sweep';
+  const namesDestination = transfer || sweep;
+
+  // A transfer goes to another trust account; a sweep to a PM operating account, never a trust one.
   const destinations = useMemo(
     () =>
-      balances.isSuccess
-        ? balances.data.filter((bank) => bank.isTrust && bank.bankAccountId !== bankAccountId)
-        : [],
-    [balances.isSuccess, balances.data, bankAccountId],
+      !balances.isSuccess
+        ? []
+        : kind === 'transfer'
+          ? balances.data.filter((bank) => bank.isTrust && bank.bankAccountId !== bankAccountId)
+          : kind === 'sweep'
+            ? balances.data.filter((bank) => !bank.isTrust)
+            : [],
+    [balances.isSuccess, balances.data, bankAccountId, kind],
   );
-  // One destination needs no choosing; several start unchosen so a transfer never lands by default.
-  const to = toChoice || (destinations.length === 1 ? (destinations[0]?.bankAccountId ?? '') : '');
-  const transfer = kind === 'transfer';
-  const noDestination = transfer && balances.isSuccess && destinations.length === 0;
+  // One destination needs no choosing; several start unchosen so money never lands by default. A
+  // choice made for the other kind is not one of this kind's accounts, so it is not kept.
+  const chosen = destinations.some((bank) => bank.bankAccountId === toChoice) ? toChoice : '';
+  const to = chosen || (destinations.length === 1 ? (destinations[0]?.bankAccountId ?? '') : '');
+  const noDestination = namesDestination && balances.isSuccess && destinations.length === 0;
 
-  // A transfer's destinations come from the account list; a failed or pending read of it — or a
-  // failed refetch that still holds rows naming a since-deactivated account — blocks the write.
-  const destinationsUnavailable = transfer && (balances.isPending || balances.isError);
-  const blocked = orgToday.status !== 'ready' || destinationsUnavailable || noDestination;
+  // A transfer's or a sweep's destinations come from the account list; a failed or pending read of
+  // it — or a failed refetch that still holds rows naming a since-deactivated account — blocks the write.
+  const destinationsUnavailable = namesDestination && (balances.isPending || balances.isError);
+  // What a sweep dated `date` may take: the server refuses anything past this floor.
+  const heldFees = useHeldFees(bankAccountId, date, { enabled: sweep });
+  const floorCents = heldFees.isSuccess
+    ? Math.max(0, Math.round(num(heldFees.data.floor) * 100))
+    : null;
+  const prefill = floorCents ? centsToAmount(floorCents).toFixed(2) : '';
+  const shownAmount = sweep && !amountEdited ? prefill : amount;
+  // The amount a sweep offers comes from that read, so like the destinations a failed or pending read
+  // of it blocks the write. A blank date reads nothing; the date field's own constraint names it.
+  const heldFeesUnavailable =
+    sweep && (heldFees.isError || (heldFees.fetchStatus === 'fetching' && !heldFees.isSuccess));
+  const blocked =
+    orgToday.status !== 'ready' || destinationsUnavailable || noDestination || heldFeesUnavailable;
 
-  const amountValue = centsToAmount(parseAmountCents(amount) ?? 0);
+  const amountValue = centsToAmount(parseAmountCents(shownAmount) ?? 0);
 
   const mutation = useMutation<{ entryId: string }, ApiError, void>({
     mutationFn: () =>
@@ -130,7 +167,7 @@ export function BankAdjustmentDialog({
         amount: amountValue,
         date,
         description: description.trim() === '' ? null : description.trim(),
-        toBankAccountId: transfer ? to : null,
+        toBankAccountId: namesDestination ? to : null,
         sourceRef: sourceRef.current,
         internalNote: internalNote.trim() === '' ? null : internalNote.trim(),
       }),
@@ -145,6 +182,7 @@ export function BankAdjustmentDialog({
           setError({ ...err, field: 'amount' });
           break;
         case 'transfer_bank_not_trust':
+        case 'sweep_bank_invalid':
           setError({ ...err, field: 'to' });
           break;
         case 'account_period_locked':
@@ -163,7 +201,7 @@ export function BankAdjustmentDialog({
   });
 
   const posted = () =>
-    onPosted({ kind, amount: amountValue, toBankAccountId: transfer ? to : null });
+    onPosted({ kind, amount: amountValue, toBankAccountId: namesDestination ? to : null });
 
   const fail = (field: FieldName, message: string) => {
     setError({ field, message });
@@ -175,11 +213,12 @@ export function BankAdjustmentDialog({
     // Each field's own constraints first, in order: the browser names the first that fails.
     if (!reportFirstInvalidField(bodyRef.current)) return;
     if (orgToday.status !== 'ready') return fail('date', orgTodayUnavailableMessage(orgToday));
-    const cents = parseAmountCents(amount);
+    const cents = parseAmountCents(shownAmount);
     if (cents === null || cents <= 0) {
       return fail('amount', 'Enter an amount greater than zero, with at most two decimal places.');
     }
     if (transfer && to === '') return fail('to', 'Choose the trust account it goes to.');
+    if (sweep && to === '') return fail('to', 'Choose the PM operating account it goes to.');
     setError(null);
     mutation.mutate();
   };
@@ -218,6 +257,12 @@ export function BankAdjustmentDialog({
             fees held there, so a bank fee or a transfer dated on or after it can be paid from it.
             It is never counted as fee income.
           </p>
+        ) : sweep ? (
+          <p className="t3 fs13">
+            Moves the management fees the property manager has earned out of <b>{bankName}</b> into
+            its own operating account. Owner and tenant funds are never swept, so the amount can be
+            no more than the fees held there from its date on.
+          </p>
         ) : (
           <p className="t3 fs13">
             Paid from the management fees held in <b>{bankName}</b>. Owner and tenant funds are
@@ -237,6 +282,8 @@ export function BankAdjustmentDialog({
                   checked={kind === choice}
                   onChange={() => {
                     setKind(choice);
+                    // A sweep starts from what may be swept, whatever was typed for another kind.
+                    if (choice === 'sweep') setAmountEdited(false);
                     setError(null);
                   }}
                 />
@@ -258,10 +305,13 @@ export function BankAdjustmentDialog({
               required
               pattern={AMOUNT_PATTERN}
               title="An amount in dollars, with at most two decimal places"
-              value={amount}
+              value={shownAmount}
               aria-invalid={error?.field === 'amount' || undefined}
-              aria-describedby={describedBy('amount')}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              aria-describedby={describedBy('amount', sweep ? `${fieldId}-held` : '')}
+              onChange={(e) => {
+                setAmount(e.target.value.replace(/[^0-9.]/g, ''));
+                setAmountEdited(true);
+              }}
             />
           </div>
           <div className="col gap6">
@@ -301,12 +351,54 @@ export function BankAdjustmentDialog({
           </div>
         )}
 
-        {transfer &&
+        {sweep && (
+          <div id={`${fieldId}-held`} className="col gap6">
+            {heldFees.isError ? (
+              <>
+                <ApiErrorNotice
+                  error={heldFees.error}
+                  fallback="Couldn’t load the fees held in this account."
+                  kind="read"
+                />
+                <ErrorAction
+                  error={heldFees.error}
+                  onRetry={() => void heldFees.refetch()}
+                  retrying={heldFees.isFetching}
+                />
+              </>
+            ) : heldFees.isSuccess ? (
+              floorCents ? (
+                <span className="t3 fs12">
+                  Up to <Money value={num(heldFees.data.floor)} plain /> can be swept on this date,
+                  the least held here from then on. Held here today:{' '}
+                  <Money value={num(heldFees.data.held)} plain />.
+                </span>
+              ) : (
+                <span className="t3 fs12" role="status">
+                  No management fees are held here from this date on, so there is nothing to sweep.
+                </span>
+              )
+            ) : heldFees.fetchStatus === 'fetching' ? (
+              <>
+                <span className="t3 fs12" role="status">
+                  Loading the fees held here…
+                </span>
+                <div className="pf-skeleton" style={{ height: 20 }} />
+              </>
+            ) : (
+              <span className="t3 fs12">Enter a date to see the fees held here from it on.</span>
+            )}
+          </div>
+        )}
+
+        {namesDestination &&
           (balances.isError ? (
             <div className="col gap6">
               <ApiErrorNotice
                 error={balances.error}
-                fallback="Couldn’t load the trust accounts."
+                fallback={
+                  sweep ? 'Couldn’t load the bank accounts.' : 'Couldn’t load the trust accounts.'
+                }
                 kind="read"
               />
               <ErrorAction
@@ -317,12 +409,16 @@ export function BankAdjustmentDialog({
             </div>
           ) : balances.isPending ? (
             <div className="col gap6">
-              <span className="t3 fs12">Loading the trust accounts…</span>
+              <span className="t3 fs12">
+                {sweep ? 'Loading the bank accounts…' : 'Loading the trust accounts…'}
+              </span>
               <div className="pf-skeleton" style={{ height: 20 }} />
             </div>
           ) : noDestination ? (
             <p className="t3 fs13" role="status">
-              There is no other trust account to transfer to. Add one in Settings first.
+              {sweep
+                ? 'There is no PM operating account to sweep to. Add one in Settings first.'
+                : 'There is no other trust account to transfer to. Add one in Settings first.'}
             </p>
           ) : (
             <div className="col gap6">
@@ -337,7 +433,11 @@ export function BankAdjustmentDialog({
                 aria-describedby={describedBy('to')}
                 onChange={(e) => setTo(e.target.value)}
               >
-                {destinations.length > 1 && <option value="">Choose a trust account</option>}
+                {destinations.length > 1 && (
+                  <option value="">
+                    {sweep ? 'Choose a PM operating account' : 'Choose a trust account'}
+                  </option>
+                )}
                 {destinations.map((bank) => (
                   <option key={bank.bankAccountId} value={bank.bankAccountId}>
                     {bank.name}

@@ -13,9 +13,10 @@ namespace LeaseBook.Modules.Accounting.Features.Banking;
 
 /// <summary>
 /// Records a bank-only adjustment from the register (P65): a service fee, interest, a transfer between
-/// two of the org's bank accounts, or a PM contribution into a trust bank (#720). The <c>Kind</c> selects
-/// the posting template; all four route through the existing engine — no new journal write path.
-/// Owner-/vendor-/fee-sweep runs are M6, not here.
+/// two of the org's bank accounts, a PM contribution into a trust bank (#720), or a sweep of the PM's
+/// held fees from a trust bank to the PM operating bank (#743). The <c>Kind</c> selects the posting
+/// template; all five route through the existing engine — no new journal write path. A transfer and a
+/// sweep name where the money goes in <c>ToBankAccountId</c>.
 /// <para>
 /// <c>Description</c> is the entry's register/ledger text; <c>InternalNote</c> is staff-only (#468).
 /// </para>
@@ -29,7 +30,7 @@ public sealed record RecordBankAdjustment(
 public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBankAdjustment>
 {
     // Stryker disable once all : a static initializer runs once per test process (docs/testing/mutation.md, Static initializers)
-    public static readonly string[] Kinds = ["fee", "interest", "transfer", "contribution"];
+    public static readonly string[] Kinds = ["fee", "interest", "transfer", "contribution", "sweep"];
 
     public RecordBankAdjustmentValidator()
     {
@@ -42,19 +43,33 @@ public sealed class RecordBankAdjustmentValidator : AbstractValidator<RecordBank
         // A transfer needs a distinct destination account; the other kinds must not carry one, since
         // their handler would drop it. WithMessage covers only the validator before it, so the
         // missing-destination message is attached to both NotNull and NotEqual (#611).
-        When(x => string.Equals(x.Kind, "transfer", StringComparison.OrdinalIgnoreCase), () =>
+        When(x => IsKind(x, "transfer"), () =>
         {
             RuleFor(x => x.ToBankAccountId)
                 .NotNull().WithMessage("A transfer requires a destination bank account.")
                 .NotEqual(Guid.Empty).WithMessage("A transfer requires a destination bank account.");
             RuleFor(x => x.ToBankAccountId).NotEqual(x => x.BankAccountId)
                 .WithMessage("A transfer's source and destination must differ.");
-        }).Otherwise(() =>
+        });
+
+        // A sweep goes to the PM operating account; which bank that is the posting decides, so a sweep
+        // naming its own source is refused there as not a PM operating account (#743).
+        When(x => IsKind(x, "sweep"), () =>
+        {
+            RuleFor(x => x.ToBankAccountId)
+                .NotNull().WithMessage("A sweep requires the PM operating account it goes to.")
+                .NotEqual(Guid.Empty).WithMessage("A sweep requires the PM operating account it goes to.");
+        });
+
+        When(x => !IsKind(x, "transfer") && !IsKind(x, "sweep"), () =>
         {
             RuleFor(x => x.ToBankAccountId).Null()
-                .WithMessage("Only a transfer names a destination bank account.");
+                .WithMessage("Only a transfer or a sweep names a destination bank account.");
         });
     }
+
+    private static bool IsKind(RecordBankAdjustment command, string kind) =>
+        string.Equals(command.Kind, kind, StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class RecordBankAdjustmentHandler(
@@ -66,14 +81,15 @@ internal sealed class RecordBankAdjustmentHandler(
 {
     public async Task<PostResult> Handle(RecordBankAdjustment command, CancellationToken ct)
     {
-        // A bank fee, interest, transfer or PM contribution appears on the bank's statement by the day it is
-        // recorded (#642).
+        // A bank fee, interest, transfer, PM contribution or sweep appears on the bank's statement by the day
+        // it is recorded (#642).
         await calendar.EnsureNotAfterTodayAsync(command.Date, ct);
 
         // A closed period or a reconciled month refuses the posting whatever the PM's held fees are, so
-        // say that first: the held-fees floor a fee or a transfer reads (#553) would otherwise answer a
-        // posting into a locked month with a shortfall nobody can fix there. The posting service checks
-        // both again; this only orders the refusals, the same way TransferPropertyDeposits does.
+        // say that first: the held-fees floor a fee, a transfer or a sweep reads (#553, #743) would
+        // otherwise answer a posting into a locked month with a shortfall nobody can fix there. The
+        // posting service checks both again; this only orders the refusals, the same way
+        // TransferPropertyDeposits does.
         var period = await periods.GetOpenPeriodAsync(command.Date, ct);
         if (period.Status == PeriodStatus.Closed)
         {
@@ -101,6 +117,9 @@ internal sealed class RecordBankAdjustmentHandler(
             "contribution" => await events.PostAsync(
                 new PMContribution(money, command.Date, command.BankAccountId, command.Description ?? "PM contribution",
                     command.SourceRef, command.InternalNote), ct),
+            "sweep" => await events.PostAsync(
+                new PMFeesSwept(money, command.Date, command.BankAccountId, command.ToBankAccountId!.Value,
+                    command.Description ?? "PM fee sweep", command.SourceRef, command.InternalNote), ct),
             _ => throw new ValidationException("Unknown bank-adjustment kind."), // unreachable past the validator
         };
         return new PostResult(id);
