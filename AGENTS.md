@@ -339,7 +339,8 @@ evolved. The patterns below are established and test-enforced in built modules a
 - Cross-module reads use a consumer-owned port: an interface declared in the consuming module's
   `Contracts`, implemented by a thin host adapter that delegates to the producing module via
   `ISender`.
-- Ports expose batch reads that return maps, never per-id reads. Adapters run on the ambient RLS
+- Ports expose batch reads that return maps, never per-id reads, except a posting's read of the one
+  tenant or property it names (ADR-014 addendum of 2026-11-14). Adapters run on the ambient RLS
   transaction and must not open a new connection.
 - `SharedKernel` stays pure cross-cutting primitives. Module contracts do not live there.
 - Within a module, `db.Database.SqlQuery<T>` is acceptable for that module's own analytical reads.

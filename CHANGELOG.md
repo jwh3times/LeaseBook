@@ -18,6 +18,34 @@ next section.
 
 No unreleased changes.
 
+## [0.35.0] - 2026-11-14
+
+### Added
+
+- **Record an owner's contribution into the operating trust account from the bank register**
+  (#744). On an operating trust account, **Fee or transfer** now offers **Owner contribution**, for
+  an owner's own money paid into trust, such as a float for a repair or to cover a negative balance.
+  A security-deposit trust account and the PM operating account have no such choice. Choose the
+  owner and the property; the property is chosen for you when the owner has only one. The
+  contribution is dated the organization's today and can't be dated later. It raises the bank and
+  that owner's balance by its amount, and it appears in the Contributions section of the owner's
+  statement and the property's, and in the owner portal. The dialog says so while it checks the
+  account's purpose, the owners and their properties, and offers a retry if one can't be read. It
+  works by keyboard, and staff can use it. Through the API it is the bank-adjustment kind
+  `owner-contribution`, with `ownerId` and `propertyId`.
+
+### Changed
+
+- **An owner contribution is refused unless it goes into an operating trust account, for the
+  property's owner on its date.** A contribution into a security-deposit trust account or the PM
+  operating account is refused with `contribution_bank_not_operating_trust` (422), however it is
+  posted. A property that doesn't belong to the owner on the contribution's date, after any
+  ownership transfer, is refused with `property_not_owned` (422). Nothing is posted either way. The
+  other bank-adjustment kinds now refuse an `ownerId` or `propertyId` (400) rather than ignore it.
+- ADR-014 and ADR-037 gain addenda for the owner contribution, and the accounting guide describes
+  it. The scenario catalogue gains `owner-contribution-from-register`, which covers
+  `OwnerContribution`, so that event no longer needs an exemption.
+
 ## [0.34.0] - 2026-11-14
 
 ### Added
@@ -2241,7 +2269,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.35.0
 [0.34.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.34.0
 [0.33.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.2
 [0.33.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.1

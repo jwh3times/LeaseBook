@@ -226,7 +226,7 @@ read for it, and a statement, run or report with no period named opens on its mo
 
 Money that moves in or out cannot be dated after that day: a payment received, a deposit or prepayment
 collected or applied, deposits moved with a sale, a void, a refund check or its void, and a bank fee,
-interest, transfer or PM contribution. Each has happened by the day it is recorded, so a later date is refused
+interest, transfer, PM contribution, fee sweep or owner contribution. Each has happened by the day it is recorded, so a later date is refused
 (`posting_date_in_future`). A charge or a credit may be billed ahead, and so may the rent, late-fee and
 disbursement runs, which date their entries by the period they bill. A processor's settled payment is
 dated by its bank evidence and is not refused this way.
