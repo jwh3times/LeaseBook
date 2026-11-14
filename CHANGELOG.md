@@ -18,6 +18,49 @@ next section.
 
 No unreleased changes.
 
+## [0.34.0] - 2026-11-14
+
+### Added
+
+- **Sweep the property manager's held fees to the PM operating account from the bank register**
+  (#743). On a trust account, operating or security-deposit, **Fee or transfer** now offers
+  **Sweep PM fees**; the PM operating account has no such choice. The PM operating account is
+  chosen for you when the organization has one. The sweep is dated the organization's today and
+  can't be dated later. The amount is prefilled with the most that can be swept on the chosen
+  date, which is the lowest management fees held in that account on that date or after. It is read
+  again when the date changes, and you can lower it. **Record sweep** waits while that figure loads.
+  It is blocked, with a retry, if the figure can't be read. A sweep into a closed period or a
+  reconciled month of either account is refused, as a bank fee is. The dialog works by keyboard,
+  and staff can use it. The figure comes from a new read,
+  `GET /api/accounting/banks/{bankAccountId}/held-fees?from=`, which returns the fees held today and
+  the lowest from that date on, and changes nothing.
+
+### Changed
+
+- **A fee sweep is held to the same floor as a bank fee and a transfer.** A sweep larger than the
+  lowest management fees held in its account on its date or after is refused with
+  `pm_fees_insufficient` (409), and nothing is posted. Before, only today's balance was checked
+  (`insufficient_liability`), so a backdated sweep could take an earlier day's held fees below zero.
+  A sweep that doesn't come from a trust account, or doesn't go to a PM operating account, is
+  refused with `sweep_bank_invalid` (422), naming the end at fault, through the API as well as the
+  screen. Before, it failed as an unknown account.
+- ADR-014 and ADR-037 gain addenda for the sweep, and the accounting guide describes it. The
+  scenario catalogue gains `pm-fee-sweep-from-register`, which covers `PMFeesSwept` and the held-fees
+  read, so that event no longer needs an exemption.
+
+## [0.33.2] - 2026-11-13
+
+### Changed
+
+- Bumped three development dependencies in `web/` (Dependabot, #772): `@testing-library/user-event`
+  from 14.6.8 to 14.6.9, `oxlint` from 1.92.0 to 1.93.0, and `vite` from 8.3.6 to 8.3.7.
+
+## [0.33.1] - 2026-11-13
+
+### Changed
+
+- Bumped QuestPDF from 2026.9.1 to 2026.9.2 (Dependabot, #773).
+
 ## [0.33.0] - 2026-11-13
 
 ### Added
@@ -2198,7 +2241,10 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.34.0
+[0.33.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.2
+[0.33.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.1
 [0.33.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.0
 [0.32.20]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.20
 [0.32.19]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.32.19

@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-13
+- **Last reviewed:** 2026-11-14
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-80 scenarios, 1 of them an expected failure that shows a known limit. 5 journal event types and 18 routes are exempt.
+81 scenarios, 1 of them an expected failure that shows a known limit. 4 journal event types and 18 routes are exempt.
 
 ### Scenarios
 
@@ -276,6 +276,7 @@ not edit between the markers.
 | `bank-fee-from-register` | Record a bank fee from the register by keyboard, and see a fee larger than the PM's held fees refused in place | Banking | `bank-adjustments.spec.ts` | scenario | `BankFeeCharged` | `POST /api/accounting/banks/{bankAccountId}/adjustments` |
 | `pm-contribution-from-register` | Record a PM contribution from the register by keyboard, so a bank fee larger than the PM's held fees posts | Banking | `bank-adjustments.spec.ts` | scenario | `PMContribution` | `POST /api/accounting/banks/{bankAccountId}/adjustments` |
 | `trust-transfer-from-register` | Transfer the PM's held fees to the other trust account from the register and back, and see both registers show it | Banking | `bank-adjustments.spec.ts` | scenario | `TrustTransfer` |  |
+| `pm-fee-sweep-from-register` | Sweep the PM's held fees from a trust account to the PM operating account by keyboard, the amount prefilled with the most the held-fees floor allows | Banking | `bank-adjustments.spec.ts` | scenario | `PMFeesSwept` | `GET /api/accounting/banks/{bankAccountId}/held-fees` |
 | `owner-statement-view-export-deliver` | View an owner statement with its fiduciary checks, export it as PDF and CSV, and deliver it | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/statements/{ownerId}`<br>`GET /api/statements/{ownerId}/internal-notes`<br>`GET /api/statements/{ownerId}/pdf`<br>`GET /api/statements/{ownerId}/csv`<br>`POST /api/statements/{ownerId}/deliver` |
 | `report-catalog-preview-and-export` | Open the report catalog, preview a report with filters, and export it as CSV | Reporting | `m5-reports.spec.ts` |  |  | `GET /api/reports`<br>`GET /api/reports/{id}/preview`<br>`GET /api/reports/{id}/csv` |
 | `month-cycle-rent-run` | Preview and confirm the monthly rent run | Operations | `m6-bulk-operations.spec.ts` | demo | `RentCharged` | `GET /api/operations/runs/{type}/preview`<br>`GET /api/operations/runs/{type}/preview/issued-coverage`<br>`POST /api/operations/runs/{type}/confirm` |
@@ -328,7 +329,7 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 11 |
+| baseline gap | 10 |
 
 #### Journal event types with no scenario
 
@@ -337,7 +338,6 @@ not edit between the markers.
 | `BalanceForward` | Only the seed fixtures post it, as their cutover entry; onboarding posts OpeningBalance instead. | 2026-11-10 |  |
 | `InterestEarned` | No screen offers interest until #307 settles who interest in a trust account belongs to. | 2026-11-06 | #307 |
 | `OwnerContribution` | baseline gap | 2026-10-12 | #744 |
-| `PMFeesSwept` | baseline gap | 2026-10-12 | #743 |
 | `VendorPaid` | baseline gap | 2026-10-12 | #745 |
 
 #### Routes with no scenario

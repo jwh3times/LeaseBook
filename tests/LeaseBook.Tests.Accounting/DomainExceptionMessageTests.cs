@@ -146,8 +146,6 @@ public sealed class DomainExceptionMessageTests
             "Deposit application of 900.00 exceeds the 500.00 held for this tenant.");
         yield return (new InsufficientLiabilityException(LiabilityKind.Prepayment, 50m, 20.5m), "insufficient_liability",
             "Prepayment application of 50.00 exceeds the 20.50 held for this tenant.");
-        yield return (new InsufficientLiabilityException(LiabilityKind.FeeSweep, 300m, 200m), "insufficient_liability",
-            "Fee sweep of 300.00 exceeds the 200.00 held in the operating trust account.");
         yield return (new InsufficientLiabilityException(LiabilityKind.Refund, 400m, 399.99m), "insufficient_liability",
             "Refund of 400.00 exceeds the 399.99 held for this tenant.");
 
@@ -242,6 +240,12 @@ public sealed class DomainExceptionMessageTests
         yield return (new PmFeesInsufficientException(30m, -4m, SampleId, HeldFeesCharge.Void, "Operating Trust", new DateOnly(2026, 3, 4)),
             "pm_fees_insufficient",
             "Voiding this entry would take the management fees held in Operating Trust 34.00 below zero on or after 2026-03-04, so nothing was posted. Void the later charge that uses them first, or record a PM contribution to Operating Trust.");
+        yield return (new PmFeesInsufficientException(300m, -4m, SampleId, HeldFeesCharge.Sweep), "pm_fees_insufficient",
+            "This account holds only 0.00 in management fees on or after the sweep's date, less than the 300.00 sweep, so nothing was posted. Sweep no more than the fees held here from that date on.");
+        yield return (new SweepBankInvalidException(SampleId, TransferEnd.Source), "sweep_bank_invalid",
+            "A fee sweep moves management fees out of a trust account, and the account it comes from is not a trust account.");
+        yield return (new SweepBankInvalidException(SampleId, TransferEnd.Destination), "sweep_bank_invalid",
+            "A fee sweep moves management fees into the PM operating account, and the account it goes to is not one.");
         yield return (new ContributionBankNotTrustException(SampleId), "contribution_bank_not_trust",
             "A PM contribution is paid into a trust account, and this account is not a trust account.");
         yield return (new PmFeesInsufficientException(30m, 10m, SampleId, (HeldFeesCharge)99), "pm_fees_insufficient",

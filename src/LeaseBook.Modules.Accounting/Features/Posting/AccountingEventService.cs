@@ -311,23 +311,33 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
 
     private async Task<Guid> PostPmFeesSweptAsync(PMFeesSwept e, CancellationToken ct)
     {
-        await postingLock.AcquireAsync(ct);
-        var held = await _balances.HeldFeesAsync(e.OperatingBankId, ct);
-        if (e.Amount.Amount > held)
+        // Out of a trust bank, operating or security-deposit, into the PM operating bank and nowhere else:
+        // between trust banks it is a transfer, and the PM operating bank holds no fees to sweep (#743).
+        var (fromBank, fromClass) = await BankAsync(e.OperatingBankId, ct);
+        if (fromClass != AccountClass.TrustBank)
         {
-            throw new InsufficientLiabilityException(LiabilityKind.FeeSweep, e.Amount.Amount, held);
+            throw new SweepBankInvalidException(e.OperatingBankId, TransferEnd.Source);
         }
+
+        var (toBank, toClass) = await BankAsync(e.PmBankId, ct);
+        if (toClass != AccountClass.PmOperatingBank)
+        {
+            throw new SweepBankInvalidException(e.PmBankId, TransferEnd.Destination);
+        }
+
+        // Paid from the fees held in the source on its date and every day after, like a bank fee or a
+        // transfer: a backdated sweep must not take an earlier day's held fees below zero even when
+        // today's balance has since recovered (ADR-014 addendum).
+        await GuardHeldFeesFloorAsync(e.OperatingBankId, e.Date, e.Amount, HeldFeesCharge.Sweep, ct);
 
         // Cash moves trust → PM operating; the income attribution moves with it; net income unchanged.
         return await posting.PostAsync(new PostEntryRequest(e.Date, "PMFeesSwept", null, e.Description, e.SourceRef,
             [
-                new(AccountCodes.TrustBank(e.OperatingBankId), null, e.Amount, EntryBasis.Both,
-                    BankAccountId: e.OperatingBankId),
-                new(AccountCodes.PmOperatingBank(e.PmBankId), e.Amount, null, EntryBasis.Both,
-                    BankAccountId: e.PmBankId),
+                new(fromBank, null, e.Amount, EntryBasis.Both, BankAccountId: e.OperatingBankId),
+                new(toBank, e.Amount, null, EntryBasis.Both, BankAccountId: e.PmBankId),
                 new(AccountCodes.PmIncome, e.Amount, null, EntryBasis.Both, BankAccountId: e.OperatingBankId),
                 new(AccountCodes.PmIncome, null, e.Amount, EntryBasis.Both, BankAccountId: e.PmBankId),
-            ]), ct);
+            ], InternalNote: e.InternalNote), ct);
     }
 
     // ----- Owner cash movements -------------------------------------------------------------------
@@ -507,15 +517,8 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     }
 
     /// <summary>The chart code of the bank account representing <paramref name="bankId"/> (trust or PM operating).</summary>
-    private async Task<string> BankCodeAsync(Guid bankId, CancellationToken ct)
-    {
-        var code = await db.Set<Account>()
-            .Where(a => a.BankAccountId == bankId
-                && (a.Class == AccountClass.TrustBank || a.Class == AccountClass.PmOperatingBank))
-            .Select(a => a.Code)
-            .SingleOrDefaultAsync(ct);
-        return code ?? throw new UnknownAccountException(AccountCodes.TrustBank(bankId));
-    }
+    private async Task<string> BankCodeAsync(Guid bankId, CancellationToken ct) =>
+        (await BankAsync(bankId, ct)).Code;
 
     /// <summary>
     /// The chart code of a bank that must be a trust bank: either end of a transfer, or a PM contribution's
@@ -525,13 +528,23 @@ internal sealed class AccountingEventService(DbContext db, IPostingService posti
     private async Task<string> TrustBankCodeAsync(
         Guid bankId, Func<AccountingDomainException> notTrust, CancellationToken ct)
     {
+        var (code, accountClass) = await BankAsync(bankId, ct);
+        return accountClass == AccountClass.TrustBank ? code : throw notTrust();
+    }
+
+    /// <summary>
+    /// The chart code and class of the bank account representing <paramref name="bankId"/>, a trust bank
+    /// or the PM operating bank; an id that is no bank account at all is an unknown account.
+    /// </summary>
+    private async Task<(string Code, AccountClass Class)> BankAsync(Guid bankId, CancellationToken ct)
+    {
         var account = await db.Set<Account>()
             .Where(a => a.BankAccountId == bankId
                 && (a.Class == AccountClass.TrustBank || a.Class == AccountClass.PmOperatingBank))
             .Select(a => new { a.Code, a.Class })
             .SingleOrDefaultAsync(ct)
             ?? throw new UnknownAccountException(AccountCodes.TrustBank(bankId));
-        return account.Class == AccountClass.TrustBank ? account.Code : throw notTrust();
+        return (account.Code, account.Class);
     }
 
     /// <summary>

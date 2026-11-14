@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { trackInteraction } from '@/lib/telemetry';
 import { ORG_SETTINGS } from '@/test/mocks/handlers';
 import { server } from '@/test/mocks/server';
-import { bankRegisterKey } from './banking';
+import { bankRegisterKey, heldFeesKey } from './banking';
 import { BankingPage } from './BankingPage';
 
 vi.mock('@/lib/telemetry', () => ({ trackInteraction: vi.fn() }));
@@ -776,6 +776,49 @@ describe('BankingPage bank fee or transfer (#553)', () => {
     // The other account's register is not on screen, so it is marked stale and reads again when opened.
     expect(queryClient.getQueryState(bankRegisterKey('acct2'))?.isInvalidated).toBe(true);
     expect(reads.register.filter((id) => id === 'acct1').length).toBeGreaterThan(1);
+  });
+
+  it('records a sweep to the PM operating account and refreshes both registers and the held fees (#743)', async () => {
+    const heldReads: string[] = [];
+    server.use(
+      http.get('/api/accounting/banks/balances', () => HttpResponse.json(TRUSTS)),
+      http.get('/api/accounting/banks/:id/held-fees', ({ request }) => {
+        const from = new URL(request.url).searchParams.get('from') ?? '';
+        heldReads.push(from);
+        return HttpResponse.json({ bankAccountId: 'acct1', from, held: 300, floor: 250 });
+      }),
+      http.post('/api/accounting/banks/:id/adjustments', () =>
+        HttpResponse.json({ entryId: 'e1' }),
+      ),
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+    );
+    const queryClient = renderPage();
+    queryClient.setQueryData(bankRegisterKey('acct3'), REGISTER);
+    const user = userEvent.setup();
+    await screen.findByText('Rent deposit');
+
+    await user.click(screen.getByRole('button', { name: 'Fee or transfer' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByDisplayValue(/^\d{4}-\d{2}-\d{2}$/);
+    await user.click(within(dialog).getByRole('radio', { name: 'Sweep PM fees' }));
+    expect(await within(dialog).findByDisplayValue('250.00')).toBe(
+      within(dialog).getByLabelText('Amount'),
+    );
+    expect(within(dialog).getByLabelText('To account')).toHaveValue('acct3');
+    const readsBeforeSave = heldReads.length;
+    await user.click(within(dialog).getByRole('button', { name: 'Record sweep' }));
+
+    expect(
+      await screen.findByText('Sweep of $250.00 to Management Operating recorded.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(queryClient.getQueryState(bankRegisterKey('acct3'))?.isInvalidated).toBe(true);
+    // The held fees were on screen when the sweep posted, so they are read again, not trusted.
+    await vi.waitFor(() => expect(heldReads.length).toBeGreaterThan(readsBeforeSave));
+    expect(
+      queryClient.getQueryCache().findAll({ queryKey: heldFeesKey('acct1') }),
+    ).not.toHaveLength(0);
   });
 
   it('offers only a bank fee on an account that is not a trust account', async () => {

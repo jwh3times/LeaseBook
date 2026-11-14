@@ -501,10 +501,11 @@ public sealed class PostingTemplatesTests(PostgresFixture fixture)
         await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [Owner], properties: [Property]);
         await PostAsync(scope, new ManagementFeeAssessed(Owner, Property, new Money(290m), May(27), scope.TrustBankId, "fee"), ct);
 
-        var ex = await Should.ThrowAsync<InsufficientLiabilityException>(() => PostAsync(scope,
+        var ex = await Should.ThrowAsync<PmFeesInsufficientException>(() => PostAsync(scope,
             new PMFeesSwept(new Money(300m), May(27), scope.TrustBankId, scope.OperatingBankId, "sweep"), ct));
 
-        (ex.Kind, ex.Requested, ex.Held, ex.TenantId).ShouldBe((LiabilityKind.FeeSweep, 300m, 290m, (Guid?)null));
+        (ex.Code, ex.Charge, ex.Shortfall, ex.Held, ex.BankAccountId)
+            .ShouldBe(("pm_fees_insufficient", HeldFeesCharge.Sweep, 300m, 290m, scope.TrustBankId));
     }
 
     [Fact]

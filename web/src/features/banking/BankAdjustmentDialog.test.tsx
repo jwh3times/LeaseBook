@@ -29,9 +29,22 @@ const problem = (status: number, code: string, detail: string) =>
 
 type Posted = { url: string; body: Record<string, unknown> };
 
-function serve(opts: { banks?: (typeof TRUST)[]; respond?: () => Response } = {}) {
+function serve(
+  opts: {
+    banks?: (typeof TRUST)[];
+    respond?: () => Response;
+    /** The held-fees floor the read answers with for a date, or the response itself. */
+    floor?: (from: string) => number | Response;
+  } = {},
+) {
   const posted: Posted[] = [];
   server.use(
+    http.get('/api/accounting/banks/:id/held-fees', ({ request, params }) => {
+      const from = new URL(request.url).searchParams.get('from') ?? '';
+      const floor = opts.floor?.(from) ?? 0;
+      if (floor instanceof Response) return floor;
+      return HttpResponse.json({ bankAccountId: params.id, from, held: 368.74, floor });
+    }),
     http.get('/api/accounting/banks/balances', () =>
       HttpResponse.json({ rows: (opts.banks ?? [TRUST, DEPOSIT, OPERATING]).map(row) }),
     ),
@@ -67,6 +80,9 @@ function renderDialog(props: Partial<BankAdjustmentDialogProps> = {}) {
 const orgToday = () => dateInZone(ORG_SETTINGS.timeZone);
 const amountField = () => screen.getByLabelText('Amount');
 const saveFee = () => screen.getByRole('button', { name: 'Record fee' });
+const saveSweep = () => screen.getByRole('button', { name: 'Record sweep' });
+const chooseSweep = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole('radio', { name: 'Sweep PM fees' }));
 
 describe('BankAdjustmentDialog', () => {
   it('records a bank fee dated the organization’s today and reports what it posted', async () => {
@@ -349,7 +365,184 @@ describe('BankAdjustmentDialog', () => {
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     expect(screen.queryByText(/Transfer/)).not.toBeInTheDocument();
     expect(screen.queryByText(/contribution/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sweep/i)).not.toBeInTheDocument();
     expect(saveFee()).toBeInTheDocument();
+  });
+
+  // ---- a sweep of the held fees to the PM operating account (#743) ----
+
+  it('sweeps by keyboard to the only PM operating account, its amount the most the floor allows', async () => {
+    const posted = serve({ floor: () => 120.5 });
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    // The kind choice is a radio group: arrow from "Bank fee" past the transfer and the contribution.
+    screen.getByRole('radio', { name: 'Bank fee' }).focus();
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    expect(screen.getByRole('radio', { name: 'Sweep PM fees' })).toBeChecked();
+    expect(
+      screen.getByRole('dialog', { name: 'Sweep PM fees to the PM operating account' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('120.50')).toBe(amountField());
+    expect(screen.getByText(/can be swept on this date/)).toHaveTextContent('$120.50');
+    expect(screen.getByText(/can be swept on this date/)).toHaveTextContent('$368.74');
+    expect(amountField().getAttribute('aria-describedby')).toMatch(/-held$/);
+    // Only the PM operating account is offered, and as the only one it is chosen already.
+    const to = screen.getByLabelText('To account');
+    expect(to).toHaveValue('op1');
+    expect(Array.from(to.querySelectorAll('option'), (option) => option.textContent)).toEqual([
+      'Management Operating',
+    ]);
+    expect(screen.getByLabelText('Description')).toHaveAttribute('placeholder', 'PM fee sweep');
+
+    saveSweep().focus();
+    await user.keyboard('{Enter}');
+
+    await vi.waitFor(() => expect(onPosted).toHaveBeenCalledTimes(1));
+    expect(onPosted).toHaveBeenCalledWith({ kind: 'sweep', amount: 120.5, toBankAccountId: 'op1' });
+    const { sourceRef, ...body } = posted[0]?.body ?? {};
+    expect(sourceRef).toMatch(/^bank-adjustment:[0-9a-f-]{36}$/);
+    expect(body).toEqual({
+      bankAccountId: 'trust1',
+      kind: 'sweep',
+      amount: 120.5,
+      date: orgToday(),
+      description: null,
+      toBankAccountId: 'op1',
+      internalNote: null,
+    });
+  });
+
+  it('prefills the floor at the chosen date until an amount is typed', async () => {
+    serve({ floor: (from) => (from === '2026-01-15' ? 20 : 120.5) });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await chooseSweep(user);
+    await screen.findByDisplayValue('120.50');
+
+    await user.clear(screen.getByLabelText('Date'));
+    expect(
+      screen.getByText('Enter a date to see the fees held here from it on.'),
+    ).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Date'), '2026-01-15');
+    expect(await screen.findByDisplayValue('20.00')).toBe(amountField());
+
+    await user.clear(amountField());
+    await user.type(amountField(), '7.25');
+    await user.clear(screen.getByLabelText('Date'));
+    await user.type(screen.getByLabelText('Date'), orgToday());
+    await screen.findByText(/can be swept on this date/);
+    expect(amountField()).toHaveValue('7.25');
+  });
+
+  it('says there is nothing to sweep when no fees are held from the date on', async () => {
+    const posted = serve({ floor: () => -4 });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await chooseSweep(user);
+
+    expect(await screen.findByText(/nothing to sweep/)).toBeInTheDocument();
+    expect(amountField()).toHaveValue('');
+    await user.click(saveSweep());
+    expect(amountField()).toHaveFocus();
+    expect(posted).toHaveLength(0);
+  });
+
+  it('shows the held fees loading, then a failed read with its reference and a retry', async () => {
+    let fail = true;
+    let answer = () => {};
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    serve();
+    server.use(
+      http.get('/api/accounting/banks/:id/held-fees', async () => {
+        await answered;
+        return fail
+          ? problem(500, 'internal_error', 'The held fees could not be read.')
+          : HttpResponse.json({ bankAccountId: 'trust1', from: orgToday(), held: 55, floor: 55 });
+      }),
+    );
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await chooseSweep(user);
+    expect(await screen.findByText('Loading the fees held here…')).toBeInTheDocument();
+    answer();
+    expect(await screen.findByText(REFERENCE, { exact: false })).toBeInTheDocument();
+    // The amount offered comes from that read, so its failure blocks the write until a retry reads it.
+    expect(saveSweep()).toBeDisabled();
+
+    fail = false;
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(await screen.findByDisplayValue('55.00')).toBe(amountField());
+    expect(saveSweep()).toBeEnabled();
+  });
+
+  it('asks which PM operating account when there are several, and offers no trust account', async () => {
+    const SECOND = { bankAccountId: 'op2', name: 'PM Payroll', isTrust: false };
+    const posted = serve({ banks: [TRUST, DEPOSIT, OPERATING, SECOND], floor: () => 50 });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await chooseSweep(user);
+    const to = await screen.findByLabelText('To account');
+    expect(Array.from(to.querySelectorAll('option'), (option) => option.textContent)).toEqual([
+      'Choose a PM operating account',
+      'Management Operating',
+      'PM Payroll',
+    ]);
+    await screen.findByDisplayValue('50.00');
+    await user.click(saveSweep());
+    expect(to).toHaveFocus(); // the field's own constraint names it
+    expect(posted).toHaveLength(0);
+
+    await user.selectOptions(to, 'PM Payroll');
+    await user.click(saveSweep());
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]?.body).toMatchObject({ kind: 'sweep', toBankAccountId: 'op2' });
+  });
+
+  it('blocks a sweep when the organization has no PM operating account', async () => {
+    serve({ banks: [TRUST, DEPOSIT], floor: () => 50 });
+    renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+
+    await chooseSweep(user);
+
+    expect(await screen.findByText(/no PM operating account to sweep to/)).toBeInTheDocument();
+    expect(saveSweep()).toBeDisabled();
+  });
+
+  it('shows a sweep past the floor beside the amount, and a wrong account against it, in the server’s words', async () => {
+    const floorDetail =
+      'This account holds only 20.00 in management fees on or after the sweep’s date, less than the 25.00 sweep, so nothing was posted.';
+    const bankDetail =
+      'A fee sweep moves management fees into the PM operating account, and the account it goes to is not one.';
+    let respond = () => problem(409, 'pm_fees_insufficient', floorDetail);
+    serve({ floor: () => 20, respond: () => respond() });
+    const { onPosted } = renderDialog();
+    const user = userEvent.setup();
+    await screen.findByDisplayValue(orgToday());
+    await chooseSweep(user);
+    await screen.findByDisplayValue('20.00');
+
+    await user.clear(amountField());
+    await user.type(amountField(), '25');
+    await user.click(saveSweep());
+    expect(await screen.findByText(floorDetail)).toBeInTheDocument();
+    expect(amountField()).toHaveAttribute('aria-invalid', 'true');
+
+    respond = () => problem(422, 'sweep_bank_invalid', bankDetail);
+    await user.click(saveSweep());
+    expect(await screen.findByText(bankDetail)).toBeInTheDocument();
+    expect(screen.getByLabelText('To account')).toHaveAttribute('aria-invalid', 'true');
+    expect(onPosted).not.toHaveBeenCalled();
   });
 
   it('blocks the write, with the reason and its reference, while the organization’s today is unknown', async () => {

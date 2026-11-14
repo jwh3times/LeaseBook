@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-13
+- **Last reviewed:** 2026-11-14
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -419,13 +419,13 @@ I12 sweeps the result: every finalized month nets to its statement and stamped n
 not tenant/owner activity: `BankFeeCharged` (a service charge — a PM operating cost), `InterestEarned`
 (interest credited to the trust), and `TrustTransfer` (moving the PM's held fees between two of the
 org's trust accounts). Each balances per basis and posts through the single journal write path; none
-implies an owner/vendor/fee-sweep workflow (those are M6). A fee, and a transfer out of a bank, are paid
-from the PM's held fees there and only from them: each is refused (`pm_fees_insufficient`) when it
-exceeds the lowest fees held in that bank on or after its date, and invariant I11 reports any bank whose
-held fees are below zero. A transfer is refused (`transfer_bank_not_trust`) when either end is the PM
+implies an owner or vendor workflow (those are M6). A fee, a transfer out of a bank and a fee sweep
+(below) are paid from the PM's held fees there and only from them: each is refused
+(`pm_fees_insufficient`) when it exceeds the lowest fees held in that bank on or after its date, and
+invariant I11 reports any bank whose held fees are below zero. A transfer is refused (`transfer_bank_not_trust`) when either end is the PM
 operating bank ([ADR-014 addendum](adr/ADR-014-reconciliation-engine-and-lock.md)). Staff record a fee,
-a transfer or a PM contribution (below) from the bank register; interest has no screen until #307 settles
-who it belongs to.
+a transfer, a PM contribution or a fee sweep (both below) from the bank register; interest has no screen
+until #307 settles who it belongs to.
 
 **PM contributions.** When a charge is larger than the PM's held fees in a trust account, the property
 manager covers it with its own money: `PMContribution` (`DR bank / CR pm_income@bank`, both bases)
@@ -438,6 +438,17 @@ held to the same floor: a void whose lines take held fees from a bank, such as v
 already swept out, or a sweep the PM operating account has since spent from, is refused with
 `pm_fees_insufficient` when they would go below zero there on its date or later. There is no cap on a contribution yet; whether one applies is an open compliance
 question ([ADR-014 addendum, #720](adr/ADR-014-reconciliation-engine-and-lock.md)).
+
+**Fee sweeps.** `PMFeesSwept` (`DR pm_operating_bank / CR trust bank`, with `pm_income` moving from the
+trust bank's dimension to the operating bank's, all both bases) is the only way the property manager's
+earned fees leave trust. Staff record it from a trust account's register dialog, operating or
+security-deposit, as **Sweep PM fees**; the PM operating account has no such choice. It goes only to a
+PM operating account (`sweep_bank_invalid` otherwise), keeps to the period and reconciliation locks of
+both accounts, cannot be dated after the organization's today, and is held to the floor above. The
+dialog prefills the amount with that floor at the chosen date, from
+`GET /api/accounting/banks/{bankAccountId}/held-fees`, so it offers exactly what the posting accepts
+([ADR-014 addendum, #743](adr/ADR-014-reconciliation-engine-and-lock.md)). How often fees must be swept,
+and whether a cap applies, are open compliance questions.
 
 **Processor fee differences.** `ProcessorFeeDifference` records the amount by which a payment
 processor's fee differed from the fee quoted to the tenant

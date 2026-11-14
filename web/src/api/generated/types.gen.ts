@@ -420,6 +420,13 @@ export type HealthResponse = {
     status: string;
 };
 
+export type HeldFeesView = {
+    bankAccountId: string;
+    from: string;
+    held: number | string;
+    floor: number | string;
+};
+
 export type ImportBatchError = {
     rowNumber: number | string;
     field: string;
@@ -1639,6 +1646,26 @@ export type GetApiAccountingBanksByBankAccountIdRegisterResponses = {
 };
 
 export type GetApiAccountingBanksByBankAccountIdRegisterResponse = GetApiAccountingBanksByBankAccountIdRegisterResponses[keyof GetApiAccountingBanksByBankAccountIdRegisterResponses];
+
+export type GetApiAccountingBanksByBankAccountIdHeldFeesData = {
+    body?: never;
+    path: {
+        bankAccountId: string;
+    };
+    query: {
+        from: string;
+    };
+    url: '/api/accounting/banks/{bankAccountId}/held-fees';
+};
+
+export type GetApiAccountingBanksByBankAccountIdHeldFeesResponses = {
+    /**
+     * OK
+     */
+    200: HeldFeesView;
+};
+
+export type GetApiAccountingBanksByBankAccountIdHeldFeesResponse = GetApiAccountingBanksByBankAccountIdHeldFeesResponses[keyof GetApiAccountingBanksByBankAccountIdHeldFeesResponses];
 
 export type PostApiAccountingBanksByBankAccountIdAdjustmentsData = {
     body: RecordBankAdjustment;

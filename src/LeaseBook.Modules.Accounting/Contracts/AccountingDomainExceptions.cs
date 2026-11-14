@@ -91,7 +91,6 @@ public enum LiabilityKind
 {
     Deposit,
     Prepayment,
-    FeeSweep,
     Refund,
 }
 
@@ -114,8 +113,6 @@ public sealed class InsufficientLiabilityException(
             $"Deposit application of {requested:0.00} exceeds the {held:0.00} held for this tenant.",
         LiabilityKind.Prepayment =>
             $"Prepayment application of {requested:0.00} exceeds the {held:0.00} held for this tenant.",
-        LiabilityKind.FeeSweep =>
-            $"Fee sweep of {requested:0.00} exceeds the {held:0.00} held in the operating trust account.",
         _ => $"Refund of {requested:0.00} exceeds the {held:0.00} held for this tenant.",
     };
 }
@@ -467,6 +464,9 @@ public enum HeldFeesCharge
     /// <summary>A staff void whose mirrored lines lower the held fees in a trust bank (#720).</summary>
     Void,
 
+    /// <summary>A sweep of held fees from a trust bank to the PM operating bank (#743).</summary>
+    Sweep,
+
     /// <summary>
     /// A staff void whose mirrored lines lower the held fees in the PM operating bank, such as voiding a
     /// sweep it has since spent from (#720). A PM contribution cannot go there, so none is offered.
@@ -477,10 +477,11 @@ public enum HeldFeesCharge
 /// <summary>
 /// A charge paid from the PM fees held in one bank is larger than they are, read as the lowest held
 /// balance on or after its date (409): a processor fee shortfall (ADR-053), a bank fee, or a transfer
-/// out of that bank (ADR-014 addendum, #553), or a staff void that would lower them (#720). Posting it
+/// out of that bank (ADR-014 addendum, #553), a staff void that would lower them (#720), or a sweep of
+/// them to the PM operating bank (#743). Posting it
 /// would leave the bank holding less than owners and tenants are owed, so nothing is posted. The code is
 /// the same whichever charge it was; Payments keys its review on the code alone. Each message names the
-/// remedy: a PM contribution to that bank dated on or before the charge.
+/// remedy: a PM contribution to that bank dated on or before the charge, or for a sweep, a smaller one.
 /// </summary>
 public sealed class PmFeesInsufficientException(
     decimal shortfall, decimal held, Guid bankAccountId, HeldFeesCharge charge,
@@ -509,6 +510,10 @@ public sealed class PmFeesInsufficientException(
                 $"The account this transfer comes from holds only {Math.Max(held, 0m):0.00} in management fees on "
                 + $"or after its date, less than the {amount:0.00} transfer, so nothing was posted. "
                 + "A PM contribution to that account dated on or before the transfer covers it.",
+            HeldFeesCharge.Sweep =>
+                $"This account holds only {Math.Max(held, 0m):0.00} in management fees on or after the sweep's date, "
+                + $"less than the {amount:0.00} sweep, so nothing was posted. "
+                + "Sweep no more than the fees held here from that date on.",
             HeldFeesCharge.Void =>
                 $"Voiding this entry would take the management fees held in {bankName} {amount - held:0.00} below "
                 + $"zero on or after {from:yyyy-MM-dd}, so nothing was posted. Void the later charge that uses them "
@@ -541,6 +546,24 @@ public sealed class TransferBankNotTrustException(Guid bankAccountId, TransferEn
         end == TransferEnd.Source
             ? "A transfer moves money between trust accounts, and the account it comes from is not a trust account."
             : "A transfer moves money between trust accounts, and the account it goes to is not a trust account.")
+{
+    public Guid BankAccountId { get; } = bankAccountId;
+
+    public TransferEnd End { get; } = end;
+}
+
+/// <summary>
+/// A fee sweep names the wrong kind of bank at one end (422, #743). A sweep moves the PM's held fees out
+/// of a trust bank, operating or security-deposit, into the PM operating bank and nowhere else: between
+/// two trust banks it is a transfer, and out of the PM operating bank there are no held fees to sweep.
+/// Nothing is posted.
+/// </summary>
+public sealed class SweepBankInvalidException(Guid bankAccountId, TransferEnd end)
+    : AccountingDomainException(
+        "sweep_bank_invalid",
+        end == TransferEnd.Source
+            ? "A fee sweep moves management fees out of a trust account, and the account it comes from is not a trust account."
+            : "A fee sweep moves management fees into the PM operating account, and the account it goes to is not one.")
 {
     public Guid BankAccountId { get; } = bankAccountId;
 
