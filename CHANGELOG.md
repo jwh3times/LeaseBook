@@ -18,6 +18,44 @@ next section.
 
 No unreleased changes.
 
+## [0.36.0] - 2026-11-14
+
+### Added
+
+- **Record a vendor payment from an owner's funds in trust from the bank register** (#745). On an
+  operating trust account, **Fee or transfer** now offers **Vendor payment**, for paying someone
+  who worked on one of an owner's properties, such as a plumber, from that owner's money in trust.
+  A security-deposit trust account and the PM operating account have no such choice. Choose the
+  property and type the payee's name, what the payment was for and, if you like, a reference such
+  as a hand-written check number or an ACH trace. You don't choose the owner: the payment is
+  charged to whoever owns the property on its date, so one dated before an ownership transfer
+  charges the earlier owner. The payment is dated the organization's today and can't be dated
+  later. It lowers the bank and that owner's balance by its amount, and it appears under Operating
+  expenses on the owner's statement and the property's, and in the owner portal. The reference is
+  added to the register line's description, so you can find it by searching the register; nothing
+  requires it to be unique, and it has nothing to do with refund-check numbers. The dialog says so
+  while it loads the account's purpose and the properties, and offers a retry if either can't be
+  read. It works by keyboard, and staff can use it. Through the API it is the bank-adjustment kind
+  `vendor-payment`, with `propertyId`, `payee`, `description` and an optional `reference`.
+
+### Changed
+
+- **A vendor payment may spend the owner's whole balance, reserve included, and no more.** An
+  owner's reserve limits what is disbursed to the owner; it doesn't block the repair it is kept
+  for. A payment larger than the owner's balance is refused with `reserve_floor` (409), and the
+  message says to record an owner contribution first. Disbursements keep their reserve floor and
+  their wording.
+- **A vendor payment is refused unless it comes from an operating trust account.** A payment from
+  a security-deposit trust account or the PM operating account is refused with
+  `vendor_payment_bank_not_operating_trust` (422), however it is posted. A property that isn't one
+  of the organization's is refused with `property_not_found` (422), and a request that names an
+  `ownerId` is refused (400). Nothing is posted in any of these cases. The other bank-adjustment
+  kinds now refuse a `payee` or `reference` (400) rather than ignore it.
+- ADR-014 and ADR-037 gain addenda for the vendor payment. The accounting guide and the product
+  scope describe it, and the vendor directory, work orders and invoice approval stay in the later
+  maintenance phase. The scenario catalogue gains `vendor-payment-from-register`, which covers
+  `VendorPaid`, so that event no longer needs an exemption.
+
 ## [0.35.0] - 2026-11-14
 
 ### Added
@@ -2269,7 +2307,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.0
 [0.35.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.35.0
 [0.34.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.34.0
 [0.33.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.33.2

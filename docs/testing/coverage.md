@@ -382,8 +382,8 @@ The 22 routes no test reached, by what they have in common:
   (#555).
 - **Bank adjustments (1).** No screen recorded a bank fee, interest or a transfer between accounts
   when this was measured. The bank register now records a bank fee, a transfer, a PM contribution
-  (#720), a fee sweep (#743) or an owner contribution (#744), and a browser test reaches the route
-  (#553); interest still has no screen until #307 settles who it belongs to.
+  (#720), a fee sweep (#743), an owner contribution (#744) or a vendor payment (#745), and a browser
+  test reaches the route (#553); interest still has no screen until #307 settles who it belongs to.
 - **Accounting reads (4).** Owner balances, the owner ledger, deposits and the trust equation. No
   screen requests these routes; the screens that show the same figures get them from other routes.
   The catalogue records these four as permanent exemptions.
