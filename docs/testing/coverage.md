@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-14
+- **Last reviewed:** 2026-11-15
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -379,7 +379,8 @@ The 22 routes no test reached, by what they have in common:
   and no screen called one when this was measured. The screens create an owner, a property and a
   tenant, and edit only a lease's late-fee terms. A property's units arrive with the property. The
   property page now transfers a property to another owner, and a browser test reaches that route
-  (#555).
+  (#555). It now adds a unit and edits one too, and a browser test reaches
+  `POST /api/directory/units` and `PUT /api/directory/units/{id}` (#780).
 - **Bank adjustments (1).** No screen recorded a bank fee, interest or a transfer between accounts
   when this was measured. The bank register now records a bank fee, a transfer, a PM contribution
   (#720), a fee sweep (#743), an owner contribution (#744) or a vendor payment (#745), and a browser

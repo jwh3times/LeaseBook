@@ -18,6 +18,29 @@ next section.
 
 No unreleased changes.
 
+## [0.37.0] - 2026-11-15
+
+### Added
+
+- **Add a unit to a property, and edit one, from the property page** (#780). The Units card now has
+  **Add unit**, and each unit row has **Edit**. A unit has a label (required, up to 60
+  characters), an asking rent and an availability, available unless you choose unavailable. Two
+  units of one property may share a label. A unit can't be moved to another property or deleted;
+  marking it unavailable is how one is retired. A new unit has no lease, so it counts as vacant
+  straight away: the property's occupancy, the properties and owners lists, search and the
+  dashboard's vacancy all show it without a reload. A changed label shows on the tenant list and
+  tenant pages too. When the server refuses a unit, the dialog shows its message and reference.
+  Both dialogs work by keyboard.
+
+### Changed
+
+- **The Units card's rent column is now headed Asking rent.** It is what a unit is offered at, and
+  it charges nothing: rent charges are made from the lease rent of the lease in effect. The
+  glossary defines both terms.
+- The scenario catalogue gains `directory-add-edit-unit`, which reaches
+  `POST /api/directory/units` and `PUT /api/directory/units/{id}`, so neither route needs an
+  exemption. The coverage record says a browser test now reaches them.
+
 ## [0.36.1] - 2026-11-14
 
 ### Changed
@@ -2316,7 +2339,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.36.1...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.37.0
 [0.36.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.1
 [0.36.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.0
 [0.35.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.35.0
