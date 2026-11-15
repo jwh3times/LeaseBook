@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -405,5 +405,156 @@ describe('Transfer ownership (#555, ADR-036)', () => {
 
     expect(within(dialog).getByRole('status', { name: 'Loading owners' })).toBeInTheDocument();
     expect(confirmButton(dialog)).toBeDisabled();
+  });
+});
+
+interface UnitSent {
+  id?: string;
+  propertyId?: string;
+  label: string;
+  rent: number | string;
+  availability: string;
+}
+
+const UNIT_2B = {
+  id: 'u1',
+  propertyId: PROPERTY.id,
+  label: '#2B',
+  rent: 1450,
+  occupancy: 'vacant',
+  availability: 'available',
+};
+
+/**
+ * Serves the property with `units`, and records each unit the page adds or saves. A successful write
+ * changes what the next property read returns, as the server does.
+ */
+function serveUnits(
+  options: {
+    units?: (typeof UNIT_2B)[];
+    refuse?: { status: number; body: Record<string, unknown> };
+  } = {},
+) {
+  const sent: UnitSent[] = [];
+  let units = [...(options.units ?? [])];
+  const refusal = () =>
+    HttpResponse.json(options.refuse!.body, {
+      status: options.refuse!.status,
+      headers: { 'content-type': 'application/problem+json' },
+    });
+  server.use(
+    http.get('/api/directory/properties/:id', () => HttpResponse.json({ ...PROPERTY, units })),
+    http.post('/api/directory/units', async ({ request }) => {
+      const body = (await request.json()) as UnitSent;
+      sent.push(body);
+      if (options.refuse) return refusal();
+      units = [
+        ...units,
+        { ...UNIT_2B, ...body, id: 'uNew', occupancy: 'vacant' } as typeof UNIT_2B,
+      ];
+      return HttpResponse.json({ id: 'uNew' });
+    }),
+    http.put('/api/directory/units/:id', async ({ request, params }) => {
+      const body = (await request.json()) as UnitSent;
+      sent.push({ ...body, id: String(params.id) });
+      if (options.refuse) return refusal();
+      units = units.map((u) => (u.id === params.id ? ({ ...u, ...body } as typeof UNIT_2B) : u));
+      return new HttpResponse(null, { status: 204 });
+    }),
+  );
+  return sent;
+}
+
+const unitsCard = async () =>
+  (await screen.findByRole('heading', { name: 'Units' })).closest('.pf-card') as HTMLElement;
+
+describe('Add and edit a unit (#780)', () => {
+  it('heads the unit figure "Asking rent", the rent the unit is offered at', async () => {
+    serveUnits({ units: [UNIT_2B] });
+    renderProperty();
+
+    const card = await unitsCard();
+    expect(await within(card).findByRole('columnheader', { name: 'Asking rent' })).toBeVisible();
+    expect(within(card).queryByRole('columnheader', { name: 'Rent' })).toBeNull();
+  });
+
+  it('adds a unit by Enter, available unless chosen otherwise, and the card lists it', async () => {
+    const sent = serveUnits();
+    renderProperty();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add unit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a unit to 14 Harborview Ln' });
+    expect(within(dialog).getByLabelText('Availability')).toHaveValue('available');
+    await userEvent.type(within(dialog).getByLabelText('Label'), '#3C');
+    await userEvent.type(within(dialog).getByLabelText('Asking rent'), '1525.50{Enter}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([
+      { propertyId: PROPERTY.id, label: '#3C', rent: 1525.5, availability: 'available' },
+    ]);
+    const card = await unitsCard();
+    expect(await within(card).findByRole('cell', { name: '#3C' })).toBeVisible();
+  });
+
+  it('refuses a unit with no label before anything is sent, and bounds the asking rent', async () => {
+    const sent = serveUnits();
+    renderProperty();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add unit' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add a unit to 14 Harborview Ln' });
+    const label = within(dialog).getByLabelText('Label');
+    const rent = within(dialog).getByLabelText('Asking rent');
+    expect(label).toBeRequired();
+    expect(label).toHaveAttribute('maxLength', '60');
+    expect(rent).toBeRequired();
+    expect(rent).toHaveAttribute('min', '0');
+    expect(rent).toHaveAttribute('step', '0.01');
+
+    await userEvent.type(rent, '1200{Enter}');
+    expect(sent).toHaveLength(0);
+    expect(screen.getByRole('dialog')).toBe(dialog);
+  });
+
+  it('edits a unit from its row, opening on its current values, and the card shows the change', async () => {
+    const sent = serveUnits({ units: [UNIT_2B] });
+    renderProperty();
+
+    const card = await unitsCard();
+    await userEvent.click(await within(card).findByRole('button', { name: 'Edit unit #2B' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit unit #2B' });
+    expect(within(dialog).getByLabelText('Label')).toHaveValue('#2B');
+    expect(within(dialog).getByLabelText('Asking rent')).toHaveValue(1450);
+    expect(within(dialog).getByLabelText('Availability')).toHaveValue('available');
+
+    const rent = within(dialog).getByLabelText('Asking rent');
+    await userEvent.clear(rent);
+    await userEvent.type(rent, '1495');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Availability'), 'unavailable');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save unit' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([{ id: 'u1', label: '#2B', rent: 1495, availability: 'unavailable' }]);
+    expect(await within(card).findByText('Unavailable')).toBeVisible();
+  });
+
+  it('shows the server’s refusal with its support reference and keeps the dialog open', async () => {
+    const detail = 'Label must be 60 characters or fewer.';
+    serveUnits({
+      units: [UNIT_2B],
+      refuse: {
+        status: 400,
+        body: { code: 'validation_failed', detail, correlationId: 'corr-780' },
+      },
+    });
+    renderProperty();
+
+    const card = await unitsCard();
+    await userEvent.click(await within(card).findByRole('button', { name: 'Edit unit #2B' }));
+    const dialog = screen.getByRole('dialog', { name: 'Edit unit #2B' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save unit' }));
+
+    expect(await within(dialog).findByText(new RegExp(detail))).toBeVisible();
+    expect(within(dialog).getByText(/Reference: corr-780/)).toBeVisible();
+    expect(screen.getByRole('dialog')).toBe(dialog);
   });
 });

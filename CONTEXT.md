@@ -54,6 +54,16 @@ Whether a unit is operationally available or unavailable, independent of occupan
 be unavailable, and an available unit may be vacant.
 _Avoid_: unit status, occupancy
 
+**Asking rent**:
+The rent a unit is offered at. It charges nothing; what a tenant owes is the lease rent of the lease
+effective for that unit.
+_Avoid_: unit rent, scheduled rent, market rent
+
+**Lease rent**:
+The periodic rent a lease obliges its tenant to pay, and the amount rent charges are made from. It may
+differ from the unit's asking rent.
+_Avoid_: unit rent, rent (when the asking rent could be meant)
+
 ### Access planes
 
 Every piece of work in the system runs in exactly one access plane, and which one it is determines

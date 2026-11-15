@@ -10,10 +10,13 @@ import {
   postApiDirectoryProperties,
   postApiDirectoryPropertiesByIdOwnershipTransfers,
   postApiDirectoryTenants,
+  postApiDirectoryUnits,
   putApiDirectoryLeasesById,
+  putApiDirectoryUnitsById,
   type CreateOwner,
   type CreateProperty,
   type CreateTenant,
+  type CreateUnit,
   type OwnerDetail,
   type OwnerListRow,
   type PagedResponseOfOwnerListRow,
@@ -27,6 +30,7 @@ import {
   type TransferPropertyOwnershipRequest,
   type UnitRow,
   type UpdateLease,
+  type UpdateUnit,
   unwrap,
 } from '@/api';
 
@@ -207,6 +211,58 @@ export function useTransferPropertyOwnership(propertyId: string) {
         qc.invalidateQueries({ queryKey: ['properties'] }),
         qc.invalidateQueries({ queryKey: ['owners'] }),
         qc.invalidateQueries({ queryKey: ['owner'] }),
+      ]),
+  });
+}
+
+/** The property a unit write belongs to: its page, and the owner whose unit count it changes. */
+export interface UnitParent {
+  id: string;
+  ownerId: string;
+}
+
+/**
+ * Adds a unit to a property. The property's own page, the properties list's and the owners list's
+ * unit counts, the owner's page, search (units are searchable) and the dashboard's vacancy — a new
+ * unit has no lease in effect — all change with it.
+ */
+export function useCreateUnit(property: UnitParent) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: CreateUnit) =>
+      unwrap(postApiDirectoryUnits({ body }), 'Failed to add the unit.'),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        qc.invalidateQueries({ queryKey: ['properties'] }),
+        qc.invalidateQueries({ queryKey: ['owners'] }),
+        qc.invalidateQueries({ queryKey: ['owner', property.ownerId] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]),
+  });
+}
+
+/**
+ * Edits a unit's label, asking rent and availability. `UpdateUnit` replaces all three, so callers
+ * send the unit back whole. No count moves, and vacancy ignores availability, but the label shows on every tenant row and tenant page
+ * of a lease on the unit, and in search, so those refetch with the property.
+ */
+export function useUpdateUnit(property: UnitParent) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateUnit) =>
+      unwrap(
+        putApiDirectoryUnitsById({ path: { id }, body: { id, ...body } }),
+        'Failed to save the unit.',
+        { allowNoContent: true },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        qc.invalidateQueries({ queryKey: ['tenants'] }),
+        qc.invalidateQueries({ queryKey: ['tenant'] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
       ]),
   });
 }

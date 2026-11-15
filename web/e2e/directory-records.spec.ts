@@ -6,9 +6,9 @@ import { test } from './test';
 // ADR-056) as a staff member.
 //
 // Every record a test writes is its own, under a name no other run used, so a rerun or a CI retry
-// adds records and collides with nothing. No seeded record is changed: the property is created for
-// an owner the same test created, and nothing here has a unit, a lease or a journal entry. The
-// organization's figures and the invariants are left as the seed wrote them.
+// adds records and collides with nothing. No seeded record is changed: each property is created for
+// an owner the same test created, and a unit only on such a property. Nothing here has a lease or a
+// journal entry, so the organization's figures and the invariants are left as the seed wrote them.
 //
 // The lists load one page of 200 rows in name order and filter it in the browser. Each test types
 // the record's name into the filter and asserts on the one row left, so nothing depends on where a
@@ -244,4 +244,90 @@ test('creates a tenant by keyboard: a malformed email is refused, and the new te
   await expect(row.locator('td').nth(3)).toHaveText('—');
   await expect(row.locator('td').nth(4)).toHaveText('Past');
   await expect(row.locator('td').nth(5)).toHaveText('No alerts');
+});
+
+test('adds a unit to a property by keyboard and edits it: a blank label is refused, and the unit counts follow @scenario:directory-add-edit-unit', async ({
+  page,
+}) => {
+  const id = runId();
+  const owner = `e2e Owner ${id}`;
+  const address = `${100 + Math.floor(Math.random() * 900)} e2e Court ${id}`;
+  let unitWrites = 0;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/directory/units') && request.method() !== 'GET') unitWrites += 1;
+  });
+
+  // The unit goes on a property this test creates, for an owner it creates, so no seeded property
+  // gains a unit and no seeded owner's counts move.
+  await signIn(page, SCENARIO_STAFF);
+  await openList(page, 'Owners');
+  await page.getByRole('button', { name: 'New owner' }).click();
+  const ownerDialog = page.getByRole('dialog', { name: 'New owner' });
+  await ownerDialog.getByLabel('Name').fill(owner);
+  await ownerDialog.getByRole('button', { name: 'Create owner' }).click();
+  await expect(page.getByRole('heading', { name: owner, level: 2 })).toBeVisible();
+  await openList(page, 'Properties');
+  await page.getByRole('button', { name: 'New property' }).click();
+  const propertyDialog = page.getByRole('dialog', { name: 'New property' });
+  await propertyDialog.getByLabel('Owner').selectOption({ label: owner });
+  await propertyDialog.getByLabel('Address').fill(address);
+  await propertyDialog.getByRole('button', { name: 'Create property' }).click();
+  await expect(page.getByRole('heading', { name: address, level: 2 })).toBeVisible();
+  const content = page.locator('.pf-page');
+  await expect(content).toContainText('No units on this property yet.');
+
+  // Add unit opens on the label, and a unit is available unless chosen otherwise. A label of only
+  // spaces satisfies the browser's `required`, so it is the server that refuses it, in place.
+  // Keyboard path throughout: each dialog opens from its focused button and saves on Enter.
+  await page.getByRole('button', { name: 'Add unit' }).focus();
+  await page.keyboard.press('Enter');
+  const add = page.getByRole('dialog', { name: `Add a unit to ${address}` });
+  await expect(add.getByLabel('Label')).toBeFocused();
+  await expect(add.getByLabel('Availability')).toHaveValue('available');
+  await add.getByLabel('Label').fill('   ');
+  await add.getByLabel('Asking rent').fill('1295');
+  await page.keyboard.press('Enter');
+  await expect(add.getByRole('alert')).toContainText("'Label' must not be empty.");
+  await expect(add).toBeVisible();
+  expect(unitWrites).toBe(1);
+
+  // Give it a label and press Enter in the rent. The Units card lists it, vacant.
+  await add.getByLabel('Label').fill('#1A');
+  await add.getByLabel('Asking rent').focus();
+  await page.keyboard.press('Enter');
+  await expect(add).toBeHidden();
+  const units = content
+    .locator('.pf-card')
+    .filter({ has: page.getByRole('heading', { name: 'Units' }) });
+  const unitRow = units.locator('tbody tr').filter({ hasText: '#1A' });
+  await expect(unitRow).toContainText('$1,295.00');
+  await expect(unitRow).toContainText('Vacant');
+  await expect(unitRow).toContainText('Available');
+  await expect(units).toContainText('1 unit(s)');
+  expect(unitWrites).toBe(2);
+
+  // Edit opens on the unit as it is. Raise the asking rent and retire the unit.
+  await unitRow.getByRole('button', { name: 'Edit unit #1A' }).focus();
+  await page.keyboard.press('Enter');
+  const edit = page.getByRole('dialog', { name: 'Edit unit #1A' });
+  await expect(edit.getByLabel('Label')).toHaveValue('#1A');
+  await expect(edit.getByLabel('Asking rent')).toHaveValue('1295');
+  await edit.getByLabel('Availability').selectOption('Unavailable');
+  await edit.getByLabel('Asking rent').fill('1325.50');
+  await page.keyboard.press('Enter');
+  await expect(edit).toBeHidden();
+  await expect(unitRow).toContainText('$1,325.50');
+  await expect(unitRow).toContainText('Unavailable');
+  expect(unitWrites).toBe(3);
+
+  // The property's and the owner's unit counts follow with no reload (#559's pattern): both lists
+  // were last read before the unit existed, well inside the 30 seconds the browser would keep them.
+  await content.getByRole('button', { name: 'Properties' }).click();
+  let row = await onlyRow(page, 'Properties', address);
+  await expect(row.locator('td').nth(3)).toHaveText('1');
+  await expect(row.locator('td').nth(4)).toHaveText('0/1 occupied');
+  await openList(page, 'Owners');
+  row = await onlyRow(page, 'Owners', owner);
+  await expect(row.locator('td').nth(1)).toHaveText('1');
 });

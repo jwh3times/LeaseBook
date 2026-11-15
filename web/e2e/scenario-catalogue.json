@@ -207,6 +207,14 @@
       "routes": ["POST /api/directory/tenants"]
     },
     {
+      "id": "directory-add-edit-unit",
+      "workflow": "Add a unit to a property by keyboard, with a blank label refused, edit its asking rent and availability, and see the property's and owner's unit counts follow",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["POST /api/directory/units", "PUT /api/directory/units/{id}"]
+    },
+    {
       "id": "error-and-empty-states",
       "workflow": "An expired session, a failed query, a failed post and an empty list each show their designed state",
       "area": "Error states",
@@ -929,18 +937,6 @@
       },
       {
         "route": "GET /api/directory/units",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
-      },
-      {
-        "route": "POST /api/directory/units",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
-      },
-      {
-        "route": "PUT /api/directory/units/{id}",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 558
