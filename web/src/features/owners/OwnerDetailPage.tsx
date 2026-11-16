@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Card, CardHeader, Money, StatCard, Table, type TableColumn } from '@/design';
+import { Button, Card, CardHeader, Money, StatCard, Table, type TableColumn } from '@/design';
 import { DetailPage } from '@/components/DetailPage';
 import { PortalAccessPanel } from '@/features/portal/PortalAccessPanel';
 import { num, useOwnerDetail, type OwnerDetail, type PropertyListRow } from '@/lib/directory';
+import { EditOwnerDialog } from './EditOwnerDialog';
 
 const propertyColumns: TableColumn<PropertyListRow> = {
   key: 'address',
@@ -14,6 +16,7 @@ export function OwnerDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const query = useOwnerDetail(id);
+  const [editing, setEditing] = useState(false);
 
   const columns: TableColumn<PropertyListRow>[] = [
     propertyColumns,
@@ -36,6 +39,11 @@ export function OwnerDetailPage() {
           ? `Default management fee · ${(num(o.defaultMgmtFeeBps) / 100).toFixed(2)}%`
           : 'No default management fee'
       }
+      actions={() => (
+        <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          Edit
+        </Button>
+      )}
     >
       {(o) => (
         <div className="col gap16">
@@ -75,6 +83,7 @@ export function OwnerDetailPage() {
             />
           </Card>
           <PortalAccessPanel key={id} persona="owner" targetId={id} />
+          {editing && <EditOwnerDialog owner={o} onClose={() => setEditing(false)} />}
         </div>
       )}
     </DetailPage>

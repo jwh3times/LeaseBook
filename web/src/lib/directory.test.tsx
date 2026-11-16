@@ -4,7 +4,8 @@ import { http, HttpResponse, type JsonBodyType } from 'msw';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { useReportPreview } from '@/features/reports/reports';
+import { useRunPreview } from '@/features/operations/useRuns';
+import { useReportPreview, useStatement } from '@/features/reports/reports';
 import { useDashboard } from './dashboard';
 import { useSearch } from './search';
 import {
@@ -20,6 +21,7 @@ import {
   useTenantDetail,
   useTenants,
   useUnits,
+  useUpdateOwner,
   useUpdateUnit,
 } from './directory';
 
@@ -59,12 +61,15 @@ beforeEach(() => {
       return HttpResponse.json([]);
     }),
     countedRead('rent roll', '/api/reports/rent-roll/preview', { columns: [], rows: [] }),
+    countedRead('statement o1', '/api/statements/o1', {}),
+    countedRead('disbursement preview', '/api/operations/runs/disbursement/preview', {}),
     http.post('/api/directory/properties', () => HttpResponse.json({ id: 'pNew' })),
     http.post('/api/directory/owners', () => HttpResponse.json({ id: 'oNew' })),
     http.post('/api/directory/tenants', () => HttpResponse.json({ id: 'tNew' })),
     http.post('/api/directory/units', () => HttpResponse.json({ id: 'uNew' })),
     http.put('/api/directory/units/:id', () => new HttpResponse(null, { status: 204 })),
     http.post('/api/directory/leases', () => HttpResponse.json({ id: 'lNew' })),
+    http.put('/api/directory/owners/:id', () => new HttpResponse(null, { status: 204 })),
   );
 });
 
@@ -93,6 +98,8 @@ async function mountWithReads<T>(mutate: () => T) {
       units: useUnits('p1'),
       otherUnits: useUnits('p2'),
       rentRoll: useReportPreview('rent-roll', {}),
+      statement: useStatement('o1', { basis: 'cash', year: 2026, month: 10 }),
+      disbursements: useRunPreview('disbursement', 2026, 10),
       mutation: mutate(),
     }),
     { wrapper },
@@ -112,6 +119,8 @@ async function mountWithReads<T>(mutate: () => T) {
       'units p1': 1,
       'units p2': 1,
       'rent roll': 1,
+      'statement o1': 1,
+      'disbursement preview': 1,
     }),
   );
   return result;
@@ -292,6 +301,51 @@ describe('lease writes', () => {
       'units p2': 1,
       'owner o2': 1,
       owners: 1,
+    });
+  });
+});
+
+describe('owner writes', () => {
+  // Owner o1 holds property p1; p2 is another owner's.
+  const owner = { id: 'o1', properties: [{ id: 'p1' }] };
+
+  it("editing an owner refetches every read that shows its name, fee rate or reserve, and no other owner's", async () => {
+    const result = await mountWithReads(() => useUpdateOwner(owner));
+    await result.current.mutation.mutateAsync({
+      id: 'o1',
+      name: 'Hargrove Family Trust II',
+      initials: 'HFT',
+      contactEmail: null,
+      contactPhone: null,
+      defaultMgmtFeeBps: 825,
+      reserveAmount: 500,
+    });
+
+    await waitFor(() =>
+      expect(reads).toMatchObject({
+        // The owner's own page and its list row.
+        'owner o1': 2,
+        owners: 2,
+        // The owner's name on its properties' rows and pages, and on every tenant page it reaches.
+        properties: 2,
+        'property p1': 2,
+        'tenant t1': 2,
+        search: 2,
+        // The dashboard names owners in its balances and counts what is above each reserve.
+        dashboard: 2,
+        // The next disbursement run uses the new fee rate and reserve.
+        'disbursement preview': 2,
+        // The owner's statement and report previews name the owner.
+        'statement o1': 2,
+        'rent roll': 2,
+      }),
+    );
+    // Another owner, another owner's property, the tenant list and the units are untouched.
+    expect(reads).toMatchObject({
+      'owner o2': 1,
+      'property p2': 1,
+      tenants: 1,
+      'units p1': 1,
     });
   });
 });
