@@ -18,6 +18,35 @@ next section.
 
 No unreleased changes.
 
+## [0.38.0] - 2026-11-15
+
+### Added
+
+- **Give a tenant a lease from their ledger, with no import** (#781). The ledger header now has
+  **Add lease**. Choose a property, then one of its units: vacant, available units are listed first,
+  and every unit says in words whether it is occupied today or unavailable. An occupied or
+  unavailable unit can still be chosen. Enter a start date, an end date if the lease has one (leave
+  it blank for month to month), the lease rent, which starts at the unit's asking rent and can be
+  changed, the deposit required, and whether the lease is active or pending. Creating a lease posts
+  nothing: no rent is charged and no deposit is collected, which stays the ledger's deposit action.
+  Late-fee terms are set afterwards with **Late fees**. The ledger header shows the lease in effect
+  today, so a pending lease, or one that starts later, is saved but appears there only once it is in
+  effect; the dialog says so. A lease in effect today shows at once on the ledger, and its unit
+  reads as occupied on the property page, the properties list, the owner's page and the dashboard,
+  with no reload. A term that overlaps another lease for the tenant or the unit is refused, and the
+  dialog shows the reason and its reference. The dialog says while the properties or a property's
+  units load, offers a retry when they can't be read, and says when there is no property or unit to
+  choose. It works by keyboard.
+
+### Changed
+
+- Adding or editing a unit now also refreshes the add-lease unit list.
+- The scenario catalogue gains `directory-add-lease`, which sets up a tenancy by keyboard
+  (property, unit, tenant, lease) and reaches `GET /api/directory/units` and
+  `POST /api/directory/leases`, so neither route needs an exemption, and the coverage record says a
+  browser test now reaches them. An integration test pins that
+  creating a lease writes no journal entry, and the accessibility scan covers the dialog.
+
 ## [0.37.0] - 2026-11-15
 
 ### Added
@@ -2339,7 +2368,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.38.0
 [0.37.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.37.0
 [0.36.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.1
 [0.36.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.0
