@@ -109,6 +109,28 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
+    // #781: the add-lease dialog over the ledger, with a property's units loaded into the picker.
+    // Opening it and choosing a unit saves nothing, so the scan leaves the seeded org untouched.
+    test('no WCAG AA violations with the add lease dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/tenants', { waitUntil: 'networkidle' });
+      await page.getByText('Jasmine Carter').click();
+      await page.waitForURL(/\/tenants\//);
+      await page.getByRole('heading', { name: 'Jasmine Carter' }).waitFor();
+      await page.getByRole('button', { name: 'Add lease' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Add a lease for Jasmine Carter' });
+      await dialog.getByLabel('Property').selectOption({ label: '412 Oakmont Ave' });
+      await expect(
+        dialog.getByLabel('Unit').getByRole('option', { name: '#2B · occupied' }),
+      ).toBeAttached();
+      await dialog.getByLabel('Unit').selectOption({ label: '#2B · occupied' });
+      await expect(dialog.getByLabel('Lease rent')).not.toHaveValue('');
+      await runA11y(page);
+    });
+
     // #473: the per-account check print calibration, read but not saved — and, since #474, the
     // account's MICR details as an administrator sees them (the editable form, loaded).
     test('no WCAG AA violations with the check print settings dialog open @scenario:accessibility-staff-pages', async ({

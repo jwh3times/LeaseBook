@@ -22,6 +22,7 @@ import {
 } from '@/features/refundChecks/refundChecks';
 import { RecordQuickSwitch } from '@/components/RecordQuickSwitch';
 import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
+import { AddLeaseDialog } from './AddLeaseDialog';
 import { ApplyModal } from './ApplyModal';
 import { AuditDrawer } from './AuditDrawer';
 import { LeaseLateFeeBadge, LeaseLateFeeModal } from './LeaseLateFeeModal';
@@ -75,6 +76,7 @@ export function LedgerPage() {
   const { data: session } = useSession();
 
   const [lateFeeOpen, setLateFeeOpen] = useState(false);
+  const [addLeaseOpen, setAddLeaseOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
   // #377: the most recent post, whose issued-statement coverage the notice reports. The composer and
   // dialogs close on success, so the notice lives here; it persists until dismissed or navigation.
@@ -214,6 +216,13 @@ export function LedgerPage() {
                     </Button>
                   </span>
                 )}
+                {/*
+                  Always offered: a tenant with a lease may be given the next one, and the server's
+                  overlap check refuses a term that collides with it (#781).
+                */}
+                <Button variant="ghost" size="sm" icon="plus" onClick={() => setAddLeaseOpen(true)}>
+                  Add lease
+                </Button>
                 {detail.data.contact.phone && <span>{detail.data.contact.phone}</span>}
               </div>
             </div>
@@ -415,6 +424,13 @@ export function LedgerPage() {
         />
       )}
       {auditEntryId && <AuditDrawer entryId={auditEntryId} onClose={() => setAuditEntryId(null)} />}
+      {addLeaseOpen && detail.data && (
+        <AddLeaseDialog
+          tenantId={id}
+          tenantName={detail.data.displayName}
+          onClose={() => setAddLeaseOpen(false)}
+        />
+      )}
       {lateFeeOpen && detail.data?.lease && (
         <LeaseLateFeeModal
           tenantId={id}

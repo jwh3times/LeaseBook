@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-84 scenarios, 1 of them an expected failure that shows a known limit. 2 journal event types and 16 routes are exempt.
+85 scenarios, 1 of them an expected failure that shows a known limit. 2 journal event types and 14 routes are exempt.
 
 ### Scenarios
 
@@ -256,6 +256,7 @@ not edit between the markers.
 | `directory-create-property` | Create a property for a new owner by keyboard, with a blank address refused, and see it on its page, in the list and under its owner | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/properties` |
 | `directory-create-tenant` | Create a tenant from the tenant list by keyboard, with a malformed email refused, and see it on its page and in the list | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/tenants` |
 | `directory-add-edit-unit` | Add a unit to a property by keyboard, with a blank label refused, edit its asking rent and availability, and see the property's and owner's unit counts follow | Directory | `directory-records.spec.ts` |  |  | `POST /api/directory/units`<br>`PUT /api/directory/units/{id}` |
+| `directory-add-lease` | Set up a tenancy with no import: create a property, add a unit, create a tenant and give the tenant a lease from their ledger, with an overlapping term refused, and see the unit occupied and nothing posted | Directory | `directory-records.spec.ts` |  |  | `GET /api/directory/units`<br>`POST /api/directory/leases` |
 | `error-and-empty-states` | An expired session, a failed query, a failed post and an empty list each show their designed state | Error states | `error-states.spec.ts` |  |  |  |
 | `keyboard-record-payment` | Record a tenant payment by keyboard alone, from the ledger and from the palette action, in 3 interactions | Accounting | `keyboard-only.spec.ts` | demo | `PaymentReceived` | `POST /api/accounting/tenants/{tenantId}/payments`<br>`GET /api/accounting/tenants/{tenantId}/ledger` |
 | `keyboard-navigation-and-focus` | Move through the palette, close a dialog and see the focus ring by keyboard | Accessibility | `keyboard-only.spec.ts` |  |  |  |
@@ -332,7 +333,7 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 6 |
+| baseline gap | 4 |
 
 #### Journal event types with no scenario
 
@@ -351,9 +352,7 @@ not edit between the markers.
 | `GET /api/accounting/trust-equation` | No screen requests it; the screens that show these figures get them from other routes. | 2026-10-12 |  |
 | `PUT /api/directory/owners/{id}` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/properties/{id}` | baseline gap | 2026-10-12 | #558 |
-| `GET /api/directory/units` | baseline gap | 2026-10-12 | #558 |
 | `PUT /api/directory/tenants/{id}` | baseline gap | 2026-10-12 | #558 |
-| `POST /api/directory/leases` | baseline gap | 2026-10-12 | #558 |
 | `GET /api/health` | No screen requests it; container probes and the test runner poll it to see that the host is up. | 2026-10-12 |  |
 | `GET /api/settings/banks/{id}` | No screen requests it; the screens read the whole list of bank accounts. | 2026-10-12 |  |
 | `POST /api/portal-access/invitations/{id}/retry` | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 2026-10-12 |  |

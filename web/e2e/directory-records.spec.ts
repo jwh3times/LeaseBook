@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { SCENARIO_STAFF, signIn } from './helpers';
+import { orgToday, SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
 // Creating directory records (#544), driven in the scenario organization (`seed --org scenario`,
@@ -7,8 +7,9 @@ import { test } from './test';
 //
 // Every record a test writes is its own, under a name no other run used, so a rerun or a CI retry
 // adds records and collides with nothing. No seeded record is changed: each property is created for
-// an owner the same test created, and a unit only on such a property. Nothing here has a lease or a
-// journal entry, so the organization's figures and the invariants are left as the seed wrote them.
+// an owner the same test created, a unit only on such a property, and a lease only between a tenant
+// and a unit the same test created. Nothing here posts a journal entry, so the organization's
+// figures and the invariants are left as the seed wrote them.
 //
 // The lists load one page of 200 rows in name order and filter it in the browser. Each test types
 // the record's name into the filter and asserts on the one row left, so nothing depends on where a
@@ -45,6 +46,39 @@ function countPosts(page: Page, path: string): () => number {
     if (request.method() === 'POST' && new URL(request.url()).pathname === path) posts += 1;
   });
   return () => posts;
+}
+
+/**
+ * Creates an owner and a property of theirs, both named for this run, and leaves the property's page
+ * open. A unit added there, and a lease on it, then touch no seeded record.
+ */
+async function newOwnerAndProperty(
+  page: Page,
+  id: string,
+): Promise<{ owner: string; address: string }> {
+  const owner = `e2e Owner ${id}`;
+  const address = `${100 + Math.floor(Math.random() * 900)} e2e Court ${id}`;
+  await openList(page, 'Owners');
+  await page.getByRole('button', { name: 'New owner' }).click();
+  const ownerDialog = page.getByRole('dialog', { name: 'New owner' });
+  await ownerDialog.getByLabel('Name').fill(owner);
+  await ownerDialog.getByRole('button', { name: 'Create owner' }).click();
+  await expect(page.getByRole('heading', { name: owner, level: 2 })).toBeVisible();
+  await openList(page, 'Properties');
+  await page.getByRole('button', { name: 'New property' }).click();
+  const propertyDialog = page.getByRole('dialog', { name: 'New property' });
+  await propertyDialog.getByLabel('Owner').selectOption({ label: owner });
+  await propertyDialog.getByLabel('Address').fill(address);
+  await propertyDialog.getByRole('button', { name: 'Create property' }).click();
+  await expect(page.getByRole('heading', { name: address, level: 2 })).toBeVisible();
+  return { owner, address };
+}
+
+/** The open property page's Units card. */
+function unitsCard(page: Page): Locator {
+  return page
+    .locator('.pf-page .pf-card')
+    .filter({ has: page.getByRole('heading', { name: 'Units' }) });
 }
 
 /**
@@ -250,8 +284,6 @@ test('adds a unit to a property by keyboard and edits it: a blank label is refus
   page,
 }) => {
   const id = runId();
-  const owner = `e2e Owner ${id}`;
-  const address = `${100 + Math.floor(Math.random() * 900)} e2e Court ${id}`;
   let unitWrites = 0;
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname;
@@ -261,19 +293,7 @@ test('adds a unit to a property by keyboard and edits it: a blank label is refus
   // The unit goes on a property this test creates, for an owner it creates, so no seeded property
   // gains a unit and no seeded owner's counts move.
   await signIn(page, SCENARIO_STAFF);
-  await openList(page, 'Owners');
-  await page.getByRole('button', { name: 'New owner' }).click();
-  const ownerDialog = page.getByRole('dialog', { name: 'New owner' });
-  await ownerDialog.getByLabel('Name').fill(owner);
-  await ownerDialog.getByRole('button', { name: 'Create owner' }).click();
-  await expect(page.getByRole('heading', { name: owner, level: 2 })).toBeVisible();
-  await openList(page, 'Properties');
-  await page.getByRole('button', { name: 'New property' }).click();
-  const propertyDialog = page.getByRole('dialog', { name: 'New property' });
-  await propertyDialog.getByLabel('Owner').selectOption({ label: owner });
-  await propertyDialog.getByLabel('Address').fill(address);
-  await propertyDialog.getByRole('button', { name: 'Create property' }).click();
-  await expect(page.getByRole('heading', { name: address, level: 2 })).toBeVisible();
+  const { owner, address } = await newOwnerAndProperty(page, id);
   const content = page.locator('.pf-page');
   await expect(content).toContainText('No units on this property yet.');
 
@@ -297,9 +317,7 @@ test('adds a unit to a property by keyboard and edits it: a blank label is refus
   await add.getByLabel('Asking rent').focus();
   await page.keyboard.press('Enter');
   await expect(add).toBeHidden();
-  const units = content
-    .locator('.pf-card')
-    .filter({ has: page.getByRole('heading', { name: 'Units' }) });
+  const units = unitsCard(page);
   const unitRow = units.locator('tbody tr').filter({ hasText: '#1A' });
   await expect(unitRow).toContainText('$1,295.00');
   await expect(unitRow).toContainText('Vacant');
@@ -330,4 +348,99 @@ test('adds a unit to a property by keyboard and edits it: a blank label is refus
   await openList(page, 'Owners');
   row = await onlyRow(page, 'Owners', owner);
   await expect(row.locator('td').nth(1)).toHaveText('1');
+});
+
+test('sets up a tenancy with no import, by keyboard: property, unit, tenant, then a lease from the ledger, with an overlapping term refused and nothing posted @scenario:directory-add-lease', async ({
+  page,
+}) => {
+  const id = runId();
+  const tenant = `e2e Lease Tenant ${id}`;
+  const today = orgToday();
+  const leasePosts = countPosts(page, '/api/directory/leases');
+
+  // A property and a unit of this test's own, so the lease touches no seeded unit or tenant.
+  await signIn(page, SCENARIO_STAFF);
+  const { address } = await newOwnerAndProperty(page, id);
+  await page.getByRole('button', { name: 'Add unit' }).focus();
+  await page.keyboard.press('Enter');
+  const addUnit = page.getByRole('dialog', { name: `Add a unit to ${address}` });
+  await addUnit.getByLabel('Label').fill('#1A');
+  await addUnit.getByLabel('Asking rent').fill('1295');
+  await page.keyboard.press('Enter');
+  await expect(addUnit).toBeHidden();
+  await expect(unitsCard(page).locator('tbody tr').filter({ hasText: '#1A' })).toContainText(
+    'Vacant',
+  );
+  const propertyPage = page.url();
+
+  // A current tenant, whose ledger opens with no unit and nothing on it.
+  await openList(page, 'Tenants');
+  await page.getByRole('button', { name: 'New tenant' }).click();
+  const newTenant = page.getByRole('dialog', { name: 'New tenant' });
+  await newTenant.getByLabel('Display name').fill(tenant);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: tenant, level: 2 })).toBeVisible();
+  const header = page.locator('.pf-tenant-hd');
+  await expect(header).toContainText('No unit');
+
+  // Add lease, from the ledger header by keyboard. The unit is offered as vacant, in words, and its
+  // asking rent fills the lease rent, which is lowered before saving. The term starts today, with no
+  // end: a month-to-month lease, in effect at once.
+  await page.getByRole('button', { name: 'Add lease' }).focus();
+  await page.keyboard.press('Enter');
+  const addLease = page.getByRole('dialog', { name: `Add a lease for ${tenant}` });
+  const unitPicker = addLease.getByLabel('Unit');
+  await addLease.getByLabel('Property').selectOption({ label: address });
+  await expect(unitPicker.getByRole('option', { name: '#1A · vacant' })).toBeAttached();
+  await unitPicker.selectOption({ label: '#1A · vacant' });
+  await expect(addLease.getByLabel('Lease rent')).toHaveValue('1295');
+  await expect(addLease.getByLabel('Lifecycle')).toHaveValue('active');
+  await addLease.getByLabel('Lease rent').fill('1250');
+  await addLease.getByLabel('Start date').fill(today);
+  await addLease.getByLabel('Deposit required').fill('1250');
+  await page.keyboard.press('Enter');
+  await expect(addLease).toBeHidden();
+  expect(leasePosts()).toBe(1);
+
+  // The header shows the lease and its unit with no reload. Creating it posted nothing: the ledger
+  // is empty and nothing is owed or held.
+  await expect(header).toContainText('#1A');
+  await expect(header).toContainText(`Lease ${today} – —`);
+  await expect(page.locator('.pf-ledger-card')).toContainText('0 entries');
+  await expect(header.locator('.pf-tstat').filter({ hasText: 'Current balance' })).toContainText(
+    '—',
+  );
+  await expect(header.locator('.pf-tstat').filter({ hasText: 'Deposit held' })).toContainText(
+    '$0.00',
+  );
+
+  // A second lease on the same unit from the same day overlaps the first, and the server refuses it
+  // in the dialog: nothing is created. The unit is now offered as occupied.
+  await page.getByRole('button', { name: 'Add lease' }).focus();
+  await page.keyboard.press('Enter');
+  await addLease.getByLabel('Property').selectOption({ label: address });
+  await expect(unitPicker.getByRole('option', { name: '#1A · occupied' })).toBeAttached();
+  await unitPicker.selectOption({ label: '#1A · occupied' });
+  await addLease.getByLabel('Start date').fill(today);
+  await addLease.getByLabel('Deposit required').fill('0');
+  await page.keyboard.press('Enter');
+  await expect(addLease.getByRole('alert')).toContainText(
+    'A tenant cannot have overlapping non-pending lease terms.',
+  );
+  await expect(addLease.getByRole('alert')).toContainText('Reference:');
+  expect(leasePosts()).toBe(2);
+  await addLease.getByRole('button', { name: 'Cancel' }).click();
+  await expect(addLease).toBeHidden();
+  await expect(header).toContainText(`Lease ${today} – —`);
+
+  // The unit reads as occupied wherever occupancy shows, with no reload: the properties list was
+  // last read before the lease existed.
+  await openList(page, 'Properties');
+  const row = await onlyRow(page, 'Properties', address);
+  await expect(row.locator('td').nth(4)).toHaveText('1/1 occupied');
+  await row.click();
+  await expect(page).toHaveURL(propertyPage);
+  const unitRow = unitsCard(page).locator('tbody tr').filter({ hasText: '#1A' });
+  await expect(unitRow).toContainText('Occupied');
+  await expect(unitRow).toContainText('$1,295.00');
 });
