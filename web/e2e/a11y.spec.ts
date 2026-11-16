@@ -178,6 +178,21 @@ for (const theme of THEMES) {
       await runA11y(page);
     });
 
+    // #782: the owner edit dialog over the owner page, prefilled. Opening it saves nothing.
+    test('no WCAG AA violations with the edit owner dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/owners', { waitUntil: 'networkidle' });
+      await page.getByText('Hargrove Family Trust').click();
+      await page.waitForURL(/\/owners\/[^/]+$/);
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Edit Hargrove Family Trust' });
+      await expect(dialog.getByLabel('Name')).toHaveValue('Hargrove Family Trust');
+      await runA11y(page);
+    });
+
     test('no WCAG AA violations on a property detail @scenario:accessibility-staff-pages', async ({
       page,
     }) => {

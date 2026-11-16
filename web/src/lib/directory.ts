@@ -14,6 +14,7 @@ import {
   postApiDirectoryTenants,
   postApiDirectoryUnits,
   putApiDirectoryLeasesById,
+  putApiDirectoryOwnersById,
   putApiDirectoryUnitsById,
   type CreateLease,
   type CreateOwner,
@@ -33,6 +34,7 @@ import {
   type TransferPropertyOwnershipRequest,
   type UnitRow,
   type UpdateLease,
+  type UpdateOwner,
   type UpdateUnit,
   unwrap,
 } from '@/api';
@@ -314,6 +316,50 @@ export function useCreateLease(tenantId: string) {
         qc.invalidateQueries({ queryKey: ['owner', property.ownerId] }),
         qc.invalidateQueries({ queryKey: ['dashboard'] }),
         qc.invalidateQueries({ queryKey: ['search'] }),
+        qc.invalidateQueries({ queryKey: ['report-preview'] }),
+      ]),
+  });
+}
+
+/** The owner an edit belongs to: its id, and the properties whose rows and pages show its name. */
+export interface OwnerEditTarget {
+  id: string;
+  properties: readonly { id: string }[];
+}
+
+/**
+ * Edits an owner (#782). `UpdateOwner` replaces every field, so callers send the owner back whole:
+ * the owner read carries all six for that, initials included. The fee rate and reserve overwrite in
+ * place, with the audit row as their history, and the next run uses them.
+ *
+ * The name shows on the owner's page and list row, its properties' rows and pages, every tenant page
+ * the owner reaches (which this page cannot list, so all of them), search, the dashboard's owner
+ * balances, the owner's statements and report previews. The reserve also moves the dashboard's
+ * available-to-disburse, and the fee rate and reserve both move the run previews.
+ */
+export function useUpdateOwner(owner: OwnerEditTarget) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateOwner) =>
+      unwrap(
+        putApiDirectoryOwnersById({ path: { id }, body: { id, ...body } }),
+        'Failed to save the owner.',
+        { allowNoContent: true },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['owner', owner.id] }),
+        qc.invalidateQueries({ queryKey: ['owners'] }),
+        qc.invalidateQueries({ queryKey: ['properties'] }),
+        ...owner.properties.map((property) =>
+          qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        ),
+        qc.invalidateQueries({ queryKey: ['tenant'] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+        // `runPreviewKey`'s prefix; the operations feature owns the key, and a lib hook names it.
+        qc.invalidateQueries({ queryKey: ['operations', 'preview'] }),
+        qc.invalidateQueries({ queryKey: ['statement', owner.id] }),
         qc.invalidateQueries({ queryKey: ['report-preview'] }),
       ]),
   });

@@ -9,13 +9,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LeaseBook.Modules.Directory.Features.Owners;
 
-/// <summary>Owner detail (§C.3): the owner, its properties, and aggregate balances via the port.</summary>
+/// <summary>
+/// Owner detail (§C.3): the owner, its properties, and aggregate balances via the port. It carries
+/// every field <c>UpdateOwner</c> replaces, initials included, so an edit prefilled from it sends the
+/// owner back whole rather than clearing what it never read (#782).
+/// </summary>
 public sealed record GetOwnerDetail(Guid Id) : IQuery<OwnerDetail?>;
 
 public sealed record OwnerContact(string? Email, string? Phone);
 
 public sealed record OwnerDetail(
-    Guid Id, string Name, OwnerContact Contact, int? DefaultMgmtFeeBps, decimal ReserveAmount,
+    Guid Id, string Name, string? Initials, OwnerContact Contact, int? DefaultMgmtFeeBps, decimal ReserveAmount,
     IReadOnlyList<PropertyListRow> Properties, decimal Operating, decimal Deposits, decimal Total);
 
 internal sealed class GetOwnerDetailHandler(DbContext db, IOwnerFinancials ownerFinancials, OrgCalendar calendar)
@@ -62,7 +66,7 @@ internal sealed class GetOwnerDetailHandler(DbContext db, IOwnerFinancials owner
             .GetValueOrDefault(owner.Id, new OwnerFinancialsRow(0, 0));
 
         return new OwnerDetail(
-            owner.Id, owner.Name, new OwnerContact(owner.ContactEmail, owner.ContactPhone),
+            owner.Id, owner.Name, owner.Initials, new OwnerContact(owner.ContactEmail, owner.ContactPhone),
             owner.DefaultMgmtFeeBps, owner.ReserveAmount.Amount, propertyRows,
             financials.Operating, financials.Deposits, financials.Total);
     }

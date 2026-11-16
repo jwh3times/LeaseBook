@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { orgToday, SCENARIO_STAFF, signIn } from './helpers';
+import { orgToday, SCENARIO_ADMIN, SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
 // Creating directory records (#544), driven in the scenario organization (`seed --org scenario`,
@@ -443,4 +443,95 @@ test('sets up a tenancy with no import, by keyboard: property, unit, tenant, the
   const unitRow = unitsCard(page).locator('tbody tr').filter({ hasText: '#1A' });
   await expect(unitRow).toContainText('Occupied');
   await expect(unitRow).toContainText('$1,295.00');
+});
+
+test('edits an owner by keyboard: the fee rate as a percent, the reserve and the name follow on its page and list, and the audit log keeps the before and after @scenario:directory-edit-owner', async ({
+  page,
+}) => {
+  const id = runId();
+  const owner = `e2e Owner ${id}`;
+  const renamed = `e2e Owner ${id} Trust`;
+  let ownerWrites = 0;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'PUT' && path.startsWith('/api/directory/owners/')) ownerWrites += 1;
+  });
+
+  // An owner of this test's own, created with initials and the default 8% rate. The audit log is an
+  // administrator's, so the whole test runs as the scenario organization's administrator.
+  await signIn(page, SCENARIO_ADMIN);
+  await openList(page, 'Owners');
+  await page.getByRole('button', { name: 'New owner' }).click();
+  const create = page.getByRole('dialog', { name: 'New owner' });
+  await create.getByLabel('Name').fill(owner);
+  await create.getByLabel('Initials').fill('EO');
+  await create.getByRole('button', { name: 'Create owner' }).click();
+  await expect(page.getByRole('heading', { name: owner, level: 2 })).toBeVisible();
+  await expect(page.getByText('Default management fee · 8.00%')).toBeVisible();
+  const ownerPage = page.url();
+  const ownerId = ownerPage.split('/').at(-1) ?? '';
+
+  // Edit opens from its focused button on the owner as it is, initials included, the rate as a
+  // percent. Rename, set 8.25% and a reserve floor, and save from the focused button: it sets money
+  // policy, so like the other money dialogs it never saves from Enter in a field (#711).
+  await page.getByRole('button', { name: 'Edit', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const edit = page.getByRole('dialog', { name: `Edit ${owner}` });
+  await expect(edit.getByLabel('Name')).toHaveValue(owner);
+  await expect(edit.getByLabel('Initials')).toHaveValue('EO');
+  await expect(edit.getByLabel('Mgmt fee %')).toHaveValue('8');
+  await expect(edit.getByLabel('Reserve floor')).toHaveValue('0');
+  await expect(edit).toContainText('A fee-rate or reserve change applies from the next run.');
+  await edit.getByLabel('Name').fill(renamed);
+  await edit.getByLabel('Mgmt fee %').fill('8.25');
+  await edit.getByLabel('Reserve floor').fill('500');
+  await page.keyboard.press('Enter');
+  await expect(edit).toBeVisible();
+  expect(ownerWrites).toBe(0);
+  await edit.getByRole('button', { name: 'Save owner' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(edit).toBeHidden();
+  expect(ownerWrites).toBe(1);
+
+  // The page follows with no reload.
+  await expect(page.getByRole('heading', { name: renamed, level: 2 })).toBeVisible();
+  await expect(page.getByText('Default management fee · 8.25%')).toBeVisible();
+  await expect(
+    page.locator('.pf-statgrid .pf-card').filter({ hasText: 'Reserve floor' }),
+  ).toContainText('$500.00');
+
+  // Reopened, it shows what was saved: the rate round-trips through basis points, and the initials
+  // that were never touched are still there.
+  await page.getByRole('button', { name: 'Edit', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const again = page.getByRole('dialog', { name: `Edit ${renamed}` });
+  await expect(again.getByLabel('Mgmt fee %')).toHaveValue('8.25');
+  await expect(again.getByLabel('Initials')).toHaveValue('EO');
+  await expect(again.getByLabel('Reserve floor')).toHaveValue('500');
+  await page.keyboard.press('Escape');
+  await expect(again).toBeHidden();
+
+  // The list follows too: it was last read before the rename, well inside its 30-second stale time.
+  await openList(page, 'Owners');
+  await onlyRow(page, 'Owners', renamed);
+
+  // The audit log keeps the change: this administrator's newest owner update is this one, and its
+  // drawer lists the fee rate and reserve before and after.
+  await page.getByRole('navigation').getByRole('button', { name: 'Audit log' }).click();
+  await expect(page).toHaveURL(/\/audit$/);
+  const filters = page.getByRole('group', { name: 'Audit filters' });
+  await filters.getByLabel('Record type').selectOption('owners');
+  await filters.getByLabel('Actor').selectOption({ label: 'Scenario Admin' });
+  const view = page.getByRole('button', { name: /^View owners / }).first();
+  await view.focus();
+  await page.keyboard.press('Enter');
+  const drawer = page.getByRole('dialog', { name: 'Audit event' });
+  await expect(drawer).toContainText(ownerId);
+  const field = (name: string) => drawer.locator('tbody tr').filter({ hasText: name });
+  await expect(field('DefaultMgmtFeeBps').locator('td').nth(1)).toHaveText('800');
+  await expect(field('DefaultMgmtFeeBps').locator('td').nth(2)).toHaveText('825');
+  // A money column is recorded as the whole money value, so its amount is read out of it.
+  await expect(field('ReserveAmount').locator('td').nth(1)).toHaveText(/"Amount": 0(\.00)?,/);
+  await expect(field('ReserveAmount').locator('td').nth(2)).toHaveText(/"Amount": 500(\.00)?,/);
+  await expect(field('Name').locator('td').nth(2)).toHaveText(renamed);
 });

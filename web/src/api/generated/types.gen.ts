@@ -661,6 +661,7 @@ export type OwnerContact = {
 export type OwnerDetail = {
     id: string;
     name: string;
+    initials: null | string;
     contact: OwnerContact;
     defaultMgmtFeeBps: null | number | string;
     reserveAmount: number | string;

@@ -223,6 +223,14 @@
       "routes": ["GET /api/directory/units", "POST /api/directory/leases"]
     },
     {
+      "id": "directory-edit-owner",
+      "workflow": "Edit an owner by keyboard, with the fee rate entered as a percent, the reserve and the name followed on its page and list, and the fee and reserve change kept in the audit log with its before and after",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["PUT /api/directory/owners/{id}"]
+    },
+    {
       "id": "error-and-empty-states",
       "workflow": "An expired session, a failed query, a failed post and an empty list each show their designed state",
       "area": "Error states",
@@ -930,12 +938,6 @@
         "route": "GET /api/accounting/trust-equation",
         "reason": "No screen requests it; the screens that show these figures get them from other routes.",
         "date": "2026-10-12"
-      },
-      {
-        "route": "PUT /api/directory/owners/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
       },
       {
         "route": "PUT /api/directory/properties/{id}",
