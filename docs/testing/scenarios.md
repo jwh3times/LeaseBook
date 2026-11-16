@@ -235,7 +235,7 @@ not edit between the markers.
 | Scenario | Workflow | Area | Spec | Organization | Journal events | Routes |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
 | `accessibility-portals` | The tenant and owner portals have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  |  |
-| `accessibility-staff-pages` | Every routed staff page, the record details, the refund-check dialogs and the bank fee or transfer dialog have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  | `GET /api/refund-checks/micr/{bankAccountId}`<br>`GET /api/refund-checks/print-settings/{bankAccountId}` |
+| `accessibility-staff-pages` | Every routed staff page, the record details, the refund-check dialogs, the bank fee or transfer dialog, the add-lease dialog and the edit-owner dialog have no WCAG 2 AA violations, light and dark | Accessibility | `a11y.spec.ts` |  |  | `GET /api/refund-checks/micr/{bankAccountId}`<br>`GET /api/refund-checks/print-settings/{bankAccountId}` |
 | `accessibility-command-palette` | The command palette open on results has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `accessibility-onboarding` | The onboarding wizard has no WCAG 2 AA violations | Accessibility | `a11y.spec.ts` |  |  |  |
 | `mfa-enrollment-by-keyboard` | Be held on required MFA enrollment and complete it by keyboard, with the session and the enrollment routes answered by the test | Account security | `account-security.spec.ts` |  |  |  |

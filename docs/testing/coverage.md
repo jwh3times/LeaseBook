@@ -382,7 +382,8 @@ The 22 routes no test reached, by what they have in common:
   (#555). It now adds a unit and edits one too, and a browser test reaches
   `POST /api/directory/units` and `PUT /api/directory/units/{id}` (#780). The tenant ledger now
   gives a tenant a lease on a unit picked from a property's units, and a browser test reaches
-  `GET /api/directory/units` and `POST /api/directory/leases` (#781).
+  `GET /api/directory/units` and `POST /api/directory/leases` (#781). The owner page now edits an
+  owner, and a browser test reaches `PUT /api/directory/owners/{id}` (#782).
 - **Bank adjustments (1).** No screen recorded a bank fee, interest or a transfer between accounts
   when this was measured. The bank register now records a bank fee, a transfer, a PM contribution
   (#720), a fee sweep (#743), an owner contribution (#744) or a vendor payment (#745), and a browser

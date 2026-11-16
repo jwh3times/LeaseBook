@@ -18,6 +18,33 @@ next section.
 
 No unreleased changes.
 
+## [0.39.0] - 2026-11-15
+
+### Added
+
+- **Edit an owner from their page** (#782). The owner page header now has **Edit**. It opens on the
+  owner as saved and changes their name, initials, contact email and phone, default management-fee
+  rate and reserve floor. The rate is entered as a percent to the hundredth (8.25%) and saved
+  exactly; leave it blank for no default rate. Emptying an email, phone or initials clears it, and a
+  field you don't touch is saved as it was. A new rate or reserve floor replaces the old one and is
+  used from the next fee and disbursement run; runs already made are not recalculated, and the
+  dialog says so. The audit log records the change with its before and after values. Because the
+  rate and reserve floor are money policy, the dialog saves only from **Save owner**, never from
+  Enter in a field, and a value out of bounds is reported on its field before anything is sent. The
+  owner page, the owners and properties lists, property and tenant pages, search, the dashboard, run
+  previews and the owner's statements show the change with no reload. When the server refuses the
+  change, the dialog shows the reason and its reference. It works by keyboard.
+
+### Changed
+
+- **The owner read returns the owner's initials.** `GET /api/directory/owners/{id}` now includes
+  `initials`, so an edit made from it sends every field `UpdateOwner` replaces and no longer clears
+  the initials.
+- The scenario catalogue gains `directory-edit-owner`, which reaches `PUT /api/directory/owners/{id}`,
+  so that route needs no exemption, and the coverage record says a browser test now reaches it. An
+  integration test pins that an edit keeps the initials, and the accessibility scan covers the
+  dialog.
+
 ## [0.38.0] - 2026-11-15
 
 ### Added
@@ -2368,7 +2395,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.0
 [0.38.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.38.0
 [0.37.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.37.0
 [0.36.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.36.1
