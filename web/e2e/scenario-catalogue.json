@@ -215,6 +215,14 @@
       "routes": ["POST /api/directory/units", "PUT /api/directory/units/{id}"]
     },
     {
+      "id": "directory-add-lease",
+      "workflow": "Set up a tenancy with no import: create a property, add a unit, create a tenant and give the tenant a lease from their ledger, with an overlapping term refused, and see the unit occupied and nothing posted",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["GET /api/directory/units", "POST /api/directory/leases"]
+    },
+    {
       "id": "error-and-empty-states",
       "workflow": "An expired session, a failed query, a failed post and an empty list each show their designed state",
       "area": "Error states",
@@ -936,19 +944,7 @@
         "issue": 558
       },
       {
-        "route": "GET /api/directory/units",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
-      },
-      {
         "route": "PUT /api/directory/tenants/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
-      },
-      {
-        "route": "POST /api/directory/leases",
         "reason": "baseline gap",
         "date": "2026-10-12",
         "issue": 558

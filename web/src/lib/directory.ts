@@ -6,6 +6,8 @@ import {
   getApiDirectoryPropertiesById,
   getApiDirectoryTenants,
   getApiDirectoryTenantsById,
+  getApiDirectoryUnits,
+  postApiDirectoryLeases,
   postApiDirectoryOwners,
   postApiDirectoryProperties,
   postApiDirectoryPropertiesByIdOwnershipTransfers,
@@ -13,6 +15,7 @@ import {
   postApiDirectoryUnits,
   putApiDirectoryLeasesById,
   putApiDirectoryUnitsById,
+  type CreateLease,
   type CreateOwner,
   type CreateProperty,
   type CreateTenant,
@@ -87,6 +90,25 @@ export function useProperties(
       unwrap(
         getApiDirectoryProperties({ query: { pageSize: PAGE } }),
         'Failed to load the property list',
+      ),
+  });
+}
+
+/** The key of a property's units read, which the unit and lease writes invalidate by. */
+export const unitsKey = (propertyId: string) => ['units', propertyId] as const;
+
+/**
+ * A property's units, each with its occupancy today and its availability (#781): the add-lease
+ * dialog's unit picker. Nothing is read until a property is chosen.
+ */
+export function useUnits(propertyId: string): UseQueryResult<UnitRow[]> {
+  return useQuery({
+    queryKey: unitsKey(propertyId),
+    enabled: propertyId !== '',
+    queryFn: async () =>
+      unwrap(
+        getApiDirectoryUnits({ query: { propertyId } }),
+        "Failed to load the property's units",
       ),
   });
 }
@@ -222,9 +244,9 @@ export interface UnitParent {
 }
 
 /**
- * Adds a unit to a property. The property's own page, the properties list's and the owners list's
- * unit counts, the owner's page, search (units are searchable) and the dashboard's vacancy — a new
- * unit has no lease in effect — all change with it.
+ * Adds a unit to a property. The property's own page and its units (the add-lease picker), the
+ * properties list's and the owners list's unit counts, the owner's page, search (units are
+ * searchable) and the dashboard's vacancy — a new unit has no lease in effect — all change with it.
  */
 export function useCreateUnit(property: UnitParent) {
   const qc = useQueryClient();
@@ -234,6 +256,7 @@ export function useCreateUnit(property: UnitParent) {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        qc.invalidateQueries({ queryKey: unitsKey(property.id) }),
         qc.invalidateQueries({ queryKey: ['properties'] }),
         qc.invalidateQueries({ queryKey: ['owners'] }),
         qc.invalidateQueries({ queryKey: ['owner', property.ownerId] }),
@@ -245,8 +268,9 @@ export function useCreateUnit(property: UnitParent) {
 
 /**
  * Edits a unit's label, asking rent and availability. `UpdateUnit` replaces all three, so callers
- * send the unit back whole. No count moves, and vacancy ignores availability, but the label shows on every tenant row and tenant page
- * of a lease on the unit, and in search, so those refetch with the property.
+ * send the unit back whole. No count moves, and vacancy ignores availability, but all three show in
+ * the add-lease picker, and the label shows on every tenant row and tenant page of a lease on the
+ * unit and in search, so those refetch with the property.
  */
 export function useUpdateUnit(property: UnitParent) {
   const qc = useQueryClient();
@@ -260,9 +284,37 @@ export function useUpdateUnit(property: UnitParent) {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        qc.invalidateQueries({ queryKey: unitsKey(property.id) }),
         qc.invalidateQueries({ queryKey: ['tenants'] }),
         qc.invalidateQueries({ queryKey: ['tenant'] }),
         qc.invalidateQueries({ queryKey: ['search'] }),
+      ]),
+  });
+}
+
+/**
+ * Creates a lease for a tenant (#781). Creating one posts nothing, so no ledger or balance read
+ * changes; what changes is which unit the tenant is in and whether that unit is occupied. Every read
+ * showing either refetches: the tenant and the tenant list (unit label, lease rent), the unit's
+ * property, its units and the occupied count, its owner's property rows, the dashboard's vacancy and
+ * scheduled rent, the tenant's search sublabel, and any report preview, the rent roll among them.
+ */
+export function useCreateLease(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ lease }: { lease: CreateLease; property: UnitParent }) =>
+      unwrap(postApiDirectoryLeases({ body: lease }), 'Failed to add the lease.'),
+    onSuccess: (_created, { property }) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['tenant', tenantId] }),
+        qc.invalidateQueries({ queryKey: ['tenants'] }),
+        qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        qc.invalidateQueries({ queryKey: unitsKey(property.id) }),
+        qc.invalidateQueries({ queryKey: ['properties'] }),
+        qc.invalidateQueries({ queryKey: ['owner', property.ownerId] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+        qc.invalidateQueries({ queryKey: ['report-preview'] }),
       ]),
   });
 }

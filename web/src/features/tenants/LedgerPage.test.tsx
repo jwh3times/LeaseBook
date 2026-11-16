@@ -597,3 +597,344 @@ describe('LedgerPage refund checks', () => {
     expect(within(dialog).getByLabelText('Mailing address')).toHaveValue('412 Oakmont Ave');
   });
 });
+
+// #781: a lease is given to a tenant from their ledger, with no import. Creating one posts nothing.
+describe('LedgerPage add a lease', () => {
+  const NO_LEASE = { ...DETAIL, lease: null, unitLabel: null, propertyAddress: null, balance: 0 };
+  const LEASED = {
+    ...NO_LEASE,
+    lease: {
+      id: 'l9',
+      unitId: 'u1',
+      startDate: '2026-12-01',
+      endDate: null,
+      rent: 1395,
+      depositRequired: 1395,
+      status: 'active',
+    },
+    unitLabel: '#1A',
+    propertyAddress: '412 Oakmont Ave',
+  };
+  const PROPERTIES = {
+    items: [
+      {
+        id: 'p2',
+        address: '9 Cardinal Ct',
+        city: null,
+        ownerId: 'o2',
+        ownerName: 'Pryor',
+        units: 0,
+        occupied: 0,
+      },
+      {
+        id: 'p1',
+        address: '412 Oakmont Ave',
+        city: null,
+        ownerId: 'o1',
+        ownerName: 'Hargrove',
+        units: 5,
+        occupied: 2,
+      },
+    ],
+    total: 2,
+    page: 1,
+    pageSize: 200,
+  };
+  const unit = (
+    id: string,
+    label: string,
+    occupancy: string,
+    availability: string,
+    rent = 1295,
+  ) => ({ id, propertyId: 'p1', label, rent, occupancy, availability });
+  // In label order, as the server sends them.
+  const UNITS = [
+    unit('u1', '#1A', 'vacant', 'available', 1350),
+    unit('u2', '#2B', 'occupied', 'available'),
+    unit('u3', '#3C', 'vacant', 'unavailable'),
+    unit('u4', '#4D', 'occupied', 'unavailable'),
+    unit('u5', '#5E', 'vacant', 'available', 1425),
+  ];
+
+  interface Serve {
+    properties?: () => Response | Promise<Response>;
+    units?: (propertyId: string) => Response | Promise<Response>;
+    refuse?: { status: number; body: object };
+  }
+
+  /** Serves the tenant (with no lease until one is created), the pickers' reads and the create. */
+  function serveLease({ properties, units, refuse }: Serve = {}) {
+    const sent: unknown[] = [];
+    let created = false;
+    server.use(
+      http.get('/api/directory/tenants/t1', () => HttpResponse.json(created ? LEASED : NO_LEASE)),
+      ledgerHandler([]),
+      http.get('/api/directory/properties', () => properties?.() ?? HttpResponse.json(PROPERTIES)),
+      http.get('/api/directory/units', ({ request }) => {
+        const propertyId = new URL(request.url).searchParams.get('propertyId') ?? '';
+        return units?.(propertyId) ?? HttpResponse.json(propertyId === 'p1' ? UNITS : []);
+      }),
+      http.post('/api/directory/leases', async ({ request }) => {
+        sent.push(await request.json());
+        if (refuse) return HttpResponse.json(refuse.body, { status: refuse.status });
+        created = true;
+        return HttpResponse.json({ id: 'l9' });
+      }),
+    );
+    return sent;
+  }
+
+  /** A response held until `release` is called, so a test can see the read still loading. */
+  function held() {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { gate, release: () => release() };
+  }
+
+  async function openAddLease() {
+    const open = await screen.findByRole('button', { name: 'Add lease' });
+    open.focus();
+    await userEvent.keyboard('{Enter}');
+    return screen.getByRole('dialog', { name: 'Add a lease for Jasmine Carter' });
+  }
+
+  const optionTexts = (select: HTMLElement) =>
+    within(select)
+      .getAllByRole('option')
+      .map((option) => option.textContent);
+
+  async function chooseUnit(dialog: HTMLElement, unitId: string) {
+    await vi.waitFor(() =>
+      expect(within(dialog).getByRole('option', { name: '412 Oakmont Ave' })).toBeInTheDocument(),
+    );
+    await userEvent.selectOptions(within(dialog).getByLabelText('Property'), 'p1');
+    await vi.waitFor(() =>
+      expect(within(dialog).getByRole('option', { name: '#1A · vacant' })).toBeInTheDocument(),
+    );
+    await userEvent.selectOptions(within(dialog).getByLabelText('Unit'), unitId);
+  }
+
+  it('adds a lease by keyboard: the units list vacant and available first, lease rent prefills, and the header shows it', async () => {
+    const sent = serveLease();
+    renderLedger();
+
+    const dialog = await openAddLease();
+    const property = within(dialog).getByLabelText('Property');
+    await vi.waitFor(() =>
+      expect(optionTexts(property)).toEqual([
+        'Choose a property',
+        '412 Oakmont Ave',
+        '9 Cardinal Ct',
+      ]),
+    );
+    await userEvent.selectOptions(property, 'p1');
+
+    const unitPicker = within(dialog).getByLabelText('Unit');
+    await vi.waitFor(() =>
+      expect(optionTexts(unitPicker)).toEqual([
+        'Choose a unit',
+        '#1A · vacant',
+        '#5E · vacant',
+        '#2B · occupied',
+        '#3C · vacant · unavailable',
+        '#4D · occupied · unavailable',
+      ]),
+    );
+    await userEvent.selectOptions(unitPicker, 'u1');
+
+    const rent = within(dialog).getByLabelText('Lease rent');
+    expect(rent).toHaveValue(1350);
+    await userEvent.clear(rent);
+    await userEvent.type(rent, '1395');
+    await userEvent.type(within(dialog).getByLabelText('Start date'), '2026-12-01');
+    await userEvent.type(within(dialog).getByLabelText('Deposit required'), '1395{Enter}');
+
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([
+      {
+        tenantId: 't1',
+        unitId: 'u1',
+        startDate: '2026-12-01',
+        endDate: null,
+        rent: 1395,
+        depositRequired: 1395,
+        status: 'active',
+      },
+    ]);
+    expect(await screen.findByText('Lease 2026-12-01 – —')).toBeVisible();
+    expect(screen.getByText('#1A')).toBeVisible();
+  });
+
+  it('prefills lease rent again when another unit is chosen, and sends an end date and pending', async () => {
+    const sent = serveLease();
+    renderLedger();
+
+    const dialog = await openAddLease();
+    await chooseUnit(dialog, 'u1');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Unit'), 'u5');
+    expect(within(dialog).getByLabelText('Lease rent')).toHaveValue(1425);
+
+    await userEvent.type(within(dialog).getByLabelText('Start date'), '2027-01-01');
+    await userEvent.type(within(dialog).getByLabelText('End date'), '2027-12-31');
+    await userEvent.type(within(dialog).getByLabelText('Deposit required'), '0');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Lifecycle'), 'pending');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add lease' }));
+
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({
+      unitId: 'u5',
+      startDate: '2027-01-01',
+      endDate: '2027-12-31',
+      rent: 1425,
+      depositRequired: 0,
+      status: 'pending',
+    });
+  });
+
+  it('asks for a property, a unit, a start date, lease rent and deposit before anything is sent, and offers only active or pending', async () => {
+    const sent = serveLease();
+    renderLedger();
+
+    const dialog = await openAddLease();
+    for (const name of ['Property', 'Unit', 'Start date', 'Lease rent', 'Deposit required']) {
+      expect(within(dialog).getByLabelText(name)).toBeRequired();
+    }
+    expect(within(dialog).getByLabelText('End date')).not.toBeRequired();
+    for (const name of ['Lease rent', 'Deposit required']) {
+      expect(within(dialog).getByLabelText(name)).toHaveAttribute('min', '0');
+      expect(within(dialog).getByLabelText(name)).toHaveAttribute('step', '0.01');
+    }
+    const status = within(dialog).getByLabelText('Lifecycle');
+    expect(status).toHaveValue('active');
+    expect(optionTexts(status)).toEqual(['Active', 'Pending']);
+    // The header shows only the lease in effect today, so a later or pending one would seem lost.
+    expect(
+      within(dialog).getByText(
+        /a pending lease, or one that starts later, shows here once it is in effect/i,
+      ),
+    ).toBeVisible();
+    // Late-fee overrides are set afterwards with Late fees.
+    expect(within(dialog).queryByLabelText(/late fee/i)).toBeNull();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add lease' }));
+    expect(screen.getByRole('dialog')).toBeVisible();
+    expect(sent).toEqual([]);
+  });
+
+  it('shows the server’s refusal of an overlapping term with its reference, keeps the dialog open and creates nothing', async () => {
+    const detail = 'A tenant cannot have overlapping non-pending lease terms.';
+    const sent = serveLease({
+      refuse: {
+        status: 400,
+        body: { code: 'validation_failed', detail, correlationId: 'corr-781' },
+      },
+    });
+    renderLedger();
+
+    const dialog = await openAddLease();
+    await chooseUnit(dialog, 'u1');
+    await userEvent.type(within(dialog).getByLabelText('Start date'), '2026-12-01');
+    await userEvent.type(within(dialog).getByLabelText('Deposit required'), '1350{Enter}');
+
+    expect(await within(dialog).findByText(new RegExp(detail))).toBeVisible();
+    expect(within(dialog).getByText(/Reference: corr-781/)).toBeVisible();
+    expect(sent).toHaveLength(1);
+    expect(screen.getByRole('dialog')).toBeVisible();
+    expect(screen.queryByText(/^Lease \d/)).toBeNull();
+  });
+
+  it('says while the properties load, and offers a retry when they can’t be read', async () => {
+    let fail = true;
+    const first = held();
+    serveLease({
+      properties: async () => {
+        if (!fail) return HttpResponse.json(PROPERTIES);
+        await first.gate;
+        return HttpResponse.json(
+          { detail: 'Properties unavailable.', correlationId: 'corr-p' },
+          { status: 500 },
+        );
+      },
+    });
+    renderLedger();
+
+    const dialog = await openAddLease();
+    expect(within(dialog).getByText('Loading the properties…')).toBeVisible();
+    first.release();
+    expect(await within(dialog).findByText(/Reference: corr-p/)).toBeVisible();
+    expect(within(dialog).queryByLabelText('Unit')).toBeNull();
+    fail = false;
+    await userEvent.click(within(dialog).getByRole('button', { name: /retry/i }));
+    expect(
+      await within(dialog).findByRole('option', { name: '412 Oakmont Ave' }),
+    ).toBeInTheDocument();
+  });
+
+  it('says when there is no property to lease in', async () => {
+    serveLease({ properties: () => HttpResponse.json({ ...PROPERTIES, items: [], total: 0 }) });
+    renderLedger();
+
+    const dialog = await openAddLease();
+    expect(await within(dialog).findByText(/No properties yet/)).toBeVisible();
+    // With nothing to lease in there is nothing to save, and the dialog says why rather than
+    // ignoring the button.
+    expect(within(dialog).getByRole('button', { name: 'Add lease' })).toBeDisabled();
+  });
+
+  it('sends nothing while the chosen property has no unit to pick, and forgets the last unit’s rent', async () => {
+    const sent = serveLease();
+    renderLedger();
+
+    const dialog = await openAddLease();
+    await chooseUnit(dialog, 'u1');
+    expect(within(dialog).getByLabelText('Lease rent')).toHaveValue(1350);
+    await userEvent.selectOptions(within(dialog).getByLabelText('Property'), 'p2');
+    expect(await within(dialog).findByText(/9 Cardinal Ct has no units yet/)).toBeVisible();
+    // The rent was 1350's unit's, and that unit is no longer chosen.
+    expect(within(dialog).getByLabelText('Lease rent')).toHaveValue(null);
+
+    await userEvent.type(within(dialog).getByLabelText('Lease rent'), '1200');
+    await userEvent.type(within(dialog).getByLabelText('Start date'), '2026-12-01');
+    await userEvent.type(within(dialog).getByLabelText('Deposit required'), '0{Enter}');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add lease' }));
+
+    // The unit is still required, so the form stops before anything is sent.
+    expect(within(dialog).getByLabelText('Unit')).toBeInvalid();
+    expect(screen.getByRole('dialog')).toBeVisible();
+    expect(sent).toEqual([]);
+  });
+
+  it('says while a property’s units load, when it has none, and offers a retry when they can’t be read', async () => {
+    let fail = true;
+    const first = held();
+    serveLease({
+      units: async (propertyId) => {
+        if (propertyId !== 'p1') return HttpResponse.json([]);
+        if (!fail) return HttpResponse.json(UNITS);
+        await first.gate;
+        return HttpResponse.json(
+          { detail: 'Units unavailable.', correlationId: 'corr-u' },
+          { status: 500 },
+        );
+      },
+    });
+    renderLedger();
+
+    const dialog = await openAddLease();
+    await vi.waitFor(() =>
+      expect(within(dialog).getByRole('option', { name: '9 Cardinal Ct' })).toBeInTheDocument(),
+    );
+    await userEvent.selectOptions(within(dialog).getByLabelText('Property'), 'p2');
+    expect(await within(dialog).findByText(/9 Cardinal Ct has no units yet/)).toBeVisible();
+
+    await userEvent.selectOptions(within(dialog).getByLabelText('Property'), 'p1');
+    expect(within(dialog).getByText('Loading the units…')).toBeVisible();
+    first.release();
+    expect(await within(dialog).findByText(/Reference: corr-u/)).toBeVisible();
+    fail = false;
+    await userEvent.click(within(dialog).getByRole('button', { name: /retry/i }));
+    expect(await within(dialog).findByRole('option', { name: '#1A · vacant' })).toBeInTheDocument();
+  });
+});
