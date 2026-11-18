@@ -8,7 +8,20 @@
       "Bash(npm install:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(gh project item-list *)",
+      "Bash(cygpath *)",
+      "Bash(gh label list *)",
+      "Bash(gh project field-list *)",
+      "Bash(nslookup *)",
+      "Bash(gh project view *)",
+      "mcp__microsoft-learn__microsoft_docs_search",
+      "Bash(gh run watch *)",
+      "Bash(npm ls *)",
+      "Bash(npm view *)",
+      "mcp__context7__query-docs",
+      "mcp__context7__resolve-library-id",
+      "Bash(gh search *)"
     ]
   }
 }
