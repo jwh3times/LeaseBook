@@ -205,6 +205,12 @@ jobs:
       - name: Test the Playwright launcher and the Windows checkout guard
         working-directory: ${{ github.workspace }}
         run: node --test scripts/playwright-cli.test.mjs scripts/windows-checkout.test.mjs
+      # The wrapper the e2e jobs run each Playwright pass through (#798): how it tells a dev server
+      # that died mid-run from an ordinary failure, the annotation it adds, and that it passes the
+      # run's output and exit code through unchanged. They start no server and no browser.
+      - name: Test the e2e server-crash wrapper
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/e2e-server-crash.test.mjs
       # The weekly link sweep's signal for the links it excludes (#665): which answers end an
       # exclude. Only docs-links.yml runs the script against the real links.
       - name: Test the challenged links script
@@ -443,15 +449,19 @@ jobs:
       - name: Install Playwright browser
         working-directory: web
         run: npx playwright install --with-deps chromium
+      # Each Playwright pass in the e2e jobs runs through `scripts/e2e-server-crash.mjs` (#798). If
+      # the SPA dev server dies mid-run, Playwright keeps going and every later test fails with a
+      # refused connection; the wrapper then adds one error annotation naming the crash. The run's
+      # output and exit code pass through unchanged, so a crash still fails the job.
       - name: Run e2e (Playwright suite incl. a11y)
         working-directory: web
-        run: npm run e2e
+        run: node ../scripts/e2e-server-crash.mjs -- npm run e2e
       - name: Initialize isolated payment fixture
         shell: pwsh
         run: ./scripts/payment-fixture.ps1 init -Container '${{ job.services.postgres.id }}' -Port 5432
       - name: Run simulated payment browser flow
         working-directory: web
-        run: npx playwright test simulated-payment.spec.ts
+        run: node ../scripts/e2e-server-crash.mjs -- npx playwright test simulated-payment.spec.ts
         env:
           PAYMENT_SIMULATION_E2E: '1'
           Payments__ManifestPath: ${{ github.workspace }}/payment-fixture.local
@@ -549,7 +559,7 @@ jobs:
       # `check-invariants --all` after each scenario, while the host is up.
       - name: Run the Stripe stand-in browser flow
         working-directory: web
-        run: npx playwright test stripe-stand-in.spec.ts
+        run: node ../scripts/e2e-server-crash.mjs -- npx playwright test stripe-stand-in.spec.ts
         env:
           STRIPE_STAND_IN_E2E: '1'
           Payments__ManifestPath: ${{ github.workspace }}/payment-fixture-standin.local
