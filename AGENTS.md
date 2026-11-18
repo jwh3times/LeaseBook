@@ -489,3 +489,6 @@ These flows are instrumented in telemetry; regressions fail the release checklis
   confidence than presentational changes.
 - Do not put confidential `private/` details into public commits, PR descriptions, public docs, or
   generated output.
+- Before trusting a new test, guard or claim, read `docs/agents/verification.md`; before running
+  tests, e2e or the docs gate locally, `docs/agents/local-runs.md`; once a PR is open,
+  `docs/agents/merging.md`.

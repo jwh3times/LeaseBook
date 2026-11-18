@@ -220,6 +220,18 @@ Two consequences for how you write a backfill:
 - **Raw SQL only.** EF's `InsertData`/`UpdateData`/`DeleteData` builders are rejected outright. Each emits its statement alone, so no block exists in which the lift could bracket it — the bracketing and the write have to be one reviewable unit.
 - **A missing restore fails too**, not just a missing lift. Leaving `FORCE` off is the worse bug: the table stays unprotected against its own owner afterwards, and no data-level test would notice.
 
+`MigrationReplayTests` has a second blind spot: it replays against the demo org, so a backfill of a
+table demo never populates runs over an empty table. Copy `StatementDeliveryBackfillTests` instead:
+its own container, rows planted with a raw migrator `INSERT` (itself lifted), roll forward, then read
+back through the app role under org context so a zero-row backfill fails. Pin the target migration
+by name (`SingleOrDefault(m => m.EndsWith(...))`, rolling back to `migrations[index - 1]`), never by
+position, or the next migration breaks the test.
+
+An ad-hoc `psql` check as the migrator needs the lift on **every** table it joins, not only the one
+it aggregates: a joined `accounts` still forced filters to zero rows and makes "violations: 0"
+vacuous. Select a non-empty count beside the violations query, and restore and verify
+`relforcerowsecurity` afterwards, or stay forced and set `app.org_id` and `app.persona` per org.
+
 A plain `INSERT … VALUES` into a forced table is deliberately out of scope — its `WITH CHECK` raises `42501` and aborts the migration at the mistake. Only statements RLS filters _silently_ are the hazard.
 
 ### Immutable tables (journal / audit)
@@ -291,6 +303,15 @@ Never set the org context by hand in a job. `OrgContextCallSiteTests` fails the 
 Never issue a cross-org query without enumerating orgs and scoping each transaction separately. A missing org context that returns empty rows silently is a bug — the job should throw.
 
 The shipped reference implementation is `src/LeaseBook.Web/Jobs/InvariantSweepRunner.cs` (the nightly invariant sweep, ADR-001's first scheduled job). Follow its shape: it takes the **root** `IServiceProvider` and opens one DI scope per org, so each org gets its own `OrgScopedExecutor` transaction and org context — reusing a single scope across orgs would reuse a single transaction, and therefore a single `app.org_id`. Enumerating `orgs` itself is the one legitimate pre-context read (`orgs` is global-class: no `org_id`, no RLS, the org _is_ the isolation boundary); every read after it is org-scoped.
+
+---
+
+## Schema facts EF configuration doesn't show
+
+- **`journal_lines.owner_id` has a real FK to `owners`** that `JournalLineConfiguration.cs` doesn't
+  declare, so a corruption fixture inventing an owner id fails with `23503`. Don't infer a table's FK
+  surface from its EF configuration alone.
+- **Basis `both` on a single-sided line trips invariant I1 twice**, once per basis.
 
 ---
 
