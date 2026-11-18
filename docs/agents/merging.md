@@ -93,7 +93,8 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
 merge, then without asking between steps:
 
 - move the board item to Done and strip stale `ready-for-agent` labels;
-- delete the local and remote branches (remote branches aren't deleted automatically);
+- delete the local branch, and the remote one if it survived the merge (the repository's
+  `delete_branch_on_merge` setting normally removes it);
 - close a private issue by hand;
 - file any issue the work spun off.
 

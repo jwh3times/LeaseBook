@@ -389,8 +389,8 @@ public sealed class MyFeatureTests(PostgresFixture fixture)
   `IDataProtectionProvider`.** `PostgresFixture.CreateContext` and design-time contexts get a
   plaintext model, so never seed encrypted columns (`bank_micr_profiles`, `asp_net_user_tokens`)
   through them; read ciphertext over a raw connection with `RlsProbe.SetOrgAsync`.
-- **Three of the four seeders run as a system actor; `ScenarioSeeder` runs as a real user**
-  (`Actor.User(adminId)`), so the scenario org looks operated by an admin.
+- **Every org seeder runs as a system actor (`RunAsSystemAsync`) except `ScenarioSeeder`**, which
+  runs as a real user (`Actor.User(adminId)`), so the scenario org looks operated by an admin.
 - **The test host reports a parent configuration node as an empty string**, not null, so a check
   over setting paths must judge leaves, or it refuses every host start.
 
@@ -420,8 +420,9 @@ public sealed class MyFeatureTests(PostgresFixture fixture)
 
 - **The chiseled runtime image has no fonts.** A PDF glyph outside QuestPDF's bundled font (Latin,
   Greek, Cyrillic) renders blank in production while the suite, which runs on the host, stays green.
-  Draw anything else as vector (`.Svg()`). The container smoke job renders the two existing PDF
-  documents inside the image; a new renderer is host-only until it is added there.
+  Draw anything else as vector (`.Svg()`). The container smoke job renders only the owner statement
+  and the compliance-pack cover inside the image; every other renderer, the refund check among them,
+  is host-only until it is added there.
 - **It has no time zone database**, so no IANA zone resolves there, nor on Windows under
   `InvariantGlobalization`. Ubuntu CI resolves them, so green CI proves nothing.
 - **QuestPDF:** `TranslateX/Y` is now `OffsetX/Y` (the old names are a build error); output is never

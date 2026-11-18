@@ -74,9 +74,9 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
 
 ## The docs gate
 
-- **`npm run format` covers `web/` only.** Root Markdown, `docs/`, `.claude/agents/` and `.agents/`
-  need `npm run docs:format`, which must run before `node scripts/sync-agents.mjs`, or the mirror is
-  generated from unformatted source.
+- **`npm run format` covers `web/` only.** Root Markdown, `docs/`, `infra/`, `.github/` and
+  `.claude/agents/` need `npm run docs:format`, which must run before `node scripts/sync-agents.mjs`,
+  or the mirror is generated from unformatted source.
 - **Run `docs:check` after committing.** Its review-date rule compares a doc's `Last reviewed:`
   header with the file's last commit date, so on a dirty tree it always passes. Editing any doc with
   that header, runbooks included, means bumping it.
@@ -84,8 +84,10 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
   `git fetch --unshallow` first, and don't "fix" the headers it flags.
 - **Root Markdown scratch files are inventoried**, even dot-prefixed ones like `.pr-302.md`. Draft PR
   and issue bodies outside the checkout.
-- **`.agents/**` is in the gate**, so a new skill must pass Prettier, markdownlint and cspell. cspell
-  scans Markdown only: reword a one-off coinage rather than growing `cspell.json`.
+- **`.agents/skills/` is outside the gate and every formatter** (`web/.prettierignore`, and the
+  globs in `web/package.json` and `cspell.json`): `scripts/check-skills.mjs` fails an installed copy
+  that differs from `skills-lock.json`, so never format one.
+- **cspell scans Markdown only**: reword a one-off coinage rather than growing `cspell.json`.
 - **A new table row wider than the columns makes Prettier reflow the whole table.** Pad the new row
   to the existing widths.
 - **Prettier is unstable on code fences nested in list items.**
@@ -121,7 +123,9 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
 ## CI workflows
 
 - **`ci.yml` lists script tests by name.** A new `scripts/*.test.mjs` runs in CI only once a step
-  names it, and nothing fails when none does.
+  names it. `scripts/script-tests-listed.test.mjs` fails on a file that no workflow or
+  `web/package.json` script names, but it reads names only: it can't prove the naming step runs in a
+  required job.
 - **A red Windows result in ship's fast checks is your branch's.** They pass on a Windows checkout
   now. Run Playwright from a script through `scripts/playwright-cli.mjs`;
   `scripts/stripe-sandbox-run.mjs` still doesn't run on Windows.

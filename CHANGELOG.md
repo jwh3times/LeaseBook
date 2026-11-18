@@ -18,6 +18,29 @@ next section.
 
 No unreleased changes.
 
+## [0.39.2] - 2026-11-18
+
+### Changed
+
+- **Agents read the repository's hard-won traps from the repository.** Three new guides under
+  `docs/agents/` collect lessons that had lived only in one machine's session memory:
+  `verification.md` (proving a test, guard or claim actually goes red), `local-runs.md` (running
+  builds, tests, e2e and the docs gate locally without a false green) and `merging.md` (from an open
+  PR to a finished merge: the ruleset, watching CI, merging several PRs and dependency PRs).
+  `AGENTS.md` points at them, and the Doc map lists them. The `dotnet-api`, `postgres-specialist`
+  and `react-frontend` agents gain sections on fixtures, the test host, the production image, schema
+  facts EF configuration doesn't show and SPA test traps; `docs/agents/dev-flow.md` gains
+  "Before implementing" and `docs/agents/issue-tracker.md` gains "Board mechanics".
+
+## [0.39.1] - 2026-11-16
+
+### Changed
+
+- Bumped eight dependencies in `web/` (Dependabot, #790): `react-hook-form` from 7.91.0 to 7.92.0,
+  `@testing-library/user-event` from 14.6.9 to 14.6.10, `jsdom` from 31.0.0 to 31.0.1,
+  `markdownlint-cli2` from 0.24.0 to 0.24.1, `msw` from 3.0.4 to 3.0.5, `oxlint-tsgolint` from
+  7.0.2006 to 7.0.2007, `prettier` from 3.9.10 to 3.10.1 and `vite` from 8.3.7 to 8.3.8.
+
 ## [0.39.0] - 2026-11-15
 
 ### Added
@@ -2395,7 +2418,9 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.2...HEAD
+[0.39.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.2
+[0.39.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.1
 [0.39.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.0
 [0.38.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.38.0
 [0.37.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.37.0
