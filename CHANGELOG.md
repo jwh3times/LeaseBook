@@ -18,6 +18,17 @@ next section.
 
 No unreleased changes.
 
+## [0.39.3] - 2026-11-18
+
+### Changed
+
+- **Fewer permission prompts for read-only agent commands.** The project's Claude Code allowlist
+  (`.claude/settings.json`) gains 13 read-only commands that agent sessions run often. They cover
+  board and label reads (`gh project item-list`, `field-list` and `view`, `gh label list`), waiting
+  on and searching GitHub (`gh run watch`, `gh search`), package metadata (`npm ls`, `npm view`),
+  `cygpath` and `nslookup`, and the Microsoft Learn and Context7 docs lookups. Nothing that writes,
+  pushes or runs arbitrary code was added.
+
 ## [0.39.2] - 2026-11-18
 
 ### Changed
@@ -2418,7 +2429,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.2...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.3...HEAD
+[0.39.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.3
 [0.39.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.2
 [0.39.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.1
 [0.39.0]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.0
