@@ -460,6 +460,28 @@ test("records a payment", async () => {
   zone at an instant where the two disagree (06:30 UTC on 1 Nov 2026 is 31 Oct in Los Angeles and
   1 Nov in New York). Playwright pins the browser to `America/New_York`, and a spec's own "today"
   comes from `orgToday()` in `e2e/helpers.ts`, because the spec runs in Node on CI's UTC clock
+- **MSW takes the first matching handler**, so a per-test override goes before the shared set:
+  `server.use(http.get('/api/x', …503), ...baseHandlers())`. The other order leaves the base handler
+  winning, and the test passes against the happy path it meant to break.
+- **Unhandled requests bypass MSW and fail**, so a component test that never stubs one of its queries
+  asserts against an error state it didn't intend. When touching a component test, list every query
+  the component issues and confirm each has a handler.
+- **jsdom has no layout, so `Element.scrollIntoView` throws** and takes down the whole render. Stub
+  it in `web/src/test/setup.ts`, never with an optional call in app code.
+- **The SPA mounts under `StrictMode`, so an effect runs twice in dev.** A ref counted inside an
+  effect over-counts in the browser while jsdom passes. Derive from state set in an event handler,
+  and render such a test under `<StrictMode>`.
+- **React Router reuses a route element across a param or query change**, so a `useState(fromUrl)`
+  initializer keeps the old value. Key the child on `location.key`.
+- **History state survives reload and back/forward.** Gate one-shot state on
+  `useNavigationType() === NavigationType.Push` (the enum member, or oxlint fails the build). A
+  `createMemoryRouter` test starts with a POP, so navigate to prove the PUSH path.
+- **Playwright's `getByRole('option')` also matches the `<select>` options of the page behind a
+  dialog.** Scope palette queries to `getByRole('dialog', { name: 'Command palette' })`, assert row
+  labels with `toHaveText`, and anchor URL patterns.
+- **The tenant ledger lists only `tenant_receivable` and `tenant_prepayments` lines.** Deposit
+  collection, application and refunds never appear as rows; deposits show only in the header's
+  "Deposit held".
 
 ---
 

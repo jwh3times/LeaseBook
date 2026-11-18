@@ -59,5 +59,6 @@ writing the changelog.
 4. Fill the template: the link line in its `Closes #` slot (deleted for exempt work); **What & why**;
    tick a **Definition of Done** item only on evidence from the diff or the fast checks;
    **Verification** with the fast checks run and the checks left to CI.
-5. Report that CodeQL (medium-or-higher alerts), code quality and the Copilot review also run on the
-   PR and can block it, and that the ruleset requires the branch to be up to date with `main`.
+5. Report that CodeQL (medium-or-higher alerts) and code quality also run on the PR and can block
+   it, that the ruleset's Copilot review does not gate (`merging.md`), and that the ruleset requires
+   the branch to be up to date with `main`.

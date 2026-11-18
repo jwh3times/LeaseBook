@@ -116,7 +116,12 @@ is recreated.
 - `docs/research/stripe-connect-payment-lifecycle.md` — dated provider evidence for the payment
   design. `amend-only`.
 - `docs/agents/dev-flow.md` — what this repository adds to the shared development flow: docs
-  tooling paths, the `security` branch type, bump and release details. **When:** any of those changes.
+  tooling paths, the `security` branch type, bump and release details, the checks before
+  implementing. **When:** any of those changes.
+- `docs/agents/merging.md`, `docs/agents/verification.md`, `docs/agents/local-runs.md` — from open
+  PR to finished merge; proving a test, guard or claim; running builds, tests and gates locally
+  without a false green. **When:** a lesson is learned that no script or test enforces, or a
+  command, check or ruleset rule they quote changes.
 - `docs/agents/domain.md` — the domain-docs layout. **When:** the glossary or ADR layout changes.
 - `docs/agents/issue-tracker.md` — tracker conventions, which tracker, the one rule, wayfinding
   operations, and its settings. **When:** a convention, the board or a board field changes.

@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-18
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
@@ -104,6 +104,26 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (see **Count open blockers**, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far — the **answer**, not the delivery status, and only for **closed** tickets. A map that narrates its children's status becomes a second source of truth for them and goes stale on the next merge.
+
+## Board mechanics
+
+- **`gh project item-edit` takes ids, never names**: the project id
+  (`gh project view 3 --owner jwh3times --format json --jq .id`), and the field and single-select
+  option ids from `gh project field-list 3 --owner jwh3times --format json`. `item-add` returns the
+  item id to edit.
+- **`gh project item-list` lags a just-added item.** Don't read its absence as a failed add: verify a
+  write by querying the item id you hold (`gh api graphql` on the `ProjectV2Item`). Re-adding on the
+  strength of an empty list starts a duplicate.
+- **Auto-enrollment can race an explicit `item-add`.** If `item-add` reports a duplicate, find the
+  existing item by repository and number and use its id, then check `Track` and `Gate` once it
+  settles.
+- **A documented label is not a created label.** `gh issue create --label X` fails outright and loses
+  the issue when the label doesn't exist; check `gh label list` first.
+- **A reopened issue shows `In Progress`**, set by the board's own workflow. Leave it.
+- **With both trackers in play, always pass `-R`.** Two parallel commands where one runs inside
+  `private/` can send the other's `gh` to the private repository.
+- **`Gate = Trigger-fired` means gated on a trigger**, not that it fired. Read the trigger's
+  condition against the world.
 
 ## Public repository
 

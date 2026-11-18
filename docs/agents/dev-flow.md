@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-03
+- **Last reviewed:** 2026-11-18
 
 The flow itself is `.agents/skills/ship/settings/dev-flow.md`, and `AGENTS.md` summarizes it. This file holds what this repository
 adds.
@@ -25,6 +25,20 @@ adds.
 - **Release prep** is a commit touching only `CHANGELOG.md` and `VERSION`: the sections for
   Dependabot's merges, or a `chore(release): cut <version> — <headline>` commit that starts a new
   major or minor line.
+
+## Before implementing
+
+- **Grill before implementing a candidate.** Of the first eight Wayfinder questions grilled, five
+  were materially wrong or oversized as filed. A well-specified ready issue can be wrong about scope
+  as readily: check its premise and its verification recipe ([verification](verification.md#claims)).
+- **Budget for `code-reviewer` and `docs-updater` before a PR, and treat their output as work.** An
+  adversarial review after the build has caught real defects every functional suite passed, and a
+  fix correct inside its component can be a regression in aggregate.
+- **Until production alerting is deployed, alert keys are still free.** Nothing in `infra/` or
+  `.github/` keys on an invariant id yet, so fix a known naming defect in anything alerting will
+  depend on now rather than filing it.
+- **One step per pull request**, then wait for the maintainer's "merge" before the next.
+  [Merging](merging.md) covers the rest.
 
 ## Linking
 

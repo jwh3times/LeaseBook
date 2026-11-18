@@ -369,6 +369,67 @@ public sealed class MyFeatureTests(PostgresFixture fixture)
 - Docker must be running (Testcontainers spins `postgres:18`)
 - Format check (`dotnet format --verify-no-changes`) is a CI gate — run it before committing
 
+### Fixtures and the test host
+
+- **A new `DbContext` must also be re-pointed in `Tests.Common/ApiFactory.cs`.** The factory replaces
+  `DbContextOptions<AppDbContext>` only, so another context keeps reading `ConnectionStrings:Default`,
+  the developer's compose database, and nothing fails loudly. A second context also breaks EF
+  tooling's inference: every `dotnet ef` call site (the workflows, `AGENTS.md`, the Dockerfile) passes
+  `--context AppDbContext`, and a third context means updating them all.
+- **The demo org is a frozen showcase.** Its figures are golden-locked across about a dozen test
+  files and e2e, so a new posted event on it moves all of them. Extend the scenario org instead.
+- **A corrupted-org fixture must be committed**, not rolled back: a sweep reads on its own
+  connection. Scope such tests to an explicit org id.
+- **Fixed clocks use noon UTC.** Midnight UTC is the previous evening in every US zone, and "today"
+  is the organization's. Expected dates use `TimeProvider.TodayIn(...)`. Two exceptions: where the
+  code under test still bounds by the UTC date, build "tomorrow" the way the code does; and a test
+  double for a host adapter must send the same command the adapter sends. A Backend CI red only
+  between 00:00 UTC and Eastern midnight is this class.
+- **`AppDbContext` attaches `EncryptedStringConverter` only when DI supplies an
+  `IDataProtectionProvider`.** `PostgresFixture.CreateContext` and design-time contexts get a
+  plaintext model, so never seed encrypted columns (`bank_micr_profiles`, `asp_net_user_tokens`)
+  through them; read ciphertext over a raw connection with `RlsProbe.SetOrgAsync`.
+- **Every org seeder runs as a system actor (`RunAsSystemAsync`) except `ScenarioSeeder`**, which
+  runs as a real user (`Actor.User(adminId)`), so the scenario org looks operated by an admin.
+- **The test host reports a parent configuration node as an empty string**, not null, so a check
+  over setting paths must judge leaves, or it refuses every host start.
+
+### Behavior worth knowing first
+
+- **`audit_events` attribution is stamped by `SaveChanges`** (ADR-039). Leave `actor_*` unset on a
+  hand-written `AuditEvent`; a partial or disagreeing actor throws.
+- **Audit snapshots withhold secret-named columns at write time** (`AuditFieldRedaction.IsSecretName`,
+  ADR-051). A new secret-named audited column fails `AuditPayloadExposureTests` until it is added to
+  `DecidedSecretColumns`.
+- **An invariant collaborator may be absent only if its absence throws** (ADR-039,
+  `OptionalCollaboratorTests`). An optional `IReconciliationLock` silently skipped a period-lock check.
+- **`UpdateOrgSettings` and `UpdateLease` replace, not patch.** A partial PUT blanks the omitted
+  fields, so a settings form carries the whole payload.
+- **`new ValidationException("message")` returns a 400 without the message**: the handler
+  serializes `Errors`. Throw `new ValidationException([new ValidationFailure(property, message)])`.
+- **CodeQL `cs/log-forging`** treats `HttpContext.Request` members as taint sources even as
+  structured log arguments, and typed values bound from the query count too. Log the identity from
+  the database row the request matched.
+- **UUID v7 sorts differently in Postgres and in .NET's `Guid` comparer**, so `ORDER BY id` and an
+  in-memory `MaxBy(x => x.Id)` disagree. Order by an explicit sequence column.
+- **`AntiforgeryOptions.Cookie.SecurePolicy = Always` takes sign-in down** behind a TLS-terminating
+  ingress: it throws on every token request when the origin sees HTTP. It is deliberately not
+  `Always` (ADR-041); assert cookie properties on the real `Set-Cookie` header.
+
+### The production image
+
+- **The chiseled runtime image has no fonts.** A PDF glyph outside QuestPDF's bundled font (Latin,
+  Greek, Cyrillic) renders blank in production while the suite, which runs on the host, stays green.
+  Draw anything else as vector (`.Svg()`). The container smoke job renders only the owner statement
+  and the compliance-pack cover inside the image; every other renderer, the refund check among them,
+  is host-only until it is added there.
+- **It has no time zone database**, so no IANA zone resolves there, nor on Windows under
+  `InvariantGlobalization`. Ubuntu CI resolves them, so green CI proves nothing.
+- **QuestPDF:** `TranslateX/Y` is now `OffsetX/Y` (the old names are a build error); output is never
+  byte-identical, since every render stamps a creation date, so pin a page's drawing operations by
+  hash; and there is no clip element, so a layout guarantee must hold by construction. Process-wide
+  settings are pinned in `src/LeaseBook.Web/Reporting/QuestPdfSetup.cs`.
+
 ---
 
 ## Banned patterns
