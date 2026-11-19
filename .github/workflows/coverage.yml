@@ -127,10 +127,12 @@ jobs:
       # Runs the documented command and not a copy of its steps: the collector, the three
       # Playwright passes with E2E_COVERAGE=1, the three reports, the scenario catalogue's measured
       # check and the invariant run (scripts/e2e-coverage.mjs). The runner reads the journal through
-      # `psql` inside the Postgres container, so it is told which container that is.
+      # `psql` inside the Postgres container, so it is told which container that is. It runs through
+      # `scripts/e2e-server-crash.mjs` (#798), which names a dev server that died mid-pass in an
+      # error annotation and passes the output and exit code through unchanged.
       - name: Run e2e with coverage (main, simulated-payment and Stripe stand-in passes)
         working-directory: web
-        run: npm run e2e:coverage -- --payments --stand-in
+        run: node ../scripts/e2e-server-crash.mjs -- npm run e2e:coverage -- --payments --stand-in
         env:
           E2E_DB_CONTAINER: ${{ job.services.postgres.id }}
       # The summary is written before the runner reports a failing pass, so a red run still shows

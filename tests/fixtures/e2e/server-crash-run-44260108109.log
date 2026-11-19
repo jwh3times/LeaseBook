@@ -1,0 +1,98 @@
+Running 166 tests using 1 worker
+················································································
+[WebServer] abort: Lazy deopt after a fast API call with return value is unsupported
+[WebServer] 
+[WebServer] ==== JS stack trace =========================================
+[WebServer] 
+[WebServer]     0: ExitFrame [pc: 0x70a9bce3ea76]
+[WebServer]     1: byteLength [0x17a8db199b19] [node:buffer:926] [bytecode=0x38b9bca342e1 offset=88](this=0x17a8db1981a9 <JSFunction Buffer (sfi = 0x2f7d8b881d99)>#0#,0x01039fdcc4f9 <String[95173]: uc"...<truncated>>">#1#,0x2251755c0011 <undefined>)
+[WebServer]     2: maybePrepareFinalChunk(aka maybePrepareFinalChunk) [0x332624de7d29] [node:_http_outgoing:1174] [bytecode=0x268c073db6d1 offset=58](this=0x2251755c0011 <undefined>,0x392632055fb9 <ServerResponse map = 0xb1f2a12f481>#2#,0x01039fdcc4f9 <String[95173]: uc"...<truncated>>">#1#,0x2251755c0011 <undefined>)
+[WebServer]     3: end [0x332624deac79] [node:_http_outgoing:1302] [bytecode=0x268c073db1b1 offset=117](this=0x392632055fb9 <ServerResponse map = 0xb1f2a12f481>#2#,0x01039fdcc4f9 <String[95173]: uc"...<truncated>>">#1#,0x2251755c0011 <undefined>,0x2251755c0011 <undefined>)
+[WebServer]     4: send$1(aka send$1) [0x19acf98ca1d9] [file:///home/runner/work/LeaseBook/LeaseBook/web/node_modules/vite/dist/node/chunks/node.js:~17646] [pc=0x70a99d4ced31](this=0x2251755c0011 <undefined>,0x392632056869 <IncomingMessage map = 0x275f9062e179>#3#,0x392632055fb9 <ServerResponse map = 0xb1f2a12f481>#2#,0x246031000011 <String[44798]: u"...<truncated>>">#4#,0x1c5d34[WebServer] ce6e79 <String[2]: #js>,0x3926320508a1 <Object map = 0xb1f2a108171>#5#)
+[WebServer]     5: viteTransformMiddleware(aka viteTransformMiddleware) [0x3fb05f014249] [file:///home/runner/work/LeaseBook/LeaseBook/web/node_modules/vite/dist/node/chunks/node.js:~20274] [pc=0x70a99d4ec147](this=0x2251755c0011 <undefined>,0x392632056869 <IncomingMessage map = 0x275f9062e179>#3#,0x392632055fb9 <ServerResponse map = 0xb1f2a12f481>#2#,0x392632056251 <JSFunction next (sfi = 0x3304babd7479)>#6#)
+[WebServer]     6: /* anonymous */ [0x392632050629](this=0x3cbccf3ba5a9 <JSGlobalProxy>#7#,0x331212ace2c1 <Object map = 0x2402960e74b1>#8#)
+[WebServer]     7: StubFrame [pc: 0x70a9bcec3075]
+[WebServer]     8: StubFrame [pc: 0x70a9bcdbe74b]
+[WebServer]     9: EntryFrame [pc: 0x70a9bcd8b167]
+[WebServer] 
+[WebServer] ==== Details ================================================
+[WebServer] 
+
+  1) [chromium] › e2e/m6-bulk-operations.spec.ts:266:3 › M6 full-month cycle › owner statement: O5 Ridgeline Investments May 2026 loads with 3 passing fiduciary checks and ending balance $22,640.30 @scenario:month-cycle-reconcile-and-statement 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.fill: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByLabel('Email')
+
+
+      68 | async function login(page: Page) {
+      69 |   await page.goto('/login');
+    > 70 |   await page.getByLabel('Email').fill(ADMIN);
+         |                                  ^
+      71 |   await page.getByLabel('Password').fill(PASSWORD);
+      72 |   await page.getByRole('button', { name: /sign in/i }).click();
+      73 |   await expect(page).toHaveURL(/\/dashboard/);
+        at login (/home/runner/work/LeaseBook/LeaseBook/web/e2e/m6-bulk-operations.spec.ts:70:34)
+        at /home/runner/work/LeaseBook/LeaseBook/web/e2e/m6-bulk-operations.spec.ts:269:5
+
+    Error Context: test-results/m6-bulk-operations-M6-full-0e09d-cle-reconcile-and-statement-chromium/error-context.md
+
+  2) [chromium] › e2e/m6-operations.spec.ts:20:1 › dashboard CTA navigates to the disbursement run screen @scenario:operations-navigation 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5373/login
+    Call log:
+      - navigating to "http://localhost:5373/login", waiting until "load"
+
+
+      11 |
+      12 | async function login(page: Page) {
+    > 13 |   await page.goto('/login');
+         |              ^
+      14 |   await page.getByLabel('Email').fill(ADMIN);
+      15 |   await page.getByLabel('Password').fill(PASSWORD);
+      16 |   await page.getByRole('button', { name: /sign in/i }).click();
+        at login (/home/runner/work/LeaseBook/LeaseBook/web/e2e/m6-operations.spec.ts:13:14)
+        at /home/runner/work/LeaseBook/LeaseBook/web/e2e/m6-operations.spec.ts:23:9
+
+    Error Context: test-results/m6-operations-dashboard-CT-4197a-nario-operations-navigation-chromium/error-context.md
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5373/login
+    Call log:
+      - navigating to "http://localhost:5373/login", waiting until "load"
+
+  25 failed
+    [chromium] › e2e/m6-bulk-operations.spec.ts:266:3 › M6 full-month cycle › owner statement: O5 Ridgeline Investments May 2026 loads with 3 passing fiduciary checks and ending balance $22,640.30 @scenario:month-cycle-reconcile-and-statement 
+    [chromium] › e2e/m6-operations.spec.ts:20:1 › dashboard CTA navigates to the disbursement run screen @scenario:operations-navigation 
+    [chromium] › e2e/m6-operations.spec.ts:41:1 › operations page tab bar switches screens @scenario:operations-navigation 
+    [chromium] › e2e/m7-onboarding.spec.ts:115:3 › M7 onboarding wizard › empty org dashboard redirects to /onboarding @scenario:onboarding-import-verify-sign-off 
+    [chromium] › e2e/m8-audit-review.spec.ts:19:3 › M8 audit-log review › an admin reaches the trail from the sidebar and reads one event @scenario:audit-log-review 
+    [chromium] › e2e/m8-audit-review.spec.ts:47:3 › M8 audit-log review › filters narrow the trail, and the whole audited universe is reachable @scenario:audit-log-review 
+    [chromium] › e2e/m8-audit-review.spec.ts:74:3 › M8 audit-log review › an admin exports the filtered trail as a CSV holding the rows on screen, and each export is itself recorded @scenario:audit-log-export 
+    [chromium] › e2e/m8-compliance-pack.spec.ts:20:3 › M8 trust compliance pack › PMAdmin sees the pack card and gets a clear "period not closed" message for an open period @scenario:compliance-pack-open-period 
+    [chromium] › e2e/m8-late-fee-settings.spec.ts:15:1 › org late-fee policy round-trips and preview requires an open rent obligation @scenario:late-fee-policy-settings 
+    [chromium] › e2e/m8-late-fee-settings.spec.ts:77:1 › a lease late-fee override can be set and cleared from the tenant ledger @scenario:lease-late-fee-override 
+    [chromium] › e2e/owner-portal.spec.ts:21:3 › owner sign-in, balance, statement PDF, denials and sign-out (light) @scenario:owner-portal-balance-and-statement 
+    [chromium] › e2e/owner-portal.spec.ts:21:3 › owner sign-in, balance, statement PDF, denials and sign-out (dark) @scenario:owner-portal-balance-and-statement 
+    [chromium] › e2e/owner-portal.spec.ts:81:1 › a resident is denied the owner portal without requesting owner data @scenario:owner-portal-denials 
+    [chromium] › e2e/owner-portal.spec.ts:92:1 › staff are denied the owner portal and keep the dashboard destination @scenario:owner-portal-denials 
+    [chromium] › e2e/portal-enrollment.spec.ts:6:3 › tenant invitation, enrollment and revocation with local test delivery @scenario:portal-invitation-enrollment-revocation 
+    [chromium] › e2e/portal-enrollment.spec.ts:6:3 › owner invitation, enrollment and revocation with local test delivery @scenario:portal-invitation-enrollment-revocation 
+    [chromium] › e2e/portal-invitations.spec.ts:62:1 › a staff member replaces a pending invitation, then cancels the replacement, and each old link stops working @scenario:portal-invitation-replace-and-cancel 
+    [chromium] › e2e/portal-invitations.spec.ts:152:1 › an administrator stops staff managing portal access, and allows it again @scenario:portal-access-staff-permission 
+    [chromium] › e2e/property-ownership-transfer.spec.ts:61:1 › a staff member transfers a property to another owner and its held deposits move with it @scenario:property-ownership-transfer 
+    [chromium] › e2e/reconciliation-refinalize.spec.ts:82:1 › an administrator reopens a past month, posts the correction its statement shows, and finalizes it again in order @scenario:bank-reconciliation-refinalize-past-month 
+    [chromium] › e2e/refund-checks.spec.ts:33:1 › issues, prints and voids a deposit refund check within the ≤ 4 interaction budget @scenario:refund-check-issue-print-void 
+    [chromium] › e2e/smoke.spec.ts:4:1 › the SPA boots and shows the sign-in screen @scenario:spa-boot 
+    [chromium] › e2e/tenant-portal.spec.ts:5:1 › staff sign-in retains its dashboard destination and denies the tenant portal @scenario:tenant-portal-staff-denied 
+    [chromium] › e2e/tenant-portal.spec.ts:15:3 › resident sign-in, staff denial, account security and sign-out (light) @scenario:tenant-portal-ledger-and-security 
+    [chromium] › e2e/tenant-portal.spec.ts:15:3 › resident sign-in, staff denial, account security and sign-out (dark) @scenario:tenant-portal-ledger-and-security 
+  2 flaky
+    [chromium] › e2e/m5-reports.spec.ts:114:3 › M5 reports › owner statement renders in the dark theme @scenario:owner-statement-view-export-deliver 
+    [chromium] › e2e/m6-bulk-operations.spec.ts:85:3 › M6 full-month cycle › rent run: structural period guard shows 1 eligible (Devon Pryor $1,380) and 6 AlreadyDone; result total = $1,380.00 @scenario:month-cycle-rent-run 
+  14 skipped
+  9 did not run
+  116 passed (7.8m)

@@ -18,6 +18,21 @@ next section.
 
 No unreleased changes.
 
+## [0.39.4] - 2026-11-18
+
+### Fixed
+
+- **A web server that dies mid-run in CI e2e is now named, not hidden in dozens of failures**
+  (#798). When a server Playwright starts for e2e crashes partway through a run, Playwright keeps
+  going, and every later test fails with `net::ERR_CONNECTION_REFUSED`. This happened once with a
+  V8 abort in the Vite dev server on Node 26.13.1, a known Node bug (nodejs/node#66870) fixed on
+  Node's main branch but not yet released for 26.x. Every workflow Playwright run now goes through
+  `scripts/e2e-server-crash.mjs`, which passes the run's output and exit code through unchanged.
+  When the run shows a server abort, V8's crash dump or a refused connection to the SPA, it adds one
+  `E2E web server crashed` error annotation that quotes the first sign and says to re-run the job.
+  A crash still fails the job. A guard in the wrapper's tests fails any workflow Playwright run that
+  doesn't go through it.
+
 ## [0.39.3] - 2026-11-18
 
 ### Changed
@@ -2429,7 +2444,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.3...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.4...HEAD
+[0.39.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.4
 [0.39.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.3
 [0.39.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.2
 [0.39.1]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.1

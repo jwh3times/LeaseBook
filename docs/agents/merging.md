@@ -62,6 +62,11 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
   `gh pr close <n> && gh pr reopen <n>`, which re-runs every check on the same sha.
 - **A step that fails with `Process completed with exit code 1` and no `::error` annotation** died
   inside its script, not at its check. Read the raw step log.
+- **An e2e step red with test after test failing `net::ERR_CONNECTION_REFUSED`** usually means a web
+  server Playwright started died mid-run (#798: a V8 abort in the Vite dev server on Node 26,
+  nodejs/node#66870), not that the product regressed. Every workflow Playwright run goes through
+  `scripts/e2e-server-crash.mjs`, which then adds an `E2E web server crashed` annotation quoting the
+  first sign; re-run the job. A server that hung rather than died leaves no annotation.
 
 ## Merging several PRs
 

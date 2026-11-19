@@ -61,9 +61,11 @@ jobs:
       - name: Install Playwright browser
         working-directory: web
         run: npx playwright install --with-deps chromium
+      # Through `scripts/e2e-server-crash.mjs` (#798): a dev server that dies mid-run is named in an
+      # error annotation; output and exit code pass through unchanged.
       - name: Regenerate visual baselines
         working-directory: web
-        run: npm run e2e -- --update-snapshots
+        run: node ../scripts/e2e-server-crash.mjs -- npm run e2e -- --update-snapshots
       - name: Commit baselines back to the branch
         run: |
           git config user.name "github-actions[bot]"
