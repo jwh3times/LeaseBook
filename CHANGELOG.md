@@ -18,6 +18,16 @@ next section.
 
 No unreleased changes.
 
+## [0.39.5] - 2026-11-18
+
+### Changed
+
+- **Two more traps for reading CI, in `docs/agents/merging.md`.**
+  - `gh run view --log-failed` refuses while any job of the run is still going, even after the
+    failed job has finished. The guide gives the API call that reads a finished job's log at once.
+  - A re-run replaces what a run reports, so a scan of past failures that reads only each run's
+    conclusion misses every failure a re-run turned green. The guide says how to read each attempt.
+
 ## [0.39.4] - 2026-11-18
 
 ### Fixed
@@ -2444,7 +2454,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.4...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.5...HEAD
+[0.39.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.5
 [0.39.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.4
 [0.39.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.3
 [0.39.2]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.2
