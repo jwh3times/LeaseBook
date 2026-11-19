@@ -58,10 +58,19 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
   `gh run list --branch <b> --json databaseId,headSha,conclusion`.
 - **Re-running a failed job replays the original event**, so a label added since is invisible to it.
   Push a commit, or close and reopen the PR, to fire a new event.
+- **A re-run also replaces what the run reports.** `gh run list` and `.../actions/runs/<id>/jobs`
+  show only the latest attempt, so a scan of past failures that reads a run's conclusion misses every
+  failure a re-run turned green. Read each attempt with
+  `gh api repos/jwh3times/LeaseBook/actions/runs/<id>/attempts/<n>/jobs`; the run's `run_attempt`
+  (`attempt` in `gh run view --json`) says how many there are.
 - **A re-run stuck at `queued` that cancel, force-cancel and rerun all refuse** is cleared by
   `gh pr close <n> && gh pr reopen <n>`, which re-runs every check on the same sha.
 - **A step that fails with `Process completed with exit code 1` and no `::error` annotation** died
   inside its script, not at its check. Read the raw step log.
+- **`gh run view <run> --log-failed` refuses while any job of the run is still going** ("logs will
+  be available when it is complete"), even once the failed job has finished. Read that job's log at
+  once with `gh api --allow-escape-sequences repos/jwh3times/LeaseBook/actions/jobs/<job id>/logs`;
+  without the flag, `gh api` refuses the colored log.
 - **An e2e step red with test after test failing `net::ERR_CONNECTION_REFUSED`** usually means a web
   server Playwright started died mid-run (#798: a V8 abort in the Vite dev server on Node 26,
   nodejs/node#66870), not that the product regressed. Every workflow Playwright run goes through
