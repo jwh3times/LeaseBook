@@ -57,6 +57,13 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
   pushes starts CI runs that sit at `action_required`. Approve each:
   `gh api -X POST repos/jwh3times/LeaseBook/actions/runs/<id>/approve`, with ids from
   `gh run list --branch <b> --json databaseId,headSha,conclusion`.
+- **A skip directive anywhere in the head commit's message leaves the PR `BLOCKED`.** GitHub skips
+  push and `pull_request` workflows when `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]` or
+  `[actions skip]` appears in it, body included, and the required checks stay pending: on #811 a body
+  quoting the stamp commit's directive left only CodeQL running. Name it without the literal ("the
+  stamp commit's skip directive"); if one slips in, push an empty commit with a clean message. A PR
+  body may quote it: the merge commit carries only the PR title (`merge_commit_message: PR_TITLE`),
+  so `Version` still runs.
 - **Re-running a failed job replays the original event**, so a label added since is invisible to it.
   Push a commit, or close and reopen the PR, to fire a new event.
 - **A re-run also replaces what the run reports.** `gh run list` and `.../actions/runs/<id>/jobs`
