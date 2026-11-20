@@ -144,8 +144,9 @@ uncommitted work. Keep its report for step 7.
   the checkout is absent, report that companion docs could not be reconciled, and create no
   directory in its place. Commit companion changes by the `## Procedure` in
   `.agents/skills/end-session/settings/workspace.md`.
-- **Changelog debt.** A behavior change committed this session without its `Unreleased` entry is
-  debt to report; `ship` writes the changelog.
+- **Changelog debt.** A behavior change committed this session without its `Unreleased` entry
+  (its `changelog.d/` fragment, with `Scheme: stamp-on-tag`) is debt to report; `ship` writes the
+  changelog.
 - **One tracker.** A backlog, roadmap, or TODO file the session added to the tree duplicates the
   issue tracker; offer to move its content into issues.
 

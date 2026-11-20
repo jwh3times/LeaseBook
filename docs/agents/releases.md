@@ -2,26 +2,16 @@
 
 ## Scheme
 
-per-merge — `.github/workflows/version.yml` tags every merge to `main`
-`v<major>.<minor>.<build>` with a GitHub Release, and every merge's changelog has a dated section
-for the version it mints (the policy at the top of `CHANGELOG.md`; ADR-057). `Unreleased` stays an
-empty placeholder between merges.
-
-## Skipped tags
-
-backfill — a merged Dependabot PR (exempt from the changelog check) gets its section on the next
-ship.
-
-- **Ignore:** `v0.2.*`, `v0.3.*`, `v0.4.*`, `v0.5.*`, `v0.6.*`, `v0.7.*`, `v0.8.*`, `v0.9.*`,
-  `v0.10.*`, `v0.11.*`, `v0.12.*`, `v0.13.*`, `v0.14.*`, `v0.15.*`, `v0.16.*`, `v0.17.*`, `v0.18.*`,
-  `v0.19.*`, `v0.20.*`, `v0.21.*`, `v0.22.*`, `v0.23.*`, `v0.24.*`, `v0.25.*`, `v0.26.*` and
-  `v0.27.*` — released before the per-merge scheme, when a build tag got no section and its changes
-  went into the next minor line's section.
+stamp-on-tag — `.github/workflows/version.yml` tags every merge to `main`
+`v<major>.<minor>.<build>` with a GitHub Release. Each branch's entries live in its own
+`changelog.d/<branch-slug>.md` fragment; the workflow stamps them into the merge's dated section
+and tags the merge commit (`changelog.d/README.md`; ADR-058). `Unreleased` stays an empty
+placeholder.
 
 ## Version file
 
-`VERSION` — the release line in `<major>.<minor>.<build>` form, whose build is a floor; `version.yml`
-and `scripts/next-version.mjs` read it
+`VERSION` — the release line in `<major>.<minor>.<build>` form, whose build is a floor;
+`scripts/next-version.mjs` reads it, and `scripts/stamp-changelog.mjs` through it
 
 ## Ask before bumping
 
@@ -34,5 +24,7 @@ proposed line, and edit nothing until it is confirmed. An explicit "build" ships
 
 From the repository root: the local form of the required **CHANGELOG [Unreleased] updated** job
 (`.github/workflows/changelog.yml`, which keeps that name because the ruleset requires it by name).
-The newest section must name the version this merge will mint, and every tag released since the
-switch must have a section. The job exempts Dependabot; the next human PR backfills its section.
+It fails a branch that adds, removes or renumbers a version section, adds entries to
+`[Unreleased]`, edits or deletes a fragment already on `main`, or adds a fragment that does not
+parse. It never requires a fragment: a merge with none, Dependabot's included, gets a section from
+its PR title.

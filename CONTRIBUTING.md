@@ -182,9 +182,9 @@ Before requesting review, confirm:
       repository root are green.
 - [ ] When `.mcp.json` changed, the regenerated `.codex/config.toml` is committed
       (`npm run sync:mcp`), and `npm run sync:mcp:check` from the repository root is green.
-- [ ] `CHANGELOG.md`'s newest section names the version this merge will mint
-      (`node scripts/next-version.mjs`), with the change's entries (CI's `CHANGELOG [Unreleased] updated`
-      job enforces this with `node scripts/check-changelog.mjs`).
+- [ ] The change's entries are in its own `changelog.d/<branch-slug>.md` fragment, and
+      `CHANGELOG.md` is untouched (CI's `CHANGELOG [Unreleased] updated` job enforces this with
+      `node scripts/check-changelog.mjs`; see [`changelog.d/README.md`](changelog.d/README.md)).
 - [ ] Accounting-adjacent changes keep the invariant/property/golden suites green.
 - [ ] New org-scoped tables have their RLS policy; the schema guard passes.
 - [ ] A regenerated, committed `web/src/api/generated` accompanies any API-contract change (CI's `schema-drift` job enforces it).
@@ -234,19 +234,21 @@ which needs Azure credentials and is operator-gated.
 
 LeaseBook uses plain SemVer tags in `v<major>.<minor>.<build>` format. The root `VERSION` file declares
 the requested major/minor release line and the minimum build for that line. On every merge to `main`,
-`.github/workflows/version.yml` creates an annotated tag and GitHub Release for the merge commit.
+`.github/workflows/version.yml` stamps the changelog, then creates an annotated tag and GitHub Release
+for the merge commit.
 
 If the major/minor line already has tags, the workflow increments the third component. If a major or
 minor bump sets `VERSION` to `x.y.0` and no `vX.Y.*` tag exists yet, the first release is `vX.Y.0`, not
 `vX.Y.1`.
 
-`CHANGELOG.md` follows the same rhythm (see its per-merge policy and ADR-057): every merge writes a
-dated section for the version it mints, which `node scripts/next-version.mjs` prints with the same
-computation `version.yml` makes. A CI gate (`CHANGELOG [Unreleased] updated`, a name kept from the
-earlier policy) fails any pull request whose newest section names another version, and any pull
-request that leaves a released tag without a section. Dependabot PRs are exempt, and the next pull
-request backfills their sections. When another merge lands first and takes the number, the branch
-renumbers its section.
+`CHANGELOG.md` gives every release its own dated section, but no branch writes one (ADR-058). A
+branch writes its entries to its own `changelog.d/<branch-slug>.md` fragment. After the merge,
+`version.yml` runs `scripts/stamp-changelog.mjs`, which turns the fragments that merge added (or,
+with none, its PR title) into the section for the version it mints, deletes them, and pushes that as
+a `chore(release): v<x.y.z> [skip ci]` commit through the release GitHub App, the `main` ruleset's
+one bypass actor. A CI gate (`CHANGELOG [Unreleased] updated`, a name kept from an earlier policy)
+fails a pull request that edits a version section or `[Unreleased]`, or another merge's fragment.
+Pull requests merge in any order, and a Dependabot merge needs nothing from the next one.
 
 ---
 

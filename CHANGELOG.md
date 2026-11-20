@@ -8,11 +8,12 @@ every merge to `main` is tagged automatically from `VERSION` in `v<major>.<minor
 with the third component auto-incremented per major/minor line. For a major or minor bump, `x.y.0`
 is a valid first release when that line has no existing tag.
 
-**Per-merge policy (ADR-057):** every merge writes a dated section for the version it mints, and
-`[Unreleased]` stays empty between merges. A Dependabot merge gets its section from the next human
-pull request. Up to 0.27.0, sections were cut only at a deliberate major/minor bump, and the build
-tags in between (`v0.27.1` and the like) have no section of their own: their changes are in the
-next section.
+**Stamp-on-tag policy (ADR-058):** every release gets its own dated section, but branches never
+edit this file. Each writes its entries to `changelog.d/`, and after the merge the Version workflow
+stamps them into the section for the version that merge mints; a merge with none, Dependabot's
+included, gets a section from its PR title. `[Unreleased]` stays empty. Up to 0.27.0, sections were
+cut only at a deliberate major/minor bump, and the build tags in between (`v0.27.1` and the like)
+have no section of their own: their changes are in the next section.
 
 ## [Unreleased]
 

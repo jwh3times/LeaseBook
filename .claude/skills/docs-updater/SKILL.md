@@ -97,8 +97,9 @@ Edit each drifted document, honoring its marker:
 - `frozen` — never edit. `append-only` — add, never change. `amend-only` — add a dated amendment
   note.
 - `owner-only` — report the drift; the user edits it.
-- `ship-owned` — leave it to `ship`. Outside `ship`, add an `Unreleased` changelog entry at most;
-  never a version, date or dated section.
+- `ship-owned` — leave it to `ship`. Outside `ship`, add an `Unreleased` changelog entry at most
+  (with `Scheme: stamp-on-tag`, an entry in the branch's `changelog.d/` fragment instead, never
+  `CHANGELOG.md`); never a version, date or dated section.
 - `pinned` — another check fingerprints it, and any edit, even to a link, fails that check until
   the pin it names is updated. Edit it only when the change requires it; first confirm the edit
   alters nothing the pin protects (requirements, matrix rows), then update the pin in the same
