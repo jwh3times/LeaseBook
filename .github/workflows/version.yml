@@ -17,8 +17,9 @@ name: Version
 # The push uses a token from the release GitHub App, which the main ruleset lists as its one bypass
 # actor: `GITHUB_TOKEN` cannot bypass a ruleset. The App's client ID is the RELEASE_APP_CLIENT_ID
 # variable and its private key the RELEASE_APP_PRIVATE_KEY secret. `[skip ci]` keeps the App's push
-# from starting CI, Coverage, Docs links or this workflow again, and so Deploy (dev), which follows
-# CI through `workflow_run`, never runs for a stamp commit either.
+# from starting CI, Coverage, Docs links or this workflow again. Deploy (dev) follows CI's run on
+# the merge through `workflow_run` and checks out that run's commit, so it never builds a stamp
+# commit, though main's tip is the stamp commit by the time it starts.
 #
 # To see which release a checkout corresponds to: git describe --tags
 

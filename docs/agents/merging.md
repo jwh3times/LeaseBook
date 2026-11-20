@@ -129,8 +129,14 @@ ambiguous referent ("the PR" when two are open), and a check that isn't actually
   commit and creates its GitHub Release. Confirm with `git tag --points-at <merge commit>`: the tag
   is on the merge, not on `main`'s new tip.
 - **The stamp commit runs no CI and deploys nothing.** Its `[skip ci]` skips CI, Coverage, Docs
-  links and `Version`, so `deploy-dev`, which follows CI, never runs for it. CodeQL still analyzes
-  it.
+  links and `Version`. CodeQL still analyzes it. `deploy-dev` follows CI's run on the merge, and
+  `gh run list` shows that run on the stamp commit, because a `workflow_run` run starts on `main`'s
+  tip. It checks out and deploys the merge commit CI tested (`workflow_run.head_sha`), not the
+  commit it lists.
+- **Only a `Version` run proves the release App works.** The maintainer's `gh` user token can't
+  read App installations (`/repos/<owner>/<repo>/installation` and `/user/installations` refuse
+  it), so whether the App is installed with Contents write can't be checked from the CLI. A
+  successful run, whose App-authored stamp commit reached `main` past the ruleset, is the proof.
 - **A commit pushed after its PR merged is orphaned silently.** GitHub accepts it and nothing warns.
   Before deleting a stale branch, compare its tip tree with `main`'s
   (`git diff --quiet origin/main origin/<branch> --`). Neither `git branch -r --merged` nor

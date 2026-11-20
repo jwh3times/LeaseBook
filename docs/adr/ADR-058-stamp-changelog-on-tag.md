@@ -40,8 +40,13 @@ the merge's dated section after the merge lands** (`Scheme: stamp-on-tag` in
   uses a token from the release GitHub App, the `main` ruleset's one bypass actor. Its client ID is
   the `RELEASE_APP_CLIENT_ID` variable and its key the `RELEASE_APP_PRIVATE_KEY` secret.
 - **Nothing else acts on the stamp commit.** `[skip ci]` skips every push-triggered workflow,
-  `version.yml` included. `deploy-dev.yml` follows CI through `workflow_run`, so it does not run for a
-  stamp commit either, and `deploy-prod.yml` is manual. CodeQL's default setup still analyzes it.
+  `version.yml` included. `deploy-dev.yml` follows CI's run on the merge through `workflow_run` and
+  deploys the commit that run tested, `github.event.workflow_run.head_sha`, and `deploy-prod.yml` is
+  manual. CodeQL's default setup still analyzes it. (Corrected 2026-11-20: this record first said
+  `deploy-dev.yml` does not run for a stamp commit. It runs for the merge, but a `workflow_run`
+  run's `github.sha` is `main`'s tip when it starts, and the `Deploy (dev)` run after `v0.39.6`
+  started on the stamp commit `721fec37`. It is skipped until the dev environment is configured,
+  so nothing was deployed; it now checks out the tested commit.)
 - **Runs take turns.** The `version-main` concurrency group never cancels. A push rejected because
   `main` moved is not a failure: the run queued behind it stamps both merges.
 - **The gate.** The required job keeps its name, `CHANGELOG [Unreleased] updated`, because the
