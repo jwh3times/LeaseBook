@@ -1,16 +1,14 @@
 name: Changelog
 
-# Verifies that CHANGELOG.md documents the version this PR's merge will mint (ADR-057).
+# Guards the changelog under `Scheme: stamp-on-tag` (ADR-058).
 #
-# Every merge to main is tagged v<major>.<minor>.<build> by version.yml. scripts/next-version.mjs
-# predicts that tag from VERSION and the existing tags, the same computation version.yml makes, and
-# scripts/check-changelog.mjs fails the PR unless the newest `## [x.y.z]` section names it, and
-# unless every tag released since the per-merge switch has a section. The ruleset requires branches
-# to be up to date with main, so a merge that lands first forces a re-run here.
-#
-# Dependabot PRs are exempt: a bot writes no entry, and the next human PR backfills its section. The
-# exemption is checked inside the step, not with a job-level `if`, so the required check always
-# reports a conclusion.
+# No branch names a version or edits CHANGELOG.md's sections: each writes its entries to its own
+# `changelog.d/<branch-slug>.md` fragment, and version.yml stamps them into the merge's dated
+# section after it lands. scripts/check-changelog.mjs fails a PR that adds, removes or renumbers a
+# version section, adds entries to `## [Unreleased]`, edits or deletes a fragment already on main
+# (it belongs to the merge that added it), or adds a fragment that does not parse. A PR with no
+# fragment passes: its merge gets a one-bullet section from its PR title, so Dependabot PRs run the
+# same check with no exemption.
 #
 # The job keeps its name from the accumulator policy (ADR-024): the ruleset requires
 # "CHANGELOG [Unreleased] updated" by name, and a renamed job would leave that check pending.
@@ -34,18 +32,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history + tags, needed to predict the build number
+          fetch-depth: 0 # full history + tags, to diff the branch against its merge base
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
 
-      - name: Require a section for the version this merge will mint
-        env:
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: |
-          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
-            echo "Dependabot PR: the next human PR backfills its section."
-            exit 0
-          fi
-          node scripts/check-changelog.mjs
+      - name: Check the changelog and fragments
+        run: node scripts/check-changelog.mjs

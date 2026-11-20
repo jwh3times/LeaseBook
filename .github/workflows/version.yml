@@ -1,140 +1,107 @@
 name: Version
 
-# Stamps every merge to main with an auto-incrementing SemVer build number.
+# Releases every merge to main with a three-part SemVer tag (`Scheme: stamp-on-tag`, ADR-058).
 #
-# The root VERSION file is the requested version line in <major>.<minor>.<build> form.
-# The first merge for a new major/minor line uses VERSION exactly, so bumping VERSION
-# to 1.2.0 creates v1.2.0 when no v1.2.0 tag exists. Later merges on the same line
-# increment the third component: v1.2.1, v1.2.2, and so on.
+# On each push to main this runs `scripts/stamp-changelog.mjs`, which walks main's first-parent
+# history back to the newest `v<major>.<minor>.<build>` tag and, for each untagged merge, oldest
+# first:
+#   - builds its dated CHANGELOG.md section from the `changelog.d/` fragments that merge added, or
+#     from its PR title when it added none (a Dependabot PR, a docs-only change);
+#   - computes its version the way `scripts/next-version.mjs` does, from the root VERSION file at
+#     that merge and the tags so far (a new major/minor line starts at its `x.y.0` as written);
+#   - tags the merge commit itself, so a tag is exactly the code that merge built.
+# It makes one stamp commit, `chore(release): v<x.y.z>[, ...] [skip ci]`, that adds the sections
+# and their footer links and deletes the used fragments. This job pushes that commit and the tags
+# in one atomic push, then creates a GitHub Release per tag from its section.
 #
-# scripts/next-version.mjs makes that computation, the same one the changelog check makes
-# when it requires the PR's newest CHANGELOG section to name this tag (ADR-057).
+# The push uses a token from the release GitHub App, which the main ruleset lists as its one bypass
+# actor: `GITHUB_TOKEN` cannot bypass a ruleset. The App's client ID is the RELEASE_APP_CLIENT_ID
+# variable and its private key the RELEASE_APP_PRIVATE_KEY secret. `[skip ci]` keeps the App's push
+# from starting CI, Coverage, Docs links or this workflow again, and so Deploy (dev), which follows
+# CI through `workflow_run`, never runs for a stamp commit either.
 #
-# Why tags/releases instead of committing a bump back to main:
-#   - it works identically on protected branches (no bypass actor or bump-commit needed);
-#   - it never re-triggers CI or needs [skip ci] loops;
-#   - major/minor bumps can start at build 0, while repeated merges auto-increment.
-#
-# To see which build a checkout corresponds to: git describe --tags
+# To see which release a checkout corresponds to: git describe --tags
 
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write # required to push the build tag and create the GitHub Release
+  contents: write # gh release create with GITHUB_TOKEN
 
-# Serialize runs so two closely-spaced merges can't compute the same build number.
+# Runs take turns and never cancel: a run waiting here starts from main's new tip and stamps every
+# merge the run before it did not.
 concurrency:
   group: version-main
   cancel-in-progress: false
 
 jobs:
   release:
-    name: Tag and release
+    name: Stamp changelog and tag
     runs-on: ubuntu-latest
-    # Typically ~10 s. See ci.yml for why every job carries a bound.
+    # Typically under a minute. See ci.yml for why every job carries a bound.
     timeout-minutes: 10
     steps:
+      - name: Create release App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history + tags, needed to compute the next build number
+          ref: main # main's tip, not the pushed commit: a later merge may already be on it
+          fetch-depth: 0 # full history and tags, needed to find the untagged merges
+          token: ${{ steps.app-token.outputs.token }}
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
 
-      - name: Compute SemVer build tag
-        id: version
-        shell: bash
+      - name: Stamp the changelog and push the tags
+        id: stamp
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
-          version=$(tr -d '[:space:]' < VERSION)
-          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error file=VERSION::Version '$version' must be a plain SemVer value in <major>.<minor>.<build> format with no leading zeroes."
+          bot="${APP_SLUG}[bot]"
+          bot_id=$(gh api "/users/${bot}" --jq .id)
+          git config user.name "$bot"
+          git config user.email "${bot_id}+${bot}@users.noreply.github.com"
+
+          node scripts/stamp-changelog.mjs --notes-dir "$RUNNER_TEMP/notes" > "$RUNNER_TEMP/tags.txt"
+          if [ ! -s "$RUNNER_TEMP/tags.txt" ]; then
+            echo "Every merge on main is tagged; nothing to release." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          tags=$(cut -d' ' -f1 "$RUNNER_TEMP/tags.txt")
+
+          refs=()
+          for tag in $tags; do refs+=("refs/tags/${tag}"); done
+          if ! git push --atomic origin HEAD:main "${refs[@]}" 2> "$RUNNER_TEMP/push.log"; then
+            cat "$RUNNER_TEMP/push.log" >&2
+            # Only main moving is benign: the run waiting behind this one stamps both merges.
+            if grep -Eq 'HEAD -> main \((fetch first|non-fast-forward)\)' "$RUNNER_TEMP/push.log"; then
+              echo "::notice::main moved during this run; the next run releases these merges."
+              exit 0
+            fi
             exit 1
           fi
+          cat "$RUNNER_TEMP/push.log" >&2
+          echo "released=true" >> "$GITHUB_OUTPUT"
 
-          major="${BASH_REMATCH[1]}"
-          minor="${BASH_REMATCH[2]}"
-          prefix="v${major}.${minor}."
-
-          # Idempotency for workflow reruns: if this commit already has a release tag
-          # for the requested major/minor line, reuse it instead of minting another build.
-          current_build=$(
-            git tag --points-at "$GITHUB_SHA" --list "${prefix}*" |
-              awk -v prefix="$prefix" 'index($0, prefix) == 1 { print substr($0, length(prefix) + 1) }' |
-              grep -E '^(0|[1-9][0-9]*)$' |
-              sort -n |
-              tail -1 || true
-          )
-
-          if [[ -n "$current_build" ]]; then
-            build="$current_build"
-          else
-            next=$(node scripts/next-version.mjs) || exit 1
-            if [[ "$next" != "${major}.${minor}."* ]]; then
-              echo "::error file=VERSION::next-version.mjs printed '$next', not a build on the ${major}.${minor} line."
-              exit 1
-            fi
-            build="${next##*.}"
-          fi
-
-          tag="${prefix}${build}"
-
-          {
-            echo "tag=${tag}"
-            echo "version=${major}.${minor}.${build}"
-            echo "major_minor=${major}.${minor}"
-            echo "build=${build}"
-            if [[ -n "$current_build" ]]; then
-              echo "tag_exists=true"
-            else
-              echo "tag_exists=false"
-            fi
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Push tag
-        if: steps.version.outputs.tag_exists != 'true'
-        shell: bash
-        run: |
-          tag="${{ steps.version.outputs.tag }}"
-          version="${{ steps.version.outputs.version }}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "LeaseBook ${version}"
-          git push origin "refs/tags/${tag}"
-
-      - name: Create GitHub Release
-        shell: bash
+      - name: Create GitHub Releases
+        if: steps.stamp.outputs.released == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${{ steps.version.outputs.tag }}"
-          version="${{ steps.version.outputs.version }}"
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release ${tag} already exists."
-          else
+          echo "### Released" >> "$GITHUB_STEP_SUMMARY"
+          while read -r tag sha; do
             gh release create "$tag" \
-              --title "LeaseBook ${version}" \
-              --generate-notes
-          fi
-
-      - name: Summarize release
-        shell: bash
-        run: |
-          tag="${{ steps.version.outputs.tag }}"
-          version="${{ steps.version.outputs.version }}"
-          major_minor="${{ steps.version.outputs.major_minor }}"
-          build="${{ steps.version.outputs.build }}"
-
-          {
-            echo "### Release stamped: \`${tag}\`"
-            echo ""
-            echo "- Version: \`${version}\`"
-            echo "- Major/minor line: \`${major_minor}\`"
-            echo "- Build number: \`${build}\`"
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Release: \`${tag}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+              --verify-tag \
+              --title "LeaseBook ${tag#v}" \
+              --notes-file "$RUNNER_TEMP/notes/${tag}.md"
+            echo "- \`${tag}\` on \`${sha}\`" >> "$GITHUB_STEP_SUMMARY"
+          done < "$RUNNER_TEMP/tags.txt"

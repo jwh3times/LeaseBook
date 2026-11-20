@@ -128,6 +128,9 @@ carries a different line was bumped on purpose: ask before replacing it.
 - **`cut-on-line`** — a build has no exact target: the next tag assigns it, whether a workflow tags
   each merge or a maintainer tags a release, and another merge can land first. A confirmed major or
   minor's target is the new line from step 2.
+- **`stamp-on-tag`** — no target: the tag workflow assigns the version when the branch merges, so
+  no other PR can claim it first. A confirmed major or minor's line is the `Version file` bump from
+  step 2.
 
 ## 4. Skipped tags (release)
 
@@ -205,7 +208,8 @@ headings the file already uses (Keep a Changelog: `Added`, `Changed`, `Deprecate
 `Fixed`, `Security`, plus any the file adds), one of each per section, and match its voice. Dates
 are today's, `YYYY-MM-DD`.
 
-**Idempotent.** List the sections this branch added:
+**Idempotent.** List the sections this branch added (with `stamp-on-tag`, its fragment instead;
+see below):
 
 ```bash
 git diff origin/main...HEAD -- CHANGELOG.md | grep '^+## \['
@@ -227,10 +231,21 @@ second. Entries this branch added to `Unreleased` are rewritten the same way.
   content into `## [<target>] - <date>`, and restore the placeholder. When the cut is already there
   from an earlier `ship`, rewrite this branch's entries inside it; never leave them both above and
   below the cut.
+- **`stamp-on-tag`** — write the entries to `changelog.d/<branch-slug>.md`, the branch name with
+  each `/` replaced by `-`: only `### <Category>` headings and their bullets, with no version or
+  date heading. Never edit `CHANGELOG.md`: the tag workflow writes its sections, and
+  `Changelog check` rejects a branch that adds one or edits `Unreleased`. The one section it
+  accepts is a backfill for a version already tagged with none, which only the move to this scheme
+  writes; keep such a section. When the branch already made any other edit, stop and ask before
+  undoing it. Never edit or delete another merge's fragment: the stamp
+  releases that merge's own copy, so the check rejects it. A fragment from an earlier `ship` is
+  rewritten in place:
+  find it with `git diff --name-only origin/main...HEAD -- changelog.d/`.
 
 **Reference links.** When the file ends in a link footer, keep it consistent in the pattern its
 entries follow: `[Unreleased]` compares from the newest version to `HEAD`, and each new or
-renumbered section — backfilled ones too — gets its own link, newest first.
+renumbered section — backfilled ones too — gets its own link, newest first. With `stamp-on-tag`
+the tag workflow keeps the footer.
 
 Run `Changelog check`. A mismatch names the version the merge will really mint: redo this step with
 it.
@@ -301,7 +316,8 @@ companion detail.
 
 - The PR URL and branch.
 - The `Release level:` line and its evidence; the version this merge will mint (`per-merge`), the
-  new line (a `cut-on-line` cut), or that the next tag assigns the build. Name a competing PR
+  new line (a `cut-on-line` cut), or that the next tag assigns the build (`cut-on-line`,
+  `stamp-on-tag`), and the fragment written (`stamp-on-tag`). Name a competing PR
   claiming the same version, and say the section is renumbered on a re-ship.
 - What the docs refresh changed, the changelog entries written, and any sections backfilled. When
   docs-updater owes a wiki search after the merge, say so: the next `end-session` performs it.

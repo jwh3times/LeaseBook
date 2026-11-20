@@ -36,8 +36,12 @@ is recreated.
   changes; a port changes — check the map against `src/LeaseBook.Web/Properties/launchSettings.json`,
   `web/vite.config.ts`, `docker-compose.yml`, the `Dockerfile` and the `infra/` ingress in the same
   change.
-- `CHANGELOG.md` — Keep a Changelog; every merge writes a dated section for the version it mints
-  (ADR-057). `ship-owned`.
+- `CHANGELOG.md` — Keep a Changelog; every release has a dated section, which `version.yml` stamps
+  after the merge (ADR-058). Frozen on a branch: never edit it by hand.
+- `changelog.d/*.md` — one changelog fragment per branch, which `version.yml` stamps into
+  `CHANGELOG.md` and deletes. `ship-owned`.
+- `changelog.d/README.md` — how a fragment is named and written. **When:** the fragment format or
+  the stamp workflow changes.
 - `VERSION` — the requested release line. `ship-owned`.
 - `CODE_OF_CONDUCT.md` — community standards. `owner-only`.
 - `LICENSE` — `owner-only`.
@@ -132,7 +136,7 @@ is recreated.
 - `docs/agents/workspace.md` — workspace settings. **When:** the companion, a sync or dev-stack
   command, or an ignored path changes (`.gitignore`, `scripts/dev.ps1`, `scripts/sync-main.mjs`).
 - `docs/agents/releases.md` — release settings. **When:** `.github/workflows/version.yml`,
-  `.github/workflows/changelog.yml` or the changelog policy changes.
+  `.github/workflows/changelog.yml`, `scripts/stamp-changelog.mjs` or the changelog policy changes.
 - `docs/agents/ship.md` — fast checks and the issue link. **When:** a required check or a CI step it
   mirrors changes (`.github/workflows/ci.yml`, the ruleset), or the linking rule changes.
 - `docs/agents/handoffs.md` — handoff settings. **When:** machine-local state a session depends on
