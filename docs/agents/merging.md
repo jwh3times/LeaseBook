@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-18
+- **Last reviewed:** 2026-11-20
 
 Everything from an open pull request to a finished merge. `/ship` stops when the PR opens, and the
 maintainer merges by saying so. Each rule here comes from a merge that went wrong.
@@ -14,8 +14,9 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
 `.../branches/main/protection` answers 404. Read what applies with
 `gh api repos/jwh3times/LeaseBook/rules/branches/main`.
 
-- **No bypass, no approving review.** The maintainer is the only reviewer and can't approve their
-  own PR, so the ruleset requires none, and nobody can bypass it. CI is the review.
+- **No approving review, and one bypass actor.** The maintainer is the only reviewer and can't
+  approve their own PR, so the ruleset requires none. CI is the review. Its one bypass actor is the
+  release GitHub App, which pushes `version.yml`'s stamp commit (ADR-058); nobody else bypasses it.
 - **Branches must be up to date, and auto-merge is off.** When a PR falls behind:
   `gh pr update-branch <n>`, watch CI on the new head, then merge by hand.
 - **Only unconditional checks are required.** `Link check (lychee)` is path-filtered to Markdown and
@@ -56,6 +57,13 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
   pushes starts CI runs that sit at `action_required`. Approve each:
   `gh api -X POST repos/jwh3times/LeaseBook/actions/runs/<id>/approve`, with ids from
   `gh run list --branch <b> --json databaseId,headSha,conclusion`.
+- **A skip directive anywhere in the head commit's message leaves the PR `BLOCKED`.** GitHub skips
+  push and `pull_request` workflows when `[skip ci]`, `[ci skip]`, `[no ci]`, `[skip actions]` or
+  `[actions skip]` appears in it, body included, and the required checks stay pending: on #811 a body
+  quoting the stamp commit's directive left only CodeQL running. Name it without the literal ("the
+  stamp commit's skip directive"); if one slips in, push an empty commit with a clean message. A PR
+  body may quote it: the merge commit carries only the PR title (`merge_commit_message: PR_TITLE`),
+  so `Version` still runs.
 - **Re-running a failed job replays the original event**, so a label added since is invisible to it.
   Push a commit, or close and reopen the PR, to fire a new event.
 - **A re-run also replaces what the run reports.** `gh run list` and `.../actions/runs/<id>/jobs`
@@ -79,13 +87,19 @@ maintainer merges by saying so. Each rule here comes from a merge that went wron
 
 ## Merging several PRs
 
-- **Each merge leaves the others behind**, and two PRs that both insert a `CHANGELOG.md` entry under
-  the same heading go `DIRTY`, which `gh pr update-branch` can't fix. Merge `origin/main` locally,
-  keep both entries, push. A script that merges several PRs must stop on `DIRTY`, not loop.
+- **PRs merge in any order.** No branch names a version or edits `CHANGELOG.md`: each writes its
+  own `changelog.d/<branch-slug>.md` fragment (ADR-058), so open PRs don't collide over the
+  changelog. Any other conflict still leaves a PR `DIRTY`, which `gh pr update-branch` can't fix:
+  merge `origin/main` locally and push. A script that merges several PRs must stop on `DIRTY`, not
+  loop.
+- **Wait for the stamp before updating the next branch.** About a minute after each merge, the
+  stamp commit moves `main` again, and the ruleset requires branches to be up to date. Run
+  `gh pr update-branch` after that merge's `Version` run finishes, or the branch needs a second
+  update and a second CI run.
 - **After pushing a merge commit, `headRefOid` can stay on the old sha** with no CI started for
   minutes. An empty commit re-syncs it.
-- **The changelog gate accepts only the next `x.y.0`**, so parallel minors merge in order and the
-  second is re-cut.
+- **Two PRs that set `VERSION` to different lines** conflict there, and the second is re-cut
+  after the first merges.
 - **An approval covers the PRs it names.** "Merge the PRs" for two PRs doesn't extend to ones opened
   afterwards; ask for each batch.
 
@@ -115,6 +129,21 @@ merge, then without asking between steps:
 Report the merge commit and what the follow-ups touched. Two cases still need a question: an
 ambiguous referent ("the PR" when two are open), and a check that isn't actually green.
 
+- **Find the Version run by commit.** `gh run list --workflow version.yml --limit 1` right after a
+  merge can return the previous merge's run. Select the run whose `headSha` is the merge commit and
+  watch it. It stamps the merge's section into `CHANGELOG.md`, deletes the merge's fragments,
+  pushes that as a `chore(release): v<x.y.z> [skip ci]` commit by the release App, tags the merge
+  commit and creates its GitHub Release. Confirm with `git tag --points-at <merge commit>`: the tag
+  is on the merge, not on `main`'s new tip.
+- **The stamp commit runs no CI and deploys nothing.** Its `[skip ci]` skips CI, Coverage, Docs
+  links and `Version`. CodeQL still analyzes it. `deploy-dev` follows CI's run on the merge, and
+  `gh run list` shows that run on the stamp commit, because a `workflow_run` run starts on `main`'s
+  tip. It checks out and deploys the merge commit CI tested (`workflow_run.head_sha`), not the
+  commit it lists.
+- **Only a `Version` run proves the release App works.** The maintainer's `gh` user token can't
+  read App installations (`/repos/<owner>/<repo>/installation` and `/user/installations` refuse
+  it), so whether the App is installed with Contents write can't be checked from the CLI. A
+  successful run, whose App-authored stamp commit reached `main` past the ruleset, is the proof.
 - **A commit pushed after its PR merged is orphaned silently.** GitHub accepts it and nothing warns.
   Before deleting a stale branch, compare its tip tree with `main`'s
   (`git diff --quiet origin/main origin/<branch> --`). Neither `git branch -r --merged` nor
@@ -147,5 +176,5 @@ ambiguous referent ("the PR" when two are open), and a check that isn't actually
 - **A Dependabot config change can be checked without the UI**: merging it starts a run per
   ecosystem within seconds, and `gh run list --workflow "Dependabot Updates"` shows each one's
   conclusion. A green run proves the config was accepted, not that a rule fired.
-- **Dependabot's merges get their changelog sections on the next ship** (release prep,
-  [dev-flow.md](dev-flow.md#exemption-details)).
+- **A Dependabot merge gets its changelog section from its PR title**, stamped by `version.yml`
+  like any other merge; nothing is backfilled.

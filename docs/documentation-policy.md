@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-01
+- **Last reviewed:** 2026-11-20
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -123,9 +123,9 @@ has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater`
 (`scripts/check-docs.mjs`, shared with the other repositories that install these skills).
 The ordinary CI web job runs the same command on every pull request. The separate Lychee workflow
 checks external links and anchors on documentation changes and in a weekly sweep, which can also be
-run by hand. A few URLs are checked by the sweep only: the current release's own links, which do not
-exist until the merge, and external pages that intermittently stall on or refuse CI runners. The
-workflow file lists them and why. A page that a bot challenge goes on refusing can be excluded on
+run by hand. A few URLs are checked by the sweep only: external pages that intermittently stall on
+or refuse CI runners. The workflow file lists them and why. Release links need no exclusion: no
+branch writes them, and the stamp commit that adds them arrives with their tag (ADR-058). A page that a bot challenge goes on refusing can be excluded on
 every run instead by listing it in `scripts/challenged-links.mjs`, and the sweep then fails once
 lychee stops being refused or the page has gone.
 

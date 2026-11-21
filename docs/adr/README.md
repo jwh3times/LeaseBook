@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living decision index
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-07
+- **Last reviewed:** 2026-11-20
 
 An **Architecture Decision Record** captures a single significant or non-obvious engineering
 decision — the context that forced it, the choice made, and the consequences accepted — so it can be
@@ -81,7 +81,8 @@ form, write it, and add a row to the index below. When a decision is replaced, m
 | [054](ADR-054-stripe-sandbox-adapter.md)                             | A Stripe sandbox adapter proves the seam; a payout waits for bank evidence      | Proposed                                        | 2026-10-07 |
 | [055](ADR-055-test-coverage-measurement.md)                          | Measure what the test suites exercise, and gate nothing on the figures          | Accepted (amended by ADR-056)                   | 2026-10-12 |
 | [056](ADR-056-scenario-catalogue.md)                                 | Every journal event type and route has a scenario or a recorded exemption       | Accepted                                        | 2026-10-12 |
-| [057](ADR-057-changelog-section-per-merge.md)                        | Give every merge its own changelog section                                      | Accepted                                        | 2026-11-03 |
+| [057](ADR-057-changelog-section-per-merge.md)                        | Give every merge its own changelog section                                      | Superseded by ADR-058                           | 2026-11-03 |
+| [058](ADR-058-stamp-changelog-on-tag.md)                             | Stamp each merge's changelog section after it lands                             | Accepted                                        | 2026-11-20 |
 
 ## Status legend
 

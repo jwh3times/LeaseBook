@@ -70,8 +70,9 @@ node scripts/sync-agents.mjs
 ```
 
 `scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, `check-skills.mjs`, and
-`sync-main.mjs`, `next-version.mjs` and `check-changelog.mjs` where this repository carries them, are
-canonical in `jwh3times/skills` with their tests: fix them there, then copy them here.
+`sync-main.mjs`, `next-version.mjs`, `check-changelog.mjs` and `stamp-changelog.mjs` where this
+repository carries them, are canonical in `jwh3times/skills` with their tests: fix them there, then
+copy them here.
 `sync-agents.mjs` also writes the marked blocks in this file: change them in `jwh3times/skills`, not
 here.
 

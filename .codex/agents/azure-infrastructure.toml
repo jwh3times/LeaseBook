@@ -165,7 +165,7 @@ permissions:
 | ---------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Trigger          | `workflow_run` (CI passes on `main`) + `workflow_dispatch`                                    | `workflow_dispatch` with required `image_tag` input                                                            |
 | Environment gate | `dev`                                                                                         | `prod` (required-reviewers gate)                                                                               |
-| Image            | Built from source, tagged by `github.sha`                                                     | Promotes the app `image_tag` pushed by deploy-dev; also builds and pushes `leasebook-migrator` at the same tag |
+| Image            | Built from the commit CI tested (`workflow_run.head_sha`), tagged by it                       | Promotes the app `image_tag` pushed by deploy-dev; also builds and pushes `leasebook-migrator` at the same tag |
 | Secrets          | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MIGRATIONS_CONNECTION_STRING` | The three `AZURE_*` only — prod's migrator credential is a Key Vault reference resolved by the job's identity  |
 | Vars             | `ACR_NAME`, `APP_NAME`, `RESOURCE_GROUP`                                                      | Same, plus `MIGRATOR_JOB_NAME` (the `<prefix>-migrate` Container Apps Job)                                     |
 

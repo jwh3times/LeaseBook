@@ -40,7 +40,7 @@ a blank DB**, **Load fixture seeds + pin holds**, **E2E (Playwright + a11y)** an
 stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**, **Secret scan**
 (gitleaks is not installed here), and the ruleset's CodeQL, code-quality and Copilot review.
 **CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`, which `ship` runs after
-writing the changelog.
+writing the branch's changelog fragment.
 
 ## Hook: before PR
 
