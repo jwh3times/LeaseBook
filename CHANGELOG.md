@@ -19,6 +19,13 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.10] - 2026-11-21
+
+### Fixed
+
+- The docs spell check accepts `aspnet`, the ASP.NET Core runtime image a Dependabot bump names in
+  the changelog, so pull requests no longer fail it on a section none of them wrote.
+
 ## [0.39.9] - 2026-11-21
 
 ### Changed
@@ -2504,7 +2511,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.9...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.10...HEAD
+[0.39.10]: https://github.com/jwh3times/LeaseBook/compare/v0.39.9...v0.39.10
 [0.39.9]: https://github.com/jwh3times/LeaseBook/compare/v0.39.8...v0.39.9
 [0.39.8]: https://github.com/jwh3times/LeaseBook/compare/v0.39.7...v0.39.8
 [0.39.7]: https://github.com/jwh3times/LeaseBook/compare/v0.39.6...v0.39.7
