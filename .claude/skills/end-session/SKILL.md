@@ -93,6 +93,21 @@ Board writes need the `gh` token's `project` scope, and fail silently without it
 `gh auth status` for `project` (not just `read:project`). If it is missing, report it and skip board
 writes; the fix (`gh auth refresh -h github.com -s project`) needs a real terminal.
 
+Read and write the `Board` only through `.agents/skills/end-session/board.mjs`, never
+`gh project item-edit` or `item-list`: it finds an item from its issue, matches field and option
+names whatever their case or dash, writes an item's fields in one request, and reads every write
+back. `<board>` below is the `Board` setting's two words:
+
+```bash
+node .agents/skills/end-session/board.mjs file --board "<board>" --item <owner/name#N> --set "Status=Todo"
+node .agents/skills/end-session/board.mjs set --board "<board>" --item <owner/name#N> --set "Blocked by=<reason>"
+node .agents/skills/end-session/board.mjs audit --board "<board>" --repo <Public repository>
+```
+
+`file` adds the issue when it is not on the board yet and sets the fields given; `set` changes an
+item already there; `--set "<Field>="` clears one. A value is an option's name or a unique prefix of
+it (`P2`). Each prints JSON; an `error` means nothing was confirmed, so report it.
+
 Start from what is open, in the `Public repository` and again in the `Private issue repository`
 when there is one — always selected explicitly with `-R`:
 
@@ -110,10 +125,17 @@ For each issue the session touched:
 - **Blocked** — comment the blocker, and set the `Board fields` that record it.
 - **Understanding changed** — correct the body, or comment the correction. An issue describing the
   wrong problem costs more than a missing one.
-- **Newly discovered work** — record it as `New work` says: an issue, labelled and added to the
-  `Board`; or a `Board` draft item (`gh project item-create`), left for the work's commitment to
-  turn into an issue. Set its board fields either way. Work that never reaches the board is
-  invisible to the next session.
+- **Newly discovered work** — record it as `New work` says: an issue, labelled and filed on the
+  `Board` with `board.mjs file`; or a `Board` draft item (`gh project item-create --format json`, whose
+  `id` is the item's), left for the work's commitment to turn into an issue, its fields set with
+  `board.mjs set --item-id <id>`. Set its board fields either way. Work that never reaches the board
+  is invisible to the next session.
+
+Then run `board.mjs audit`, with `--repo` for the `Public repository` and again for the
+`Private issue repository` when there is one. Set Done on each `closedNotDone` item the session's
+work closed; report the rest of `closedNotDone`, every `openDone` item and every `missing` issue
+rather than fixing what the session never touched. The private tracker's results stay out of
+anything public.
 
 A security finding follows the `Security findings` route, never a public issue before its fix
 ships. Keep private-repository links and content out of public issues, PRs, and commits. Leave
