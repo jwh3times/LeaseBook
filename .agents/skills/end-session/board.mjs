@@ -12,9 +12,10 @@
 //
 // <ref> is an issue or pull request, as `owner/name#123` or its github.com URL. `file` adds it to
 // the board when it is not there yet, then sets the fields; `set` refuses an item not on the board.
-// `--set "<Field>="` clears a field. The board is the `Board` setting's two words; this script
-// reads no repository settings. Every command prints one JSON object, and exits 1 with
-// `{ "error": ... }` on failure.
+// `--set "<Field>="` clears a field. `audit`'s status field and its done option default to `Status`
+// and `Done`; name a board's own with `--status-field` and `--done`. The board is the `Board`
+// setting's two words; this script reads no repository settings. Every command prints one JSON
+// object, and exits 1 with `{ "error": ... }` on failure.
 //
 // What it handles, so no skill has to:
 //   - A field is named as the board shows it, in any case: `item-list` reports custom fields
@@ -22,7 +23,8 @@
 //     look failed.
 //   - A single-select value is an option's name, matched with case, spacing and the kind of dash
 //     ignored, or a unique prefix of one (`P2` finds `P2 - Normal` on one board and `P2 — Soon` on
-//     another). Option and field ids are looked up on every run, never stored.
+//     another). Option and field ids are looked up on every run, never stored. The audit's
+//     `--done` is matched the same way, so it counts as done exactly what `--set` writes as done.
 //   - An item is found from its issue or PR and read back by id, never from `item-list`, which
 //     lags writes by up to a minute.
 //   - All of an item's fields are written in one GraphQL mutation, and a secondary (burst) rate
@@ -470,17 +472,20 @@ function pages(api, query, variables, select) {
 
 function commandAudit(api, options) {
   const project = readProject(api, options.board);
-  findField(project.fields, options.statusField);
-  const status = normalizeName(options.statusField);
-  const done = normalizeName(options.done);
+  const statusField = findField(project.fields, options.statusField);
+  if (statusField.dataType !== "SINGLE_SELECT") {
+    throw new BoardError(
+      `${statusField.name} is a ${statusField.dataType.toLowerCase()} field; --status-field names a single-select field`,
+    );
+  }
+  // Resolved as a write resolves it, so `--done Done` counts what `--set "Status=Done"` set, and a
+  // done option the field does not have is an error rather than every closed item reported.
+  const done = findOption(statusField, options.done);
   const items = pages(api, ITEMS_QUERY, { id: project.id }, (data) => data.node.items)
     .filter((item) => !item.isArchived)
     .map(describeItem);
-  const statusOf = (item) => {
-    const entry = Object.entries(item.fields).find(([name]) => normalizeName(name) === status);
-    return entry ? entry[1] : null;
-  };
-  const isDone = (item) => statusOf(item) !== null && normalizeName(String(statusOf(item))) === done;
+  const statusOf = (item) => item.fields[statusField.name] ?? null;
+  const isDone = (item) => statusOf(item) === done.name;
   const summary = (item) => ({
     id: item.id,
     type: item.type,
@@ -503,6 +508,7 @@ function commandAudit(api, options) {
   }
   return {
     board: { title: project.title, owner: options.board.owner, number: project.number },
+    status: { field: statusField.name, done: done.name },
     items: items.length,
     closedNotDone,
     openDone,
