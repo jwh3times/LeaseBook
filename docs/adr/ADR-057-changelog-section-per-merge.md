@@ -1,6 +1,6 @@
 # ADR-057: Give every merge its own changelog section
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-058
 - **Date:** 2026-11-03
 - **Deciders:** Jerry Holland
 - **Supersedes:** [ADR-024](ADR-024-changelog-cut-policy-gate.md)

@@ -40,8 +40,16 @@ jobs:
     # charged against this. See ci.yml for why every job carries a bound.
     timeout-minutes: 30
     environment: dev
+    # The commit to deploy: the one CI tested, not `github.sha`. A workflow_run run's `github.sha` is
+    # main's tip when it starts, which after a merge is already version.yml's `[skip ci]` stamp
+    # commit (ADR-058), or a later merge whose CI has not finished. A manual dispatch deploys the
+    # tip of the ref it was dispatched on.
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
@@ -56,7 +64,7 @@ jobs:
       - name: Build and push image to ACR
         run: |
           az acr login --name "$ACR_NAME"
-          IMAGE="$ACR_NAME.azurecr.io/leasebook:${{ github.sha }}"
+          IMAGE="$ACR_NAME.azurecr.io/leasebook:${DEPLOY_SHA}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
         env:
@@ -86,7 +94,7 @@ jobs:
         run: |
           az containerapp update \
             --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
-            --image "$ACR_NAME.azurecr.io/leasebook:${{ github.sha }}"
+            --image "$ACR_NAME.azurecr.io/leasebook:${DEPLOY_SHA}"
         env:
           APP_NAME: ${{ vars.APP_NAME }}
           RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}

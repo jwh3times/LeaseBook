@@ -6,12 +6,16 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  addedVersions,
   checkCut,
   checkPerMerge,
+  checkStampOnTag,
   documentedVersions,
   ignorePatterns,
+  isFragmentPath,
   main,
   parseArgs,
+  parseFragment,
   releasedVersions,
   touchesSource,
   unreleasedSection,
@@ -265,5 +269,140 @@ test("cut-on-line reads a version change by value, so another package.json edit 
     assert.equal(main(["--source", "src", "--base", "main"], root), 1);
     write(root, "CHANGELOG.md", `${changelog}\n## [1.3.0] - 2026-10-31\n`);
     assert.equal(main(["--source", "src", "--base", "main"], root), 0);
+  });
+});
+
+test("a fragment holds ### categories and entries, never a version heading", () => {
+  const ok = parseFragment("### Added\r\n\r\n- A thing.\r\n  More.\r\n\r\n### Fixed\r\n- A fix.\r\n");
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual([...ok.categories], [["Added", ["- A thing.", "  More."]], ["Fixed", ["- A fix."]]]);
+  assert.match(parseFragment("## [1.2.3] - 2026-11-18\n### Added\n- A.\n").errors[0], /line 1/);
+  assert.match(parseFragment("- A.\n").errors[0], /before the first ### heading/);
+  assert.match(parseFragment("### Added\n\n").errors[0], /### Added has no entries/);
+  assert.match(parseFragment("").errors[0], /no entries/);
+});
+
+test("a fragment path is a direct child of changelog.d, and never its README", () => {
+  assert.equal(isFragmentPath("changelog.d/feat-12-x.md"), true);
+  assert.equal(isFragmentPath("changelog.d/README.md"), false);
+  assert.equal(isFragmentPath("changelog.d/old/x.md"), false);
+  assert.equal(isFragmentPath("docs/changelog.d/x.md"), false);
+  assert.equal(isFragmentPath("changelogXd/x.md"), false);
+});
+
+test("a fragment may start with a byte-order mark", () => {
+  assert.deepEqual(parseFragment("\uFEFF### Added\n- A.\n").errors, []);
+});
+
+test("stamp-on-tag lets a branch empty Unreleased, and rejects edits to another merge's fragment", () => {
+  const filled = changelog.replace("No unreleased changes.", "- An old entry.");
+  const base = { baseChangelog: filled, changedFiles: [], fragments: [], sources: [] };
+  assert.deepEqual(checkStampOnTag({ ...base, changelog }), []);
+  assert.match(
+    checkStampOnTag({ ...base, changelog: filled, pending: ["changelog.d/feat-x.md"] })[0],
+    /^changelog\.d\/feat-x\.md: this branch edits or deletes a fragment another merge added/,
+  );
+});
+
+test("stamp-on-tag rejects a branch's version sections and Unreleased edits, not other prose", () => {
+  const base = { baseChangelog: changelog, changedFiles: [], fragments: [], sources: [] };
+  assert.deepEqual(checkStampOnTag({ ...base, changelog: changelog.replace("# Changelog", "# Changes") }), []);
+  assert.match(
+    checkStampOnTag({ ...base, changelog: changelog.replace("## [Unreleased]\n", "## [Unreleased]\n\n## [1.2.13] - 2026-11-18\n") })[0],
+    /renumbers a version section/,
+  );
+  assert.match(
+    checkStampOnTag({ ...base, changelog: changelog.replace("No unreleased changes.", "- An entry.") })[0],
+    /edits \[Unreleased\]/,
+  );
+});
+
+test("addedVersions lists insertions, and refuses removals, reorders and repeats", () => {
+  assert.deepEqual(addedVersions(["1.2.12", "1.2.11"], ["1.2.12", "1.2.11"]), []);
+  assert.deepEqual(addedVersions(["1.2.13", "1.2.12", "1.2.11"], ["1.2.12", "1.2.11"]), ["1.2.13"]);
+  assert.deepEqual(addedVersions(["1.2.12", "1.2.5", "1.2.11"], ["1.2.12", "1.2.11"]), ["1.2.5"]);
+  assert.equal(addedVersions(["1.2.12"], ["1.2.12", "1.2.11"]), null);
+  assert.equal(addedVersions(["1.2.11", "1.2.12"], ["1.2.12", "1.2.11"]), null);
+  assert.equal(addedVersions(["1.2.12", "1.2.12", "1.2.11"], ["1.2.12", "1.2.11"]), null);
+});
+
+test("stamp-on-tag lets a branch backfill a tagged version with no section, and nothing else", () => {
+  const base = { baseChangelog: changelog, changedFiles: [], fragments: [], sources: [] };
+  const backfilled = changelog.replace(
+    "## [1.2.12]",
+    "## [1.2.13] - 2026-07-17\n\n### Changed\n\n- Bump x (#5)\n\n## [1.2.12]",
+  );
+  assert.deepEqual(checkStampOnTag({ ...base, changelog: backfilled, tagged: ["1.2.13"] }), []);
+  assert.match(checkStampOnTag({ ...base, changelog: backfilled, tagged: [] })[0], /as a backfill/);
+  assert.match(
+    checkStampOnTag({ ...base, changelog: backfilled.replace("## [1.2.11]", "## [1.2.10]"), tagged: ["1.2.10", "1.2.13"] })[0],
+    /renumbers a version section/,
+  );
+});
+
+test("stamp-on-tag needs a fragment for a source change only when sources are named", () => {
+  const base = { changelog, baseChangelog: changelog, changedFiles: ["src/a.txt"], fragments: [] };
+  assert.deepEqual(checkStampOnTag({ ...base, sources: [] }), []);
+  assert.match(checkStampOnTag({ ...base, sources: ["src"] })[0], /no fragment in changelog\.d/);
+  const fragment = { file: "changelog.d/x.md", text: "### Added\n- A.\n" };
+  assert.deepEqual(checkStampOnTag({ ...base, sources: ["src"], fragments: [fragment] }), []);
+  assert.match(
+    checkStampOnTag({ ...base, sources: [], fragments: [{ file: "changelog.d/x.md", text: "- A.\n" }] })[0],
+    /^changelog\.d\/x\.md: line 1/,
+  );
+});
+
+test("stamp-on-tag reads the branch's own fragments, tracked or new", () => {
+  withRepository((root) => {
+    git(root, "init", "-b", "main");
+    write(root, "docs/agents/releases.md", "## Scheme\n\nstamp-on-tag\n");
+    write(root, "package.json", '{"version":"1.2.0"}\n');
+    write(root, "CHANGELOG.md", changelog);
+    write(root, "changelog.d/README.md", "Fragments.\n");
+    write(root, "src/a.txt", "one\n");
+    commitAll(root);
+    git(root, "switch", "-c", "feature");
+    write(root, "src/a.txt", "two\n");
+    assert.equal(main(["--source", "src", "--base", "main"], root), 1);
+    write(root, "changelog.d/feature.md", "### Changed\n\n- A is two.\n");
+    assert.equal(main(["--source", "src", "--base", "main"], root), 0);
+    commitAll(root);
+    assert.equal(main(["--source", "src", "--base", "main"], root), 0);
+    write(root, "changelog.d/feature.md", "- A is two.\n");
+    assert.equal(main(["--source", "src", "--base", "main"], root), 1);
+  });
+});
+
+test("stamp-on-tag accepts a backfill only for a version the repository has tagged", () => {
+  withRepository((root) => {
+    git(root, "init", "-b", "main");
+    write(root, "docs/agents/releases.md", "## Scheme\n\nstamp-on-tag\n");
+    write(root, "package.json", '{"version":"1.2.0"}\n');
+    write(root, "CHANGELOG.md", changelog);
+    commitAll(root);
+    git(root, "tag", "v1.2.13");
+    git(root, "switch", "-c", "feature");
+    const section = (version) => `## [${version}] - 2026-07-17\n\n### Changed\n\n- Bump x.\n\n## [1.2.12]`;
+    write(root, "CHANGELOG.md", changelog.replace("## [1.2.12]", section("1.2.13")));
+    assert.equal(main(["--base", "main"], root), 0);
+    write(root, "CHANGELOG.md", changelog.replace("## [1.2.12]", section("1.2.14")));
+    assert.equal(main(["--base", "main"], root), 1);
+  });
+});
+
+test("stamp-on-tag fails a branch that edits a pending fragment, and sees non-ASCII names", () => {
+  withRepository((root) => {
+    git(root, "init", "-b", "main");
+    write(root, "docs/agents/releases.md", "## Scheme\n\nstamp-on-tag\n");
+    write(root, "package.json", '{"version":"1.2.0"}\n');
+    write(root, "CHANGELOG.md", changelog);
+    write(root, "changelog.d/feat-x.md", "### Added\n\n- X.\n");
+    commitAll(root);
+    git(root, "switch", "-c", "feature");
+    write(root, "src/café.txt", "one\n");
+    write(root, "changelog.d/café.md", "### Added\n\n- Café.\n");
+    assert.equal(main(["--source", "src", "--base", "main"], root), 0);
+    write(root, "changelog.d/feat-x.md", "### Added\n\n- X.\n\n### Fixed\n\n- X no longer crashes.\n");
+    assert.equal(main(["--source", "src", "--base", "main"], root), 1);
   });
 });

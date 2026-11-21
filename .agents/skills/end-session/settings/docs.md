@@ -17,8 +17,9 @@ they are checked against the code. Each setting below is a `##` heading in that 
     - `append-only` — add entries, never change or delete one (captured API responses);
     - `amend-only` — dated records corrected by an amendment note, never rewritten;
     - `owner-only` — the user edits it; report drift instead (`LICENSE`, open product questions);
-    - `ship-owned` — written by `ship` (`CHANGELOG.md` sections, the version file); outside `ship`,
-      add only `Unreleased` entries;
+    - `ship-owned` — written by `ship` (`CHANGELOG.md` sections, the version file, `changelog.d/`
+      fragments); outside `ship`, add only `Unreleased` entries, or fragment entries with
+      `Scheme: stamp-on-tag`;
     - `pinned: <the pin>` — another check fingerprints it (a hash in a test fixture), so an edit must
       update that pin in the same change.
 

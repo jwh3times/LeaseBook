@@ -14,10 +14,17 @@ setting below is a `##` heading in that file.
   - `cut-on-line` — `Unreleased` accumulates each change's entries, whether a workflow tags every
     merge or a maintainer tags releases by hand; a dated section is cut only at a deliberate
     release, which `ship` makes when a branch starts a new major or minor line.
+  - `stamp-on-tag` — every merge to `main` is tagged with the next version, but no branch names
+    one: `ship` writes the branch's entries to its own `changelog.d/<branch-slug>.md` fragment, and
+    the tag workflow runs `scripts/stamp-changelog.mjs`, which turns each merge's fragments (or,
+    with none, its PR title) into its dated section and tags the merge commit. `Unreleased` stays
+    as an empty placeholder. Every first-parent commit on `main` is a release, so the repository
+    merges with merge commits or squash merges, with rebase merging turned off.
   - `none` — no versions and no changelog sections: `ship` skips its release steps.
 - **Discover:** the tag workflow (`.github/workflows/version.yml` and the like), the policy at the
   top of `CHANGELOG.md`, how its recent sections line up with the `v*` tags, and the existing `ship`
-  skill. No tag workflow and no changelog means `none`.
+  skill. A tag workflow that runs `stamp-changelog.mjs` means `stamp-on-tag`. No tag workflow and
+  no changelog means `none`.
 
 ## Skipped tags
 
@@ -97,10 +104,13 @@ setting below is a `##` heading in that file.
   - `per-merge` — `node scripts/check-changelog.mjs`;
   - `cut-on-line` — there is none: the value names the paths whose changes need an entry,
     `node scripts/check-changelog.mjs --source <path> [--source <path>]`;
+  - `stamp-on-tag` — `node scripts/check-changelog.mjs`, which then never requires a fragment;
+    add `--source <path>` for each folder whose changes need one;
   - `none` — `none`.
 - **Discover:** changelog jobs in `.github/workflows/` and the scripts they run, and for
-  `cut-on-line` the folders that hold the product's source. Write the heading only for
-  `cut-on-line`, or when a repository adds a check of its own (`&&` it after the default).
+  `cut-on-line` and `stamp-on-tag` the folders that hold the product's source. Write the heading
+  only for `cut-on-line`, for `stamp-on-tag` with source paths, or when a repository adds a check of
+  its own (`&&` it after the default).
 
 ## Release commit message
 
@@ -111,6 +121,7 @@ setting below is a `##` heading in that file.
   - `per-merge` — `docs: update docs and changelog for v<version>`;
   - `cut-on-line` — `docs: update docs and changelog` for a build, and
     `chore(release): cut <version> — <headline>` for a cut, `<headline>` naming the release;
+  - `stamp-on-tag` — `docs: update docs and changelog fragment`;
   - `none` — `docs: update docs for <summary>`.
 - **Discover:** the subjects of recent commits on `main`. Write the heading only when the
   repository's commit convention rules the default out (no type prefix, say), and name that

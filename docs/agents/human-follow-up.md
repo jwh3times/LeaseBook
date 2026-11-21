@@ -36,4 +36,6 @@ issue or an outside party also carries `blocked` (`triage-labels.md`). `Status` 
 
 The private companion's wiki, index page `human-todo` linked from `Home`, push without asking:
 `AGENTS.md` requires the procedure published before agent work is reported complete. Deployment
-steps go only in its `Public-Distribution-Deployment` page.
+steps go only in its `Public-Distribution-Deployment` page. Verify a published page by cloning the
+wiki repository fresh and reading the file: the web wiki takes no API token, so a request with a
+`gh auth token` header answers 404 even for a page that exists.

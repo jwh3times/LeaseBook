@@ -8,15 +8,59 @@ every merge to `main` is tagged automatically from `VERSION` in `v<major>.<minor
 with the third component auto-incremented per major/minor line. For a major or minor bump, `x.y.0`
 is a valid first release when that line has no existing tag.
 
-**Per-merge policy (ADR-057):** every merge writes a dated section for the version it mints, and
-`[Unreleased]` stays empty between merges. A Dependabot merge gets its section from the next human
-pull request. Up to 0.27.0, sections were cut only at a deliberate major/minor bump, and the build
-tags in between (`v0.27.1` and the like) have no section of their own: their changes are in the
-next section.
+**Stamp-on-tag policy (ADR-058):** every release gets its own dated section, but branches never
+edit this file. Each writes its entries to `changelog.d/`, and after the merge the Version workflow
+stamps them into the section for the version that merge mints; a merge with none, Dependabot's
+included, gets a section from its PR title. `[Unreleased]` stays empty. Up to 0.27.0, sections were
+cut only at a deliberate major/minor bump, and the build tags in between (`v0.27.1` and the like)
+have no section of their own: their changes are in the next section.
 
 ## [Unreleased]
 
 No unreleased changes.
+
+## [0.39.8] - 2026-11-20
+
+### Changed
+
+- **`docs/agents/merging.md` records the commit-body skip-directive trap.** GitHub skips a pull
+  request's push and `pull_request` workflows when a skip directive appears anywhere in its head
+  commit's message, the body included, and the required checks then stay pending. The new bullet
+  says how to name the stamp commit without the directive, how to recover with an empty commit,
+  and why a PR body that quotes it is harmless (the merge commit carries only the PR title).
+
+## [0.39.7] - 2026-11-20
+
+### Fixed
+
+- **`deploy-dev` now deploys the commit CI tested** (#810). A `workflow_run` run's `github.sha` is
+  `main`'s tip when it starts, so the dev deploy that follows CI on a merge would have built and
+  tagged `version.yml`'s `[skip ci]` stamp commit (the run after `v0.39.6` started on it), or a
+  later merge whose CI had not finished. It now checks out and tags the image with
+  `github.event.workflow_run.head_sha`; a manual dispatch still deploys its ref's tip. The workflow
+  stays skipped until the dev environment is configured, so nothing was deployed. ADR-058,
+  `docs/agents/merging.md` and the Azure infrastructure guide are corrected to match.
+
+## [0.39.6] - 2026-11-20
+
+### Changed
+
+- **The changelog moves from `per-merge` to `stamp-on-tag`** (#807, ADR-058, superseding ADR-057).
+  A branch no longer predicts the version its merge will mint: `/ship` writes its entries to its own
+  `changelog.d/<branch-slug>.md` fragment and never edits `CHANGELOG.md`. After each merge to
+  `main`, the Version workflow runs the new `scripts/stamp-changelog.mjs`, which turns every
+  untagged merge's fragments (or, with none, its PR title) into a dated section with its footer
+  link, pushes one `chore(release): v<x.y.z> [skip ci]` commit through the release GitHub App the
+  `main` ruleset lets bypass it, tags each merge commit, and creates its GitHub Release from that
+  section. Open pull requests now merge in any order without renumbering, and a Dependabot merge
+  gets its section without a backfill. No product behavior changes.
+- **The required `CHANGELOG [Unreleased] updated` check keeps its name** but now checks fragments:
+  it fails a branch that edits a version section or `[Unreleased]`, edits or deletes another
+  merge's fragment, or adds one that does not parse, and it no longer exempts Dependabot.
+- **The docs link check no longer excludes the predicted version's release links**, since no
+  branch writes them any more.
+- **The shared skills and canonical scripts are refreshed** from `jwh3times/skills`, so `ship`
+  writes fragments.
 
 ## [0.39.5] - 2026-11-18
 
@@ -2454,7 +2498,10 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.5...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.8...HEAD
+[0.39.8]: https://github.com/jwh3times/LeaseBook/compare/v0.39.7...v0.39.8
+[0.39.7]: https://github.com/jwh3times/LeaseBook/compare/v0.39.6...v0.39.7
+[0.39.6]: https://github.com/jwh3times/LeaseBook/compare/v0.39.5...v0.39.6
 [0.39.5]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.5
 [0.39.4]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.4
 [0.39.3]: https://github.com/jwh3times/LeaseBook/releases/tag/v0.39.3
