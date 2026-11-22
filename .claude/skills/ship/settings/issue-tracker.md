@@ -7,7 +7,7 @@
 
 ## Public repository
 
-- **Read by:** end-session, land, what-next
+- **Read by:** dependabot, end-session, land, what-next
 - **Value:** `owner/name` exactly as GitHub spells it (casing can differ from the directory name).
 - **Discover:** `gh repo view --json nameWithOwner -q .nameWithOwner`.
 

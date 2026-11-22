@@ -10,9 +10,10 @@ stale label, publishing an advisory's resolution), which `land` runs before the 
 
 ## Guide
 
-- **Read by:** land
+- **Read by:** dependabot, land
 - **Value:** the path of the prose `land` reads in full before every run: the repository's account
   of reading CI, its known false reds and their remedies, and what it adds around a merge.
+  `dependabot` reads its parts about dependency pull requests.
 - **Default:** `docs/agents/merging.md`, the file these settings live in.
 - **Discover:** the document `AGENTS.md` points to for merging or landing. Write the heading only
   when that is another file.
