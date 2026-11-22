@@ -193,8 +193,9 @@ const FIELD_VALUES = `fieldValues(first: 50) { nodes {
   ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
 } }`;
 
+// `kind` aliases `__typename`, since a dangling underscore fails some consumers' lint.
 const CONTENT = `content {
-  __typename
+  kind: __typename
   ... on Issue { number state url repository { nameWithOwner } }
   ... on PullRequest { number state url repository { nameWithOwner } }
   ... on DraftIssue { title }
@@ -336,10 +337,10 @@ export function itemFields(item) {
 export function describeItem(item) {
   const content = item.content ?? {};
   const base = { id: item.id, archived: Boolean(item.isArchived), fields: itemFields(item) };
-  if (content.__typename === "DraftIssue") return { ...base, type: "draft", title: content.title };
+  if (content.kind === "DraftIssue") return { ...base, type: "draft", title: content.title };
   return {
     ...base,
-    type: content.__typename === "PullRequest" ? "pull request" : "issue",
+    type: content.kind === "PullRequest" ? "pull request" : "issue",
     repository: content.repository?.nameWithOwner ?? null,
     number: content.number ?? null,
     state: content.state ?? null,
