@@ -39,10 +39,10 @@
     },
     "docs-updater": {
       "source": "jwh3times/skills",
-      "commit": "01e385929f9ab21dc953e323609ccb21d08820bb",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
       "sourceType": "github",
       "skillPath": "skills/docs-updater/SKILL.md",
-      "computedHash": "204dd4d1d07d1d7888068480eb9744f5f9a16e40c0fb1da81cbc868930b28016",
+      "computedHash": "1e15f10606b295ff1c06ac794d6272e09d9efd2834a9b5433a25ae98d8a203c2",
       "installMode": "copy"
     },
     "domain-modeling": {
@@ -56,10 +56,10 @@
     },
     "end-session": {
       "source": "jwh3times/skills",
-      "commit": "01e385929f9ab21dc953e323609ccb21d08820bb",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
       "sourceType": "github",
       "skillPath": "skills/end-session/SKILL.md",
-      "computedHash": "8f6da536c43b2ad7fe0fa46bd8e6a12f253739f8a31d6834ed0518bdb8bfb02a",
+      "computedHash": "67994535cfefeadab7c994124eabcdc86b16e2cefbbfade3035fb75149bde3ec",
       "installMode": "copy"
     },
     "grill-me": {
@@ -91,7 +91,7 @@
     },
     "handoff": {
       "source": "jwh3times/skills",
-      "commit": "01e385929f9ab21dc953e323609ccb21d08820bb",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
       "sourceType": "github",
       "skillPath": "skills/handoff/SKILL.md",
       "computedHash": "9918f1f0885e39e27e047535f1bb661d42c27910978c1281ef71290b525b2028",
@@ -115,9 +115,17 @@
       "computedHash": "f0820b18426a7d9a6c823a890988ba0ac70bf0fd596d30d7ef07c88558728c23",
       "installMode": "copy"
     },
+    "land": {
+      "source": "jwh3times/skills",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
+      "sourceType": "github",
+      "skillPath": "skills/land/SKILL.md",
+      "computedHash": "74a231487fb24de6f61cc4f60460782231d632a55006975308d09e2484754b2f",
+      "installMode": "copy"
+    },
     "lets-go": {
       "source": "jwh3times/skills",
-      "commit": "01e385929f9ab21dc953e323609ccb21d08820bb",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
       "sourceType": "github",
       "skillPath": "skills/lets-go/SKILL.md",
       "computedHash": "5b0f2ead2e7be42c66cba87f075a925c1c538f0a8cae6876b8aab5e3fb66aa05",
@@ -152,10 +160,10 @@
     },
     "ship": {
       "source": "jwh3times/skills",
-      "commit": "01e385929f9ab21dc953e323609ccb21d08820bb",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "f3b1fff052f64037238903a831e7e1189b0c3a12a1ad43060fd65785b9d9ee5b",
+      "computedHash": "8ba55ad31c5c0b7a20d2854be655a349e84324d441e242d3c4e72feeca02832e",
       "installMode": "copy"
     },
     "tdd": {
@@ -232,10 +240,10 @@
     },
     "what-next": {
       "source": "jwh3times/skills",
-      "commit": "01e385929f9ab21dc953e323609ccb21d08820bb",
+      "commit": "c6ac790c3c795925f4e4ad2557e8d9826ceed09c",
       "sourceType": "github",
       "skillPath": "skills/what-next/SKILL.md",
-      "computedHash": "1a0a35d36cf5757f39624a2d2dd0160d28b48535cc7ae8ddab8a3d21e04928b6",
+      "computedHash": "4d8fc8e89b578edbdce3e09ef4553867fecfbf450464a055326322070f19e9d8",
       "installMode": "copy"
     },
     "wizard": {
