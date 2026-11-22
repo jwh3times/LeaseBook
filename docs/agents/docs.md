@@ -126,6 +126,9 @@ is recreated.
   PR to finished merge; proving a test, guard or claim; running builds, tests and gates locally
   without a false green. **When:** a lesson is learned that no script or test enforces, or a
   command, check or ruleset rule they quote changes.
+- `docs/agents/dependabot.md` — what reviewing a Dependabot PR takes here: review triggers, the
+  installs CI runs, where each dependency is pinned, stack facts and known fixes. **When:**
+  `.github/dependabot.yml`, a toolchain or image pin, or a fix a bump needed changes.
 - `docs/agents/domain.md` — the domain-docs layout. **When:** the glossary or ADR layout changes.
 - `docs/agents/issue-tracker.md` — tracker conventions, which tracker, the one rule, wayfinding
   operations, and its settings. **When:** a convention, the board or a board field changes.
