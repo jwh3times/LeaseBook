@@ -6,7 +6,7 @@ setting below is a `##` heading in that file.
 
 ## Scheme
 
-- **Read by:** ship
+- **Read by:** land, ship
 - **Value:** one of
   - `per-merge` — every merge to `main` is tagged with the next version, and the changelog gives
     each merge a dated section for the version it will mint. `Unreleased` stays as an empty
