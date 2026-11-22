@@ -19,6 +19,15 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.16] - 2026-11-22
+
+### Added
+
+- `docs/agents/dependabot.md`, the settings the `dependabot` skill reads when it reviews a
+  Dependabot pull request here: the bumps reviewed in full even below a major, the installs CI
+  runs, where each dependency is pinned, the stack facts a verdict must not get wrong, and the known
+  fixes for Stripe.net, the `Microsoft.OpenApi` pin and a PostgreSQL major.
+
 ## [0.39.15] - 2026-11-22
 
 ### Changed
@@ -2541,7 +2550,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.15...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.16...HEAD
+[0.39.16]: https://github.com/jwh3times/LeaseBook/compare/v0.39.15...v0.39.16
 [0.39.15]: https://github.com/jwh3times/LeaseBook/compare/v0.39.14...v0.39.15
 [0.39.14]: https://github.com/jwh3times/LeaseBook/compare/v0.39.13...v0.39.14
 [0.39.13]: https://github.com/jwh3times/LeaseBook/compare/v0.39.12...v0.39.13
