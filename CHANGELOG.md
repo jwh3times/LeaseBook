@@ -19,6 +19,14 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.17] - 2026-11-22
+
+### Changed
+
+- The Doc map's entry for the installed skills points at the `shared-skills` block in `AGENTS.md`
+  instead of listing the `jwh3times/skills` skills by hand, a list that had dropped `land` and
+  `dependabot`.
+
 ## [0.39.16] - 2026-11-22
 
 ### Added
@@ -2550,7 +2558,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.16...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.17...HEAD
+[0.39.17]: https://github.com/jwh3times/LeaseBook/compare/v0.39.16...v0.39.17
 [0.39.16]: https://github.com/jwh3times/LeaseBook/compare/v0.39.15...v0.39.16
 [0.39.15]: https://github.com/jwh3times/LeaseBook/compare/v0.39.14...v0.39.15
 [0.39.14]: https://github.com/jwh3times/LeaseBook/compare/v0.39.13...v0.39.14
