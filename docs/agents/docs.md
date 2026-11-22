@@ -166,10 +166,10 @@ is recreated.
   checks changes.
 - `.claude/agents/azure-infrastructure.md` — Bicep, deploy workflows, Key Vault, PITR. **When:**
   `infra/` or a deploy workflow changes.
-- `.agents/skills/*/` — installed skills, mirrored to `.claude/skills/`: the `mattpocock/skills`
-  set in `skills-lock.json`, and `end-session`, `handoff`, `lets-go`, `ship`, `docs-updater` and
-  `what-next` from `jwh3times/skills`. `frozen`: fixed upstream, never here. **When:** a skill is
-  added, removed or replaced: `AGENTS.md` ("Domain Guidance Files", "Agent skills") and `CLAUDE.md`.
+- `.agents/skills/*/` — installed skills, mirrored to `.claude/skills/`: the `mattpocock/skills` set
+  in `skills-lock.json`, and the skills from `jwh3times/skills` that the `shared-skills` block in
+  `AGENTS.md` installs. `frozen`: fixed upstream, never here. **When:** a skill is added, removed or
+  replaced: `AGENTS.md` ("Domain Guidance Files", "Agent skills") and `CLAUDE.md`.
 - `.github/pull_request_template.md` — the PR body: the link-line slot and the Definition of Done
   checklist. **When:** the linking rule or the Definition of Done changes.
 - `private/README.md` — the companion's index and operating guide: document authority, bootstrap,
