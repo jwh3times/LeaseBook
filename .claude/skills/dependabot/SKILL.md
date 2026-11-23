@@ -57,9 +57,11 @@ out, and report, a PR that is a `draft`, carries a label containing `hold`, `do-
 
 ## 2. Triage
 
-- **Already reviewed:** a PR with a `verdict` is not reviewed again unless the user asks. A
-  `low-risk` verdict counts only while `versionsNamed` is true; one that no longer names the PR's
-  versions (Dependabot retargeted it) is reported as stale, and is no basis for landing.
+- **Already reviewed:** a PR whose `verdict` is `current` is not reviewed again unless the user
+  asks. A `low-risk` verdict stops being current when it no longer names the PR's versions
+  (Dependabot retargeted it) or when the PR's checks have failed since; report it as stale, never
+  as a basis for landing, and review the PR again: the new verdict, the latest marked comment,
+  replaces it.
 - **ROUTINE:** `kind` is `minor`, `patch`, `digest` or `removed`, and no update matches the `Review
   triggers`. It needs no release-note research, but step 3 still applies.
 - **CANDIDATE:** `kind` is `major`, `unknown`, `downgrade` or `suffix`, or an update matches the
@@ -145,7 +147,8 @@ Write each verdict to its own file, named for the repository and the PR. It star
 
 ## 7. Post the verdicts
 
-In a scheduled run, and in a session once the user says to. Post only on a PR with no `verdict`:
+In a scheduled run, and in a session once the user says to. Post only on a PR with no `verdict`,
+or one whose verdict is not `current`:
 
 ```bash
 gh api --method POST "repos/<owner>/<repo>/issues/<n>/comments" -F body=@"$verdict_file" --jq .html_url
@@ -173,7 +176,7 @@ updating the branch, never `@dependabot rebase`, which would drop the fix. Wait 
 ## 9. Land (in a session, on the user's word)
 
 A PR is ready to offer when its checks passed on its current head and it is ROUTINE, or carries a
-`low-risk` verdict with `versionsNamed`. List the ready ones, oldest first. The user's words name
+`current` `low-risk` verdict. List the ready ones, oldest first. The user's words name
 the PRs to land; "land the ready ones" names that list as shown. Hand them to `land` one at a time,
 in that order, each through all of its steps. After each merge, run step 1 again: Dependabot
 rebases the others, or closes one and opens a replacement, which is a new PR the user has not

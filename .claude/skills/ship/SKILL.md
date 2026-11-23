@@ -3,7 +3,7 @@
 name: ship
 description: Ship the current branch — evaluate its SemVer release impact, refresh the docs, write the changelog entry for the version this merge will mint, file its human follow-ups, run the fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
 metadata:
-  settings: workspace issue-tracker human-follow-up releases ship dev-flow triage-labels agents-md
+  settings: workspace issue-tracker human-follow-up releases ship dev-flow triage-labels agents-md guard
 ---
 
 # Ship
