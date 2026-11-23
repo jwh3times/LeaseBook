@@ -1,7 +1,7 @@
 ---
 name: postgres-specialist
 description: Specialist for all LeaseBook Postgres work — RLS policy design, migrations, DDL conventions, query patterns, index design, and the three-role model. Use for new tables, migrations, background jobs, analytical queries, or any tenancy-sensitive change. Supersedes rls-tenant-isolation.
-model: opus
+model: inherit
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 

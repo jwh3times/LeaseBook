@@ -1,6 +1,7 @@
 ---
 name: code-reviewer
 description: Reviews LeaseBook diffs for the non-negotiable invariants that are correctness bugs, not style. Use after implementing a feature or before merging.
+model: inherit
 tools: Read, Grep, Glob, Bash
 ---
 

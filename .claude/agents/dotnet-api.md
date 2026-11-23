@@ -1,6 +1,7 @@
 ---
 name: dotnet-api
 description: Specialist for the LeaseBook .NET backend. Use when implementing features, adding endpoints, writing commands/queries, designing tests, or reviewing .NET code. Knows the vertical-slice CQRS pattern, ISender dispatcher, module boundary rules, and integration test conventions.
+model: inherit
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 

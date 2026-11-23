@@ -1,7 +1,7 @@
 ---
 name: azure-infrastructure
 description: Specialist for LeaseBook Azure infrastructure — Bicep authoring/validation, the dev+prod environment model, managed identity + RBAC, the Key Vault secrets contract, the OIDC deploy workflows, Postgres role bootstrap, and PITR/restore. Use before any infra, Bicep, or deployment-wiring work in M8. Authoring is in scope; live Azure deploy is operator-gated.
-model: opus
+model: inherit
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 
