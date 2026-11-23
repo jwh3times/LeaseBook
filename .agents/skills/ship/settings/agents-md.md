@@ -71,11 +71,12 @@ npx skills add mattpocock/skills#d1478fcb140db0b93c0c8df17bcfd311844749d0 \
 node scripts/sync-agents.mjs
 ```
 
-`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, `check-skills.mjs`, and
-`sync-main.mjs`, `next-version.mjs`, `check-changelog.mjs` and `stamp-changelog.mjs` where this
-repository carries them, are canonical in `jwh3times/skills` with their tests: fix them there, then
-copy them here.
+`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, `check-skills.mjs`,
+`guard.mjs`, and `sync-main.mjs`, `next-version.mjs`, `check-changelog.mjs` and
+`stamp-changelog.mjs` where this repository carries them, are canonical in `jwh3times/skills` with
+their tests: fix them there, then copy them here.
 `sync-agents.mjs` also writes the marked blocks in this file: change them in `jwh3times/skills`, not
-here.
+here. It registers `guard.mjs` in `.claude/settings.json`, which stops the commands and edits these
+rules forbid; this repository's own additions go in `docs/agents/guard.md`.
 
 <!-- /shared:shared-skills -->

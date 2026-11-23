@@ -26,3 +26,5 @@ playwright-report-stand-in
 ../scripts/check-docs.test.mjs
 ../scripts/check-skills.mjs
 ../scripts/check-skills.test.mjs
+../scripts/guard.mjs
+../scripts/guard.test.mjs

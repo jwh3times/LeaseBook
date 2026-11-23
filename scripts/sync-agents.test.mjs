@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -14,8 +16,11 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  checkGuardSettings,
   hookTouchesAuthoredTree,
   injectSkillBanner,
+  managedHooks,
+  mergeClaudeSettings,
   renderCodexAgent,
   renderSharedBlocks,
   splitFrontmatter,
@@ -396,5 +401,163 @@ test("the setting's none leaves AGENTS.md alone, whatever the block file holds",
     syncMirrors(root);
     assert.equal(read(root, "AGENTS.md"), "# Rules\n");
     assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+  });
+});
+
+// --- .claude/settings.json --------------------------------------------------------------------
+
+// Node's own `import.meta.dirname`; a runner that leaves it unset (Vitest gives `import.meta.url` a
+// non-file scheme) runs from the repository root, where the scripts are in `scripts/`.
+const scriptsDir = import.meta.dirname ?? path.resolve("scripts");
+const settingsFile = ".claude/settings.json";
+
+function withGuard(fn) {
+  withFixture((root) => {
+    mkdirSync(path.join(root, "scripts"), { recursive: true });
+    copyFileSync(path.join(scriptsDir, "guard.mjs"), path.join(root, "scripts", "guard.mjs"));
+    fn(root);
+  });
+}
+
+const settingsOf = (root) => JSON.parse(read(root, settingsFile));
+const guardEntries = (hooks) =>
+  hooks.filter((entry) =>
+    entry.hooks.some((hook) => JSON.stringify(hook).includes("scripts/guard.mjs")),
+  );
+
+test("without scripts/guard.mjs no settings file is written", () => {
+  withFixture((root) => {
+    syncMirrors(root);
+    assert.equal(existsSync(path.join(root, settingsFile)), false);
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+  });
+});
+
+test("a missing settings file is reported, then created with both entries in exec form", () => {
+  withGuard((root) => {
+    assert.ok(syncMirrors(root, { check: true }).stale.includes(`${settingsFile} (missing)`));
+    syncMirrors(root);
+    const raw = read(root, settingsFile);
+    assert.ok(raw.endsWith("}\n") && !raw.includes("\r"));
+    assert.deepEqual(settingsOf(root), { hooks: { PreToolUse: [managedHooks.PreToolUse], PostToolUse: [managedHooks.PostToolUse] } });
+    assert.deepEqual(managedHooks.PreToolUse.hooks[0], {
+      type: "command",
+      command: "node",
+      args: ["${CLAUDE_PROJECT_DIR}/scripts/guard.mjs"],
+      timeout: 10,
+    });
+    assert.deepEqual(managedHooks.PostToolUse.hooks[0].args.at(-1), "--post");
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+  });
+});
+
+test("an empty object or a permissions-only file keeps its keys and gains the hooks", () => {
+  assert.deepEqual(JSON.parse(mergeClaudeSettings("{}")), { hooks: { PreToolUse: [managedHooks.PreToolUse], PostToolUse: [managedHooks.PostToolUse] } });
+  const merged = JSON.parse(mergeClaudeSettings('{"permissions":{"allow":["Bash(ls:*)"]}}'));
+  assert.deepEqual(Object.keys(merged), ["permissions", "hooks"]);
+  assert.deepEqual(merged.permissions, { allow: ["Bash(ls:*)"] });
+  assert.throws(
+    () => mergeClaudeSettings("{ nope"),
+    (error) => /settings\.json: invalid JSON/.test(error.message) && error.cause instanceof SyntaxError,
+  );
+  assert.throws(() => mergeClaudeSettings('{"hooks":{"PreToolUse":{}}}'), /must be an array/);
+});
+
+test("valleys' shape: its own hooks stay first, in order, and the guard joins after them", () => {
+  const valleys = {
+    permissions: { allow: ["Bash(npm test:*)"] },
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "*",
+          hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/scripts/require-production-confirmation.ts" || exit 2', timeout: 5 }],
+        },
+      ],
+      PostToolUse: [
+        { matcher: "Write|Edit", hooks: [{ type: "command", command: "node scripts/sync-agents.mjs --hook", timeout: 20 }] },
+      ],
+    },
+  };
+  const merged = JSON.parse(mergeClaudeSettings(JSON.stringify(valleys, null, 2)));
+  assert.deepEqual(merged.hooks.PreToolUse, [valleys.hooks.PreToolUse[0], managedHooks.PreToolUse]);
+  assert.deepEqual(merged.hooks.PostToolUse, [valleys.hooks.PostToolUse[0], managedHooks.PostToolUse]);
+  assert.deepEqual(merged.permissions, valleys.permissions);
+});
+
+test("a current entry with its own formatting is left byte for byte, CRLF included", () => {
+  withGuard((root) => {
+    const odd = `{ "hooks": { "PreToolUse": [ ${JSON.stringify(managedHooks.PreToolUse)} ],\n"PostToolUse": [${JSON.stringify(managedHooks.PostToolUse)}] } }`;
+    write(root, settingsFile, odd);
+    syncMirrors(root);
+    assert.equal(read(root, settingsFile), odd);
+    write(root, settingsFile, odd.replaceAll("\n", "\r\n"));
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+    syncMirrors(root);
+    assert.equal(read(root, settingsFile), odd.replaceAll("\n", "\r\n"));
+  });
+});
+
+test("a stale entry is replaced where it stands, and duplicates collapse into it", () => {
+  withGuard((root) => {
+    const shellForm = { type: "command", command: 'node "$CLAUDE_PROJECT_DIR/scripts/guard.mjs"', timeout: 5 };
+    const other = { matcher: "Bash", hooks: [{ type: "command", command: "echo other" }] };
+    const staleSettings = JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          { matcher: "Bash", hooks: [shellForm] },
+          other,
+          { matcher: "Edit", hooks: [shellForm, { type: "command", command: "echo kept" }] },
+        ],
+        PostToolUse: [],
+      },
+    });
+    syncMirrors(root);
+    write(root, settingsFile, staleSettings);
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, [settingsFile]);
+    syncMirrors(root);
+    const { PreToolUse, PostToolUse } = settingsOf(root).hooks;
+    assert.deepEqual(PreToolUse, [
+      managedHooks.PreToolUse,
+      other,
+      { matcher: "Edit", hooks: [{ type: "command", command: "echo kept" }] },
+    ]);
+    assert.equal(guardEntries(PreToolUse).length, 1);
+    assert.deepEqual(PostToolUse, [managedHooks.PostToolUse]);
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+  });
+});
+
+test("guard.md is validated with the repository's own guard parser", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "sync-agents-guard-"));
+  try {
+    assert.deepEqual(await checkGuardSettings(root), []);
+    mkdirSync(path.join(root, "scripts"));
+    copyFileSync(path.join(scriptsDir, "guard.mjs"), path.join(root, "scripts", "guard.mjs"));
+    write(root, "docs/agents/guard.md", "## Deny commands\n\n- `supabase db reset` — wipes data.\n");
+    assert.deepEqual(await checkGuardSettings(root), []);
+    write(root, "docs/agents/guard.md", "## Deny commands\n\n- supabase db reset, no backticks\n");
+    const [problem] = await checkGuardSettings(root);
+    assert.match(problem, /docs\/agents\/guard\.md:3:/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("spawned: --check fails on a malformed guard.md, and --hook still syncs an authored edit", () => {
+  withGuard((root) => {
+    copyFileSync(path.join(scriptsDir, "sync-agents.mjs"), path.join(root, "scripts", "sync-agents.mjs"));
+    const run = (args, input = "") =>
+      spawnSync(process.execPath, [path.join(root, "scripts", "sync-agents.mjs"), ...args], { input, encoding: "utf8" });
+
+    const payload = { tool_input: { file_path: path.join(root, ".agents/skills/demo/SKILL.md") } };
+    assert.equal(run(["--hook"], JSON.stringify(payload)).status, 0);
+    assert.ok(existsSync(path.join(root, ".claude/skills/demo/SKILL.md")));
+    assert.ok(existsSync(path.join(root, settingsFile)));
+
+    assert.equal(run(["--check"]).status, 0);
+    write(root, "docs/agents/guard.md", "## Ask commands\n\nnot a bullet\n");
+    const failed = run(["--check"]);
+    assert.equal(failed.status, 1);
+    assert.match(failed.stderr, /guard\.md:3:/);
   });
 });

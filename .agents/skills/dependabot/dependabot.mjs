@@ -21,7 +21,8 @@
 //     update merging `main` in, or a fix), after which Dependabot no longer rebases it.
 //   - `verdict`: the latest comment carrying the review marker, its `kind` (low-risk or
 //     needs-effort, by its first character) and `versionsNamed`, true when it names every update's
-//     new version; `comments`: the other comments people wrote.
+//     new version, and `current`: false for a low-risk verdict that no longer names the versions
+//     or whose PR's checks have since failed; `comments`: the other comments people wrote.
 // `marker` is the closing line a verdict comment carries, with `--label` (default: the repository's
 // name) as the name in it.
 //
@@ -265,6 +266,15 @@ export function readVerdict(comments, updates) {
   return { verdict, comments: others };
 }
 
+// A low-risk verdict was reached on a green PR for the versions it names. It stops counting when
+// Dependabot retargets the PR or when the PR's checks fail afterwards (a new `main`, a rerun), so a
+// stale "safe to merge" is never read as current. A needs-effort verdict stays current.
+export function verdictCurrent(verdict, checks) {
+  if (!verdict) return false;
+  if (verdict.kind !== "low-risk") return true;
+  return verdict.versionsNamed && checks.state !== "failed";
+}
+
 // ---------------------------------------------------------------------------------------------
 // Reading
 
@@ -285,6 +295,9 @@ function readOne(rest, sleep, options, pr) {
   const commits = rest(`repos/${options.repo}/pulls/${full.number}/commits?per_page=100`);
   const comments = rest(`repos/${options.repo}/issues/${full.number}/comments?per_page=100`);
   const othersCommitted = commits.filter((commit) => commit.author?.login !== BOT).map((commit) => commit.sha);
+  const checks = summarizeChecks(checkRuns, status);
+  const { verdict, comments: others } = readVerdict(comments, updates);
+  if (verdict) verdict.current = verdictCurrent(verdict, checks);
   return {
     number: full.number,
     title: full.title,
@@ -302,10 +315,11 @@ function readOne(rest, sleep, options, pr) {
     kind: furthestKind(updates),
     mergeable: full.mergeable ?? null,
     mergeableState: full.mergeable_state ?? "unknown",
-    checks: summarizeChecks(checkRuns, status),
+    checks,
     maintainedByDependabot: othersCommitted.length === 0,
     othersCommitted,
-    ...readVerdict(comments, updates),
+    verdict,
+    comments: others,
   };
 }
 
