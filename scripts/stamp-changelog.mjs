@@ -9,7 +9,8 @@
 //
 // - its section holds the `changelog.d/` fragments that merge added, merged by category, or,
 //   when it added none (a bot's PR, a docs-only change), one `### Changed` bullet from its PR
-//   title;
+//   title, with its dependency names and technical words in code spans (`inertTitle`), since no
+//   check reads the `[skip ci]` stamp commit before the next pull request's linters do;
 // - its version is next-version.mjs's computation over the version file at that merge and the tags
 //   so far, and its date is the merge's.
 //
@@ -101,15 +102,50 @@ export function salvageFragment(text) {
 
 // The entry for a merge that added no fragment, from its PR title: GitHub's merge commit names the
 // PR in its subject and carries the title as its body; a squash merge's subject is the title
-// followed by `(#N)`.
+// followed by `(#N)`. The title goes through `inertTitle`, because the stamp commit is `[skip ci]`:
+// no check reads this line before every later pull request's linters do.
 export function prTitleEntry(message) {
   const [subject = "", ...rest] = message.replace(/\r\n?/g, "\n").trim().split("\n");
   const merge = /^Merge pull request #(\d+) from \S+/.exec(subject);
   if (merge) {
     const title = rest.find((line) => line.trim() !== "")?.trim();
-    return `- ${title ?? subject} (#${merge[1]})`;
+    return title ? `- ${inertTitle(title)} (#${merge[1]})` : `- ${subject} (#${merge[1]})`;
   }
-  return `- ${subject.trim()}`;
+  const squash = /^(.*?)\s*(\(#\d+\))$/.exec(subject.trim());
+  return squash ? `- ${inertTitle(squash[1])} ${squash[2]}` : `- ${inertTitle(subject.trim())}`;
+}
+
+// A word that only a dictionary of package names knows, or that Markdown would read as markup:
+// a path, a scoped package, a dotted name or version, or anything holding a Markdown character.
+// `#` is not one: mid-line it is no markup, and `#123` should stay a link to its issue.
+const TECHNICAL = /[/@_*<>[\]|\\~$^{}=+]|\w\.\w/;
+// The words Dependabot's titles put a dependency or group name after, lowercased.
+const NAMES_FOLLOW = new Set(["bump", "bumps", "update", "updates"]);
+
+// A PR title made safe for a changelog line: each dependency name Dependabot's title shapes put
+// after "Bump" or "Update" (or "Bump the ... group"), and each technical word, goes in a code span,
+// which spell checkers and Markdown formatters leave alone. Existing code spans are kept; prose
+// is untouched. A title with an unmatched backtick is left as it is.
+export function inertTitle(title) {
+  if ((title.match(/`/g) ?? []).length % 2 !== 0) return title;
+  const parts = title.split(/(`[^`]*`)/);
+  let previous = [];
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1) {
+        previous = ["`"];
+        return part;
+      }
+      return part.replace(/\S+/g, (word) => {
+        const [, open, core, close] = /^([("']*)(.*?)([)"',.;:!?]*)$/.exec(word);
+        const last = previous.at(-1);
+        const named = core !== "" && (NAMES_FOLLOW.has(last) || (last === "the" && NAMES_FOLLOW.has(previous.at(-2))));
+        previous = [...previous.slice(-1), core.toLowerCase()];
+        if (core === "" || core.toLowerCase() === "the") return word;
+        return named || TECHNICAL.test(core) ? `${open}\`${core}\`${close}` : word;
+      });
+    })
+    .join("");
 }
 
 // Merges parsed fragments' categories into one, Keep a Changelog's order first.

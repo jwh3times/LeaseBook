@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   TRAILER,
+  inertTitle,
   insertSections,
   isStampCommit,
   main,
@@ -58,10 +59,29 @@ test("a malformed fragment is salvaged under Changed, never blocking a release",
 test("a PR title entry comes from a merge commit's body or a squash commit's subject", () => {
   assert.equal(
     prTitleEntry("Merge pull request #13 from o/dependabot/npm/vite\n\nBump vite from 7.1.2 to 7.1.4\n"),
-    "- Bump vite from 7.1.2 to 7.1.4 (#13)",
+    "- Bump `vite` from `7.1.2` to `7.1.4` (#13)",
   );
   assert.equal(prTitleEntry("Merge pull request #14 from o/x\n"), "- Merge pull request #14 from o/x (#14)");
   assert.equal(prTitleEntry("docs: fix a typo (#15)\r\n\r\nbody\r\n"), "- docs: fix a typo (#15)");
+  assert.equal(prTitleEntry("Bump oxlint from 1.2.0 to 1.3.0 (#16)"), "- Bump `oxlint` from `1.2.0` to `1.3.0` (#16)");
+});
+
+// The stamp commit is `[skip ci]`, so a PR title's word that a spell check or a Markdown formatter
+// rejects first fails on every later pull request (LeaseBook #802, `dotnet/aspnet`).
+test("a PR title's dependency names and technical words go in code spans", () => {
+  const cases = [
+    ["build(deps): Bump dotnet/aspnet from `bfd912c` to `12b1135`", "build(deps): Bump `dotnet/aspnet` from `bfd912c` to `12b1135`"],
+    ["chore(deps): bump @types/node from 26.1.0 to 26.2.0 in /web", "chore(deps): bump `@types/node` from `26.1.0` to `26.2.0` in `/web`"],
+    ["Bump the npm-minor-and-patch group across 1 directory with 5 updates", "Bump the `npm-minor-and-patch` group across 1 directory with 5 updates"],
+    ["Bumps oxlint, then the rest", "Bumps `oxlint`, then the rest"],
+    ["Update Microsoft.OpenApi requirement from 2.12.0 to 2.13.0", "Update `Microsoft.OpenApi` requirement from `2.12.0` to `2.13.0`"],
+    ["fix: keep (snake_case) names and a * b safe", "fix: keep (`snake_case`) names and a `*` b safe"],
+    ["docs: point the notices at the shared-skills block", "docs: point the notices at the shared-skills block"],
+    ["Fix #123 without touching its link", "Fix #123 without touching its link"],
+    ["an unmatched ` stays as it is: foo/bar", "an unmatched ` stays as it is: foo/bar"],
+  ];
+  for (const [title, expected] of cases) assert.equal(inertTitle(title), expected, title);
+  assert.equal(inertTitle(inertTitle(cases[1][0])), cases[1][1], "inertTitle is idempotent");
 });
 
 test("categories merge across fragments in Keep a Changelog's order, others last", () => {
@@ -166,7 +186,7 @@ test("stamps each untagged merge with its own version and tags the merge commit"
     assert.equal(git(root, "rev-parse", "v1.2.2^{commit}"), second);
 
     const stamped = readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
-    assert.match(stamped, /## \[1\.2\.2\] - \d{4}-\d{2}-\d{2}\n\n### Changed\n\n- Bump vite from 7\.1\.2 to 7\.1\.4 \(#13\)\n\n## \[1\.2\.1\] - \d{4}-\d{2}-\d{2}\n\n### Added\n\n- X, for everyone\.\n\n## \[1\.2\.0\]/);
+    assert.match(stamped, /## \[1\.2\.2\] - \d{4}-\d{2}-\d{2}\n\n### Changed\n\n- Bump `vite` from `7\.1\.2` to `7\.1\.4` \(#13\)\n\n## \[1\.2\.1\] - \d{4}-\d{2}-\d{2}\n\n### Added\n\n- X, for everyone\.\n\n## \[1\.2\.0\]/);
     assert.match(stamped, /## \[Unreleased\]\n\nNo unreleased changes\.\n/);
     assert.equal(existsSync(path.join(root, "changelog.d/feat-x.md")), false);
     assert.equal(readFileSync(path.join(root, ".git", "notes", "v1.2.1.md"), "utf8"), "### Added\n\n- X, for everyone.\n");
