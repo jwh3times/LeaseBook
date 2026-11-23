@@ -29,6 +29,7 @@ import {
   takenBlocks,
   tomlMultiline,
 } from "./sync-agents.mjs";
+import * as syncAgents from "./sync-agents.mjs";
 
 function write(root, rel, content) {
   mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -523,6 +524,104 @@ test("a stale entry is replaced where it stands, and duplicates collapse into it
     ]);
     assert.equal(guardEntries(PreToolUse).length, 1);
     assert.deepEqual(PostToolUse, [managedHooks.PostToolUse]);
+    assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
+    // The rewrite is in the shape Prettier and Biome print, so their checks pass on it.
+    const raw = read(root, settingsFile);
+    assert.ok(raw.includes('\n            "args": ["${CLAUDE_PROJECT_DIR}/scripts/guard.mjs", "--post"],\n'), raw);
+    // An array holding objects stays expanded, one key per line, however short.
+    assert.ok(raw.includes('\n            "command": "echo other"\n'), raw);
+  });
+});
+
+// --- The formatter-compatible JSON writer ---------------------------------------------------------
+
+const FRESH_AT_100 = `{
+  "permissions": {
+    "allow": ["Bash(ls:*)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["\${CLAUDE_PROJECT_DIR}/scripts/guard.mjs"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["\${CLAUDE_PROJECT_DIR}/scripts/guard.mjs", "--post"],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+`;
+
+test("the writer prints short primitive arrays inline and expands objects, empties stay inline", () => {
+  assert.equal(typeof syncAgents.formatJson, "function", "formatJson is exported");
+  assert.equal(
+    syncAgents.formatJson({ a: ["x", 1, true, null], b: {}, c: [], d: [{ e: 1 }], f: [[1]] }, 80),
+    '{\n  "a": ["x", 1, true, null],\n  "b": {},\n  "c": [],\n  "d": [\n    {\n      "e": 1\n    }\n  ],\n  "f": [\n    [1]\n  ]\n}\n',
+  );
+  assert.equal(syncAgents.formatJson([], 80), "[]\n");
+});
+
+test("a primitive array goes one element per line once its whole line, comma included, passes the width", () => {
+  const { formatJson } = syncAgents;
+  assert.equal(typeof formatJson, "function", "formatJson is exported");
+  // `  "k": ["aaaa"],` is 16 columns; without the comma (the last key) it is 15.
+  assert.equal(formatJson({ k: ["aaaa"], z: 1 }, 16), '{\n  "k": ["aaaa"],\n  "z": 1\n}\n');
+  assert.equal(formatJson({ k: ["aaaa"], z: 1 }, 15), '{\n  "k": [\n    "aaaa"\n  ],\n  "z": 1\n}\n');
+  assert.equal(formatJson({ z: 1, k: ["aaaa"] }, 15), '{\n  "z": 1,\n  "k": ["aaaa"]\n}\n');
+  const allow = ["Bash(npm run build:*)", "Bash(npm run check:*)", "Bash(npm run test:*)", "Bash(git status:*)"];
+  assert.match(formatJson({ permissions: { allow } }, 80), /\n {4}"allow": \[\n {6}"Bash\(npm run build:\*\)",\n/);
+  assert.match(formatJson({ permissions: { allow } }, 200), /\n {4}"allow": \["Bash\(npm run build:\*\)", /);
+});
+
+test("the width comes from the repository's Prettier or Biome config, else 80", () => {
+  const { formatWidth } = syncAgents;
+  assert.equal(typeof formatWidth, "function", "formatWidth is exported");
+  const cases = [
+    [{}, 80],
+    [{ ".prettierrc": '{ "printWidth": 100, "tabWidth": 2 }' }, 100],
+    [{ ".prettierrc": "semi: true\nprintWidth: 120\n" }, 120],
+    [{ ".prettierrc.json": '{ "singleQuote": true, "printWidth": 90 }' }, 90],
+    [{ "package.json": '{ "name": "x", "prettier": { "printWidth": 110 } }' }, 110],
+    [{ "biome.json": '{ "formatter": { "indentStyle": "space", "lineWidth": 100 } }' }, 100],
+    [{ "biome.json": '{ "formatter": { "lineWidth": 100 }, "json": { "formatter": { "lineWidth": 120 } } }' }, 120],
+    [{ "biome.jsonc": '{\n  // comment\n  "formatter": { "lineWidth": 96 }\n}' }, 96],
+    [{ "package.json": '{ "name": "x" }' }, 80],
+  ];
+  for (const [files, width] of cases) {
+    const root = mkdtempSync(path.join(tmpdir(), "sync-agents-width-"));
+    try {
+      for (const [rel, content] of Object.entries(files)) write(root, rel, content);
+      assert.equal(formatWidth(root), width, JSON.stringify(files));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("a first registration is written in the shape the repository's formatter prints", () => {
+  withGuard((root) => {
+    write(root, ".prettierrc", '{ "printWidth": 100 }\n');
+    write(root, settingsFile, '{"permissions":{"allow":["Bash(ls:*)"]}}');
+    syncMirrors(root);
+    assert.equal(read(root, settingsFile), FRESH_AT_100);
     assert.deepEqual(syncMirrors(root, { check: true }).stale, []);
   });
 });

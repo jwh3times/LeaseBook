@@ -353,10 +353,81 @@ function namesGuard(hook) {
   );
 }
 
+// JSON in the shape Prettier and Biome print it, so a consumer's formatter check passes on a file
+// this script wrote: an object one key per line (both keep an expanded object expanded), an array
+// of primitives on one line when that whole line, comma included, fits `width`, otherwise one
+// element per line, an array holding an object or array expanded, `{}` and `[]` inline, a 2-space
+// indent and a final newline.
+export function formatJson(value, width = 80) {
+  const pad = (n) => " ".repeat(n);
+  const isPrimitive = (item) => item === null || typeof item !== "object";
+  // `lead` is the text before the value on its line, `tail` what follows it there (a comma).
+  const print = (item, indent, lead, tail) => {
+    if (isPrimitive(item)) return JSON.stringify(item);
+    if (Array.isArray(item)) {
+      if (item.length === 0) return "[]";
+      if (item.every(isPrimitive)) {
+        const inline = `[${item.map((element) => JSON.stringify(element)).join(", ")}]`;
+        if (lead + inline.length + tail <= width) return inline;
+      }
+      const lines = item.map((element, i) => {
+        const last = i === item.length - 1;
+        return `${pad(indent + 2)}${print(element, indent + 2, indent + 2, last ? 0 : 1)}`;
+      });
+      return `[\n${lines.join(",\n")}\n${pad(indent)}]`;
+    }
+    const entries = Object.entries(item);
+    if (entries.length === 0) return "{}";
+    const lines = entries.map(([key, element], i) => {
+      const head = `${pad(indent + 2)}${JSON.stringify(key)}: `;
+      return head + print(element, indent + 2, head.length, i === entries.length - 1 ? 0 : 1);
+    });
+    return `{\n${lines.join(",\n")}\n${pad(indent)}}`;
+  };
+  return `${print(value, 0, 0, 0)}\n`;
+}
+
+// The print width the repository's formatter uses for JSON: Prettier's `printWidth` (from
+// `.prettierrc`, JSON or YAML, `.prettierrc.json` or `package.json`), else Biome's
+// `json.formatter.lineWidth` or `formatter.lineWidth`, else Prettier's and Biome's default of 80.
+export function formatWidth(root = defaultRoot) {
+  const readText = (rel) => {
+    const file = path.join(root, rel);
+    return existsSync(file) ? readFileSync(file, "utf8") : null;
+  };
+  const parse = (text) => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  };
+  const positive = (value) => (Number.isInteger(value) && value > 0 ? value : null);
+  for (const rel of [".prettierrc", ".prettierrc.json", ".prettierrc.yaml", ".prettierrc.yml"]) {
+    const text = readText(rel);
+    if (text === null) continue;
+    const width = positive(parse(text)?.printWidth) ?? positive(Number(/^[ \t]*"?printWidth"?[ \t]*:[ \t]*(\d+)/m.exec(text)?.[1]));
+    if (width) return width;
+  }
+  const packageText = readText("package.json");
+  const fromPackage = packageText === null ? null : positive(parse(packageText)?.prettier?.printWidth);
+  if (fromPackage) return fromPackage;
+  for (const rel of ["biome.json", "biome.jsonc"]) {
+    const text = readText(rel);
+    if (text === null) continue;
+    // A `.jsonc` may hold comments, which JSON.parse refuses; full-line comments are dropped first.
+    const config = parse(text) ?? parse(text.replace(/^[ \t]*\/\/.*$/gm, ""));
+    const width = positive(config?.json?.formatter?.lineWidth) ?? positive(config?.formatter?.lineWidth);
+    if (width) return width;
+  }
+  return 80;
+}
+
 // `.claude/settings.json` with the managed entries in place: a stale one is replaced where it
-// stands, duplicates collapse into it, a missing one is appended. When nothing changes, the text
-// comes back as it was, so a file formatted its own way is never rewritten.
-export function mergeClaudeSettings(raw, file = settingsTarget) {
+// stands, duplicates collapse into it, a missing one is appended, and the file is written as the
+// repository's formatter prints it (`formatJson`). When nothing changes, the text comes back as it
+// was, so a file formatted its own way is never rewritten.
+export function mergeClaudeSettings(raw, file = settingsTarget, { width = 80 } = {}) {
   const text = raw === null ? null : normalizeNewlines(raw);
   let settings;
   try {
@@ -392,7 +463,7 @@ export function mergeClaudeSettings(raw, file = settingsTarget) {
     settings.hooks[event] = merged;
   }
   if (text !== null && JSON.stringify(settings) === before) return text;
-  return `${JSON.stringify(settings, null, 2)}\n`;
+  return formatJson(settings, width);
 }
 
 function buildClaudeSettings(root) {
@@ -400,6 +471,8 @@ function buildClaudeSettings(root) {
   const target = path.join(root, settingsTarget);
   return mergeClaudeSettings(
     existsSync(target) ? readFileSync(target, "utf8") : null,
+    settingsTarget,
+    { width: formatWidth(root) },
   );
 }
 
@@ -657,13 +730,10 @@ async function main(argv) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) {
-  main(process.argv.slice(2)).then(
-    (code) => {
-      process.exitCode = code;
-    },
-    (error) => {
-      console.error(`sync-agents: ${error.message}`);
-      process.exitCode = 1;
-    },
-  );
+  try {
+    process.exitCode = await main(process.argv.slice(2));
+  } catch (error) {
+    console.error(`sync-agents: ${error.message}`);
+    process.exitCode = 1;
+  }
 }
