@@ -151,6 +151,9 @@ jobs:
       - name: Verify installed skills match the lock
         working-directory: ${{ github.workspace }}
         run: node scripts/check-skills.mjs
+      - name: Test the tool-call guard
+        working-directory: ${{ github.workspace }}
+        run: node --test scripts/guard.test.mjs
       # Sources are read from their mirrored copies too: a bare $0-$9 in a SKILL.md or a relative
       # link that breaks there fails here.
       - name: Test the tool-neutrality lint
