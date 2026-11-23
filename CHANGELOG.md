@@ -19,6 +19,15 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.23] - 2026-11-23
+
+### Changed
+
+- Every Claude Code agent definition in `.claude/agents/` now sets `model: inherit`, so a subagent
+  runs on the model of the session that launched it instead of a pinned Opus model or the tool's
+  default. The Codex mirrors are unchanged, because the generator drops `model:`. No product
+  behavior changes.
+
 ## [0.39.22] - 2026-11-23
 
 ### Added
@@ -2598,7 +2607,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.22...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.23...HEAD
+[0.39.23]: https://github.com/jwh3times/LeaseBook/compare/v0.39.22...v0.39.23
 [0.39.22]: https://github.com/jwh3times/LeaseBook/compare/v0.39.21...v0.39.22
 [0.39.21]: https://github.com/jwh3times/LeaseBook/compare/v0.39.20...v0.39.21
 [0.39.20]: https://github.com/jwh3times/LeaseBook/compare/v0.39.19...v0.39.20
