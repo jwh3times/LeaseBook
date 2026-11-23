@@ -10,11 +10,11 @@ This repository's own license is in `LICENSE`. The files below are kept here und
 ## Agent skills
 
 The skills in `.agents/skills/`, and the generated copies in `.claude/skills/`, come from two
-sources, and `skills-lock.json` records which skill comes from where. Six of them, `end-session`,
-`handoff`, `lets-go`, `ship`, `docs-updater` and `what-next`, come from
-[jwh3times/skills](https://github.com/jwh3times/skills) (MIT). `handoff` derives in part from Matt
-Pocock's handoff skill and carries his notice in its folder (`.agents/skills/handoff/LICENSE`). The
-rest come from [mattpocock/skills](https://github.com/mattpocock/skills), under the license below.
+sources, and `skills-lock.json` records which skill comes from where. The ones the `shared-skills`
+block in `AGENTS.md` installs come from [jwh3times/skills](https://github.com/jwh3times/skills)
+(MIT). `handoff` derives in part from Matt Pocock's handoff skill and carries his notice in its
+folder (`.agents/skills/handoff/LICENSE`). The rest come from
+[mattpocock/skills](https://github.com/mattpocock/skills), under the license below.
 
 ```text
 MIT License
