@@ -7,13 +7,13 @@
 
 ## Public repository
 
-- **Read by:** dependabot, end-session, land, what-next
+- **Read by:** ci-triage, dependabot, end-session, land, records-audit, what-next
 - **Value:** `owner/name` exactly as GitHub spells it (casing can differ from the directory name).
 - **Discover:** `gh repo view --json nameWithOwner -q .nameWithOwner`.
 
 ## Private issue repository
 
-- **Read by:** end-session, land, ship, what-next
+- **Read by:** end-session, land, records-audit, ship, what-next
 - **Value:** `none`, a literal `owner/name`, or a `discover:` value — the repository that holds
   issues too sensitive for the public tracker.
 - **Default:** the `Private companion`'s repository; `none` without a companion.
@@ -23,7 +23,7 @@
 
 ## Board
 
-- **Read by:** end-session, land, ship, what-next
+- **Read by:** end-session, land, records-audit, ship, what-next
 - **Value:** `none`, or the GitHub project as `<owner> <number>` (the arguments `gh project` takes),
   or a `discover:` value.
 - **Discover:** `gh project list --owner <owner>`, matched to the repository by title, and links to
@@ -31,12 +31,18 @@
 
 ## Board fields
 
-- **Read by:** end-session, land, what-next
+- **Read by:** end-session, land, records-audit, what-next
 - **Value:** bulleted list, one per field the skills set: field name, its options, and when each
   applies (e.g. `Status: Todo / In Progress / Blocked / Parked / Done`; `Blocked by: <reason>` set
-  with `Blocked`). Field and option IDs are looked up at run time, never written here.
+  with `Blocked`). Field and option IDs are looked up at run time, never written here. A board may
+  have a date field, `Due` (a `DATE` field; another name is listed here as the deadline field): set
+  it only when the action has a real deadline (an expiry, a renewal, an offer's end, a date someone
+  else set), never an aspirational one, and leave it empty otherwise. `what-next` ranks overdue
+  items first, and `board.mjs audit` and `records-audit` report what is overdue or due within a
+  week.
 - **Discover:** `gh project field-list <number> --owner <owner> --format json`, and existing
-  skills and docs for how each field is used.
+  skills and docs for how each field is used. A deadline written only in an issue's title or body
+  belongs in `Due` once the board has the field.
 
 ## Priority order
 
@@ -53,7 +59,7 @@
 
 ## New work
 
-- **Read by:** end-session
+- **Read by:** end-session, records-audit
 - **Value:** how work found during a session, and not yet committed to, is recorded: `issue` (an
   issue, labelled and added to the `Board`) or `draft item` (a draft item on the `Board`, which
   becomes an issue only when the work is committed to, by the rule the repository records).
