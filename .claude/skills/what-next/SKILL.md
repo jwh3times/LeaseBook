@@ -1,7 +1,7 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/what-next/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: what-next
-description: Report what to work on next in this repository — an active handoff waiting to be resumed, work already in flight, ready issues ranked the way the board ranks them, what needs the user, what needs shaping first, and blocks that have quietly cleared — and recommend the one command to run. Read-only. Use when the user asks what to work on next, what is ready or what to pick up, or when a phase ends with no next piece of work chosen.
+description: Report what to work on next in this repository — an active handoff waiting to be resumed, work already in flight, ready issues ranked the way the board ranks them, what needs the user (overdue deadlines first), what needs shaping first, and blocks that have quietly cleared — and recommend the one command to run. Read-only. Use when the user asks what to work on next, what is ready or what to pick up, or when a phase ends with no next piece of work chosen.
 argument-hint: "A focus: agent, human, bugs, or a label, area or field value (optional)"
 metadata:
   settings: issue-tracker triage-labels handoffs dev-flow
@@ -109,9 +109,20 @@ gh project item-list "$board_number" --owner "$board_owner" --format json --limi
 Items come back in the board's manual order, top first, which is what `board order` in
 `Priority order` reads. Each item's field values are keys named by the field in lower case
 (`priority`, `blocked by`); `content.number` and `content.repository` join it to an issue, and an
-item whose `content.type` is `DraftIssue` is a board draft. Reading a board needs the token's
-`read:project` scope (`gh auth status`). Without it, or on any other failure, rank without the
-board and say so in the report; never stop over it.
+item whose `content.type` is `DraftIssue` is a board draft. A deadline is the `Due` date field
+(`due`, as `YYYY-MM-DD`), or the date field `Board fields` names as the deadline: an item whose date
+is before today is **overdue**. Reading a board needs the token's `read:project` scope
+(`gh auth status`). Without it, or on any other failure, rank without the board and say so in the
+report; never stop over it.
+
+**The last records audit**, which `records-audit` saves in the repository's git folder:
+
+```bash
+ls "$(git rev-parse --path-format=absolute --git-common-dir)/records-audit" 2>/dev/null | sort | tail -1
+```
+
+The newest file's name is its date (`2026-11-23.md`). None, or one more than seven days old, is
+named in the report.
 
 **Security findings**, when the `Security findings` setting is the default (draft advisories):
 
@@ -178,20 +189,25 @@ Within each bucket, order by:
 3. Age (`createdAt`), oldest first.
 
 With `Priority order: none`, or the board unreadable, rank by 2 and 3 alone and say so.
-**Finish first** goes: the active handoff, then PRs with failing checks or changes requested, then
-approved PRs, then PRs waiting for review, then assigned issues with no PR, then drafts.
+**Needs you** goes by its deadline first: overdue items, the longest overdue first; then items with
+a due date, the earliest first; then the rest, by the keys above. **Finish first** goes: the active
+handoff, then PRs with failing checks or changes requested, then approved PRs, then PRs waiting for
+review, then assigned issues with no PR, then drafts.
 
 **The recommendation** is, in order:
 
-1. The top of **Finish first**, unless it holds only drafts or a pending handoff. An active handoff
-   whose document is here is resumed with `/lets-go`, which brings the checkout to its state before
-   anything else starts. A green PR with nothing requested is finished by the user's review and
-   merge, which the recommendation names; it never merges.
-2. Otherwise the higher-ranked of the tops of **Ready for an agent** and **Needs you**, comparing
+1. An active handoff whose document is here, resumed with `/lets-go`, which brings the checkout to
+   its state before anything else starts.
+2. An overdue **Needs you** item, the longest overdue first: a missed deadline outranks agent
+   work, finishing work included. Below an active handoff, name it beside the handoff.
+3. The top of **Finish first**, unless it holds only drafts or a pending handoff. A green PR with
+   nothing requested is finished by the user's review and merge, which the recommendation names;
+   it never merges.
+4. Otherwise the higher-ranked of the tops of **Ready for an agent** and **Needs you**, comparing
    by the same keys. On a tie, the **Needs you** item: no agent can take it, and it may unblock
    others.
-3. Otherwise the top of **Needs shaping**.
-4. Otherwise nothing: say the queue is empty, with the **Waiting** counts.
+5. Otherwise the top of **Needs shaping**.
+6. Otherwise nothing: say the queue is empty, with the **Waiting** counts.
 
 ## 4. Report
 
@@ -216,7 +232,7 @@ alone. List at most ten items per bucket and count the rest. Leave out an empty 
 1. <title> (#<n>) — <rank values>; unblocks <k> — `/implement` or `/diagnosing-bugs`
 
 ### Needs you (<count>)
-1. <title> (#<n>) — <the decision or action owed>
+1. <title> (#<n>) — **overdue since <date>** <or: due <date>> — <the decision or action owed>
 
 ### Needs shaping (<count>)
 1. <title> (#<n>) — <why it is not ready> — `<route>`
@@ -229,6 +245,8 @@ work.<, <n> draft security advisories open.>
 issues, open items with no `Priority order` value, conflicting state labels — or "none found">.
 **Not read:** <the handoff map, the board, the private tracker or advisories, with why — or leave
 the line out>.
+**Records audit:** <last run <date>, <n> days ago — or never run> — run `/records-audit`. <Leave
+the line out when the last audit is seven days old or less.>
 ```
 
 Then stop. Say which command the recommendation runs, and wait: the user starts the next phase.

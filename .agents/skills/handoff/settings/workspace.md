@@ -7,7 +7,7 @@ that file.
 
 ## Private companion
 
-- **Read by:** docs-updater, end-session, handoff, lets-go, ship
+- **Read by:** docs-updater, end-session, handoff, lets-go, records-audit, ship
 - **Value:** `none`, or the companion's checkout path (normally `private/`, its own Git repository,
   ignored by this one) and its repository as a literal `owner/name` or a `discover:` value.
 - **Discover:** `private/.git` exists → `git -C private remote get-url origin`. Repositories that

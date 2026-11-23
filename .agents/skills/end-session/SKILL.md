@@ -136,7 +136,9 @@ in a field other than `Status`, or with an option other than `Done`, add
 `--status-field "<field>" --done "<option>"` naming them; the defaults are `Status` and `Done`. Its
 `status` names the pair it used. Set that option on each `closedNotDone` item the session's work
 closed; report the rest of `closedNotDone`, every `openDone` item and every `missing` issue
-rather than fixing what the session never touched. The private tracker's results stay out of
+rather than fixing what the session never touched. When the board has a `Due` date field (or
+`Board fields` names the deadline field, passed as `--due-field "<name>"`), report its `overdue`
+and `dueSoon` items too, with their dates. The private tracker's results stay out of
 anything public.
 
 A security finding follows the `Security findings` route, never a public issue before its fix

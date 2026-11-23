@@ -86,7 +86,9 @@ Record `Release level: <major|minor|build> — <one-sentence rationale>`. Steps 
 exact line.
 
 **Apply it.** The baseline is the higher of the newest three-part `v*` tag (ignoring the
-`Skipped tags` **Ignore** patterns) and the `Version file` on `origin/main` (`git show "origin/main:<file>"`).
+`Skipped tags` **Ignore** patterns) and the `Version file` on `origin/main`
+(`MSYS_NO_PATHCONV=1 git show "origin/main:<file>"`, which keeps Git Bash from rewriting the
+`ref:path` argument).
 
 - **Build** — the `Version file` stays at its `origin/main` value. Restore it if the branch moved it
   without release intent.
@@ -151,7 +153,7 @@ eye reports every tag as missing.
   ones were rolled into an earlier section:
 
   ```bash
-  newest="$(git show origin/main:CHANGELOG.md |
+  newest="$(MSYS_NO_PATHCONV=1 git show origin/main:CHANGELOG.md |
     sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/p' | sort -V | tail -1)"
   git tag -l 'v*' | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | sort -V |
     sed -n "/^${newest}\$/,\$p" | tail -n +2
@@ -261,6 +263,15 @@ files, run the list again from the top: a generated mirror built from unformatte
 again once they are formatted. A check that cannot run here (a missing service, a missing secret) is
 named in the report as left to CI.
 
+**When the branch adds or changes tests**, prove them with the `test-prover` skill, in a subagent
+where the harness has one (it forks on its own where the harness reads its `context: fork`),
+given the base (`git merge-base origin/main HEAD`) and what the branch fixes; otherwise follow
+`.agents/skills/test-prover/SKILL.md` yourself. A subagent cannot ask the user, so complete its
+settings first, here, by following its step 0. It works in a scratch worktree and changes nothing
+here. A test it finds vacuous (green with the fix reverted), a surviving mutation, a run that
+matched no tests or an asserted name missing from the source is reported, and the push waits for
+the user: fixing the test is a change to the branch, and pushing as it is is their call.
+
 Then run `Hook: before PR` from `docs/agents/ship.md`. Its findings go in the report and, where it
 says, the PR body.
 
@@ -322,7 +333,8 @@ companion detail.
 - What the docs refresh changed, the changelog entries written, and any sections backfilled. When
   docs-updater owes a wiki search after the merge, say so: the next `end-session` performs it.
 - Human follow-ups: verified issue and wiki links, what is unpublished and why, or that none remain.
-- Fast-check results, checks left to CI, `Hook: before PR` findings, and issue-link warnings.
+- Fast-check results, checks left to CI, the test proof's verdict and findings when it ran,
+  `Hook: before PR` findings, and issue-link warnings.
 - The companion: absent, or clean and in step, and any companion commit made. Never describe the
   unmerged PR as shipped there.
 - Settings files written in step 0.

@@ -8,7 +8,7 @@ finds today's values.
 
 ## Follow-up destination
 
-- **Read by:** docs-updater, end-session, ship
+- **Read by:** docs-updater, end-session, records-audit, ship
 - **Value:** where each follow-up becomes trackable: issues in a repository (`owner/name`, or a
   `discover:` value), or a checkbox in one public tracking issue (`owner/name#n`).
 - **Default:** issues in the `Private issue repository`, or in the `Public repository` when that is
@@ -18,7 +18,7 @@ finds today's values.
 
 ## Follow-up label
 
-- **Read by:** docs-updater, end-session, ship
+- **Read by:** docs-updater, end-session, records-audit, ship
 - **Value:** the label a follow-up issue carries (`ready-for-human`, `human-action-required`, …),
   or `none` for a tracking-issue checkbox.
 - **Default:** `ready-for-human`; a conflicting `ready-for-agent` or `needs-triage` comes off.
@@ -26,7 +26,7 @@ finds today's values.
 
 ## Follow-up board
 
-- **Read by:** docs-updater, end-session, ship
+- **Read by:** docs-updater, end-session, records-audit, ship
 - **Value:** `none`, `same as Board` (the `Board` setting in `issue-tracker.md`), or a separate
   project as `<owner> <number>` or a `discover:` value, with the fields to set.
 - **Default:** `same as Board`, with the fields its `Board fields` describe.
@@ -35,7 +35,7 @@ finds today's values.
 
 ## Follow-up wiki
 
-- **Read by:** docs-updater, end-session, ship
+- **Read by:** docs-updater, end-session, records-audit, ship
 - **Value:** `none`, or the wiki that holds step-by-step instructions: its repository and index
   page (e.g. the destination repository's wiki, index `human-todo`), plus whether pushing to it is
   pre-authorized (`push without asking` or `ask before pushing`).
@@ -71,7 +71,11 @@ line in a final message is not a follow-up.
    its wiki too; otherwise stop and publish nothing there.
 4. **Board.** Add the issue to the follow-up board and set its fields from current evidence:
    actionable, blocked by a named prerequisite, or parked until a conditional trigger. Look up
-   field and option IDs; never assume them.
+   field and option IDs; never assume them. When the action has a real deadline (a token or
+   certificate expiry, a renewal, an offer or support window ending, a date someone else set) and
+   the board has a `Due` date field, set it to that date (`--set "Due=YYYY-MM-DD"`) and name the
+   source of the date in the issue. Never set one for a date that is only a wish; a deadline lives
+   in `Due`, not in the title.
 5. **Instructions.** Publish numbered steps on the wiki: access needed, exact commands or verified
    UI navigation, expected results, how to verify completion, and recovery where relevant. Mark
    uncertainty about a UI instead of inventing clicks. With `Follow-up wiki` `none`, the steps go

@@ -8,12 +8,16 @@
 //   node .agents/skills/end-session/board.mjs file   --board "<owner> <number>" --item <ref> [--set "<Field>=<value>" ...]
 //   node .agents/skills/end-session/board.mjs set    --board "<owner> <number>" (--item <ref> | --item-id <id>) --set "<Field>=<value>" ...
 //   node .agents/skills/end-session/board.mjs audit  --board "<owner> <number>" [--repo <owner/name> ...]
-//                                                    [--status-field <name>] [--done <option>]
+//                                                    [--status-field <name>] [--done <option>] [--due-field <name>]
 //
 // <ref> is an issue or pull request, as `owner/name#123` or its github.com URL. `file` adds it to
 // the board when it is not there yet, then sets the fields; `set` refuses an item not on the board.
 // `--set "<Field>="` clears a field. `audit`'s status field and its done option default to `Status`
-// and `Done`; name a board's own with `--status-field` and `--done`. The board is the `Board`
+// and `Done`; name a board's own with `--status-field` and `--done`. When the board has a date field
+// named `Due`, or the one `--due-field` names, `audit` also lists the open items not done whose date
+// has passed (`overdue`) or falls within seven days (`dueSoon`), by today's date where it runs; a
+// board without one gives `due: null`, with a `dueNote` when its `Due` is not a date field (only a
+// field `--due-field` names must be one). The board is the `Board`
 // setting's two words; this script reads no repository settings. Every command prints one JSON
 // object, and exits 1 with `{ "error": ... }` on failure.
 //
@@ -43,6 +47,7 @@ import { fileURLToPath } from "node:url";
 export const COMMANDS = ["fields", "get", "file", "set", "audit"];
 const WRITABLE = new Set(["SINGLE_SELECT", "TEXT", "NUMBER", "DATE"]);
 const RETRY_PAUSES_MS = [2000, 5000, 10000];
+const SOON_DAYS = 7;
 
 export class BoardError extends Error {}
 
@@ -63,6 +68,7 @@ export function parseArgs(argv) {
     repos: [],
     statusField: "Status",
     done: "Done",
+    dueField: null,
   };
   const single = {
     "--board": "board",
@@ -70,6 +76,7 @@ export function parseArgs(argv) {
     "--item-id": "itemId",
     "--status-field": "statusField",
     "--done": "done",
+    "--due-field": "dueField",
   };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
@@ -99,6 +106,7 @@ export function parseArgs(argv) {
     throw new BoardError(`${command} takes no --item, --item-id or --set`);
   }
   if (command !== "audit" && options.repos.length) throw new BoardError("only audit takes --repo");
+  if (command !== "audit" && options.dueField) throw new BoardError("only audit takes --due-field");
   return options;
 }
 
@@ -471,7 +479,7 @@ function pages(api, query, variables, select) {
   return nodes;
 }
 
-function commandAudit(api, options) {
+function commandAudit(api, options, today) {
   const project = readProject(api, options.board);
   const statusField = findField(project.fields, options.statusField);
   if (statusField.dataType !== "SINGLE_SELECT") {
@@ -515,15 +523,68 @@ function commandAudit(api, options) {
     openDone,
     noStatus,
     ...(options.repos.length ? { missing } : {}),
+    ...dueLists(project, items, options, { isDone, summary, today }),
   };
+}
+
+// The date field that records a real deadline: the one --due-field names, which must be a date
+// field, else `Due` when the board has it as a date field. A `Due` of another type is left out with a
+// note, so the rest of the audit still runs.
+function dueFieldOf(project, options) {
+  if (options.dueField) {
+    const field = findField(project.fields, options.dueField);
+    if (field.dataType !== "DATE") {
+      throw new BoardError(`${field.name} is a ${field.dataType.toLowerCase()} field; --due-field names a date field`);
+    }
+    return { field };
+  }
+  const field = project.fields.find((candidate) => normalizeName(candidate.name) === "due");
+  if (!field) return { field: null };
+  if (field.dataType !== "DATE") {
+    return {
+      field: null,
+      note: `${field.name} is a ${field.dataType.toLowerCase()} field, not a date, so no item is read as due; name a date field with --due-field`,
+    };
+  }
+  return { field };
+}
+
+function daysBetween(from, to) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+// Open items (drafts too) not done, past their due date or due within SOON_DAYS, earliest first.
+function dueLists(project, items, options, { isDone, summary, today }) {
+  const { field, note } = dueFieldOf(project, options);
+  if (!field) return note ? { due: null, dueNote: note } : { due: null };
+  const dated = items
+    .filter((item) => (item.type === "draft" || item.state === "OPEN") && !isDone(item))
+    .filter((item) => typeof item.fields[field.name] === "string")
+    .map((item) => ({ item, due: item.fields[field.name], days: daysBetween(today, item.fields[field.name]) }))
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
+  return {
+    due: { field: field.name, today, soonDays: SOON_DAYS },
+    overdue: dated
+      .filter((entry) => entry.days < 0)
+      .map((entry) => ({ ...summary(entry.item), due: entry.due, daysLate: -entry.days })),
+    dueSoon: dated
+      .filter((entry) => entry.days >= 0 && entry.days <= SOON_DAYS)
+      .map((entry) => ({ ...summary(entry.item), due: entry.due, daysLeft: entry.days })),
+  };
+}
+
+// Today's date where this runs, as YYYY-MM-DD: a deadline is a day on the user's calendar.
+export function localToday(now = new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 const HANDLERS = { fields: commandFields, get: commandGet, file: commandWrite, set: commandWrite, audit: commandAudit };
 
-export function run(argv, { graphql = ghGraphql, sleep = pause } = {}) {
+export function run(argv, { graphql = ghGraphql, sleep = pause, today = localToday() } = {}) {
   const options = parseArgs(argv);
   const api = (query, variables) => withRetry(() => graphql(query, variables), sleep);
-  return HANDLERS[options.command](api, options);
+  return HANDLERS[options.command](api, options, today);
 }
 
 function main() {

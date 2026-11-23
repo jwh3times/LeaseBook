@@ -15,7 +15,8 @@ the issues it closed shut and Done on the board.
 
 Run shell snippets in bash (Git Bash on Windows). `.agents/skills/land/land.mjs` reads the PR, its
 checks, its release and its deploys, and prints one JSON object; it never writes. Board writes go
-through `.agents/skills/end-session/board.mjs`, so `end-session` is installed beside this skill.
+through `.agents/skills/end-session/board.mjs`, so `end-session` is installed beside this skill,
+and a red check is read by `ci-triage` (step 4), installed beside it too.
 
 `land` never passes `--admin` or `--auto`, never changes a branch rule, never runs, re-runs or
 dispatches a deploy or a migration, and never merges without a user to answer it. A blocked merge
@@ -93,15 +94,21 @@ ten minutes or so. After an hour, stop and ask. A check in `checks.stuck` is pen
 finished: read the job, as the `Guide` says, before waiting longer.
 
 - **`head-moved`** when this run did not move it: someone pushed. Stop and ask (step 1).
-- **`failed`:** read why each check in `checks.failed` failed: `gh run view <runId> --log-failed`,
-  or, while other jobs of the run are still going, the job's own log
-  (`gh api --allow-escape-sequences repos/<owner>/<repo>/actions/jobs/<job id>/logs`, with the id
-  from `gh run view <runId> --json jobs`). A red the
-  `Guide` names as not the code, with its remedy (re-run the failed jobs, an empty commit, a
-  comment), gets that remedy once; then wait again. Any other red stops the run: report the check,
-  the step that failed and the lines that say why. Every red stops it, required or not, unless the
-  `Guide` names that check as one that never gates. A red after its remedy stops it too. Never
-  re-run a red in the hope it passes. `checks.cancelledDuplicates` are not reds.
+- **`failed`:** find out why with the `ci-triage` skill, in a subagent where the harness has one
+  (it forks on its own where the harness reads its `context: fork`), told the `Public repository`,
+  the PR's number, the head and the names in `checks.failed`; otherwise follow
+  `.agents/skills/ci-triage/SKILL.md` yourself. It reads each failing step, log and annotation,
+  never re-runs or posts anything, and classes each red: known red, runner/infra, likely flake,
+  real failure or unknown. Then act only on what the `Guide` says:
+  - **known red:** the `Guide`'s remedy that `ci-triage` quotes (re-run the failed jobs, an empty
+    commit, a comment) is applied once; then wait again.
+  - **every other class** stops the run: report the check, the failed step, the class and the
+    lines that say why, from its diagnosis. A runner/infra red or a likely flake is not a remedy
+    by itself: it gets a re-run only when the `Guide` names one for it, which makes it a known red.
+
+  Every red stops it, required or not, unless the `Guide` names that check as one that never
+  gates. A red after its remedy stops it too. Never re-run a red in the hope it passes.
+  `checks.cancelledDuplicates` are not reds.
 - **`missing-checks`:** a required check never reported on this head (`checks.missingRequired`),
   which GitHub shows as BLOCKED with every check green. Apply the `Guide`'s remedy for a workflow
   that never started, or stop and report the checks by name.
