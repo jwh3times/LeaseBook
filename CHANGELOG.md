@@ -19,6 +19,14 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.18] - 2026-11-22
+
+### Changed
+
+- `THIRD_PARTY_NOTICES.md` points at the `shared-skills` block in `AGENTS.md` for the skills that
+  come from `jwh3times/skills` instead of listing them by hand, a list that had dropped `land` and
+  `dependabot`. The attribution and license notices are unchanged.
+
 ## [0.39.17] - 2026-11-22
 
 ### Changed
@@ -2558,7 +2566,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.17...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.18...HEAD
+[0.39.18]: https://github.com/jwh3times/LeaseBook/compare/v0.39.17...v0.39.18
 [0.39.17]: https://github.com/jwh3times/LeaseBook/compare/v0.39.16...v0.39.17
 [0.39.16]: https://github.com/jwh3times/LeaseBook/compare/v0.39.15...v0.39.16
 [0.39.15]: https://github.com/jwh3times/LeaseBook/compare/v0.39.14...v0.39.15
