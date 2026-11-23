@@ -1,7 +1,7 @@
 ---
 name: trust-accounting
 description: Specialist for the double-entry journal, posting-template catalog, dual-basis postings, and the trust equation. Use for any change to Accounting posting logic, events, or ledger reads.
-model: opus
+model: inherit
 tools: Read, Grep, Glob, Bash
 ---
 

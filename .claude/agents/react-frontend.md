@@ -1,6 +1,7 @@
 ---
 name: react-frontend
 description: Specialist for the LeaseBook React/TypeScript SPA. Use when building UI components, writing query hooks, styling with design tokens, or reviewing frontend code. Knows the pf-* design system, TanStack Query patterns, the Money component, and the API client conventions.
+model: inherit
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 
