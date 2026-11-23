@@ -23,7 +23,7 @@ x-app-build: &app-build
 
 services:
   db:
-    image: postgres:18
+    image: postgres:19
     container_name: leasebook-db
     environment:
       # Superuser password (dev-only). The three application roles are created by bootstrap.sql.
