@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.32] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `dotnet/sdk` from `fe0fd4e` to `8c6edfb` (#803)
+
 ## [0.39.31] - 2026-11-24
 
 ### Changed
@@ -2655,7 +2661,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.31...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...HEAD
+[0.39.32]: https://github.com/jwh3times/LeaseBook/compare/v0.39.31...v0.39.32
 [0.39.31]: https://github.com/jwh3times/LeaseBook/compare/v0.39.30...v0.39.31
 [0.39.30]: https://github.com/jwh3times/LeaseBook/compare/v0.39.29...v0.39.30
 [0.39.29]: https://github.com/jwh3times/LeaseBook/compare/v0.39.28...v0.39.29
