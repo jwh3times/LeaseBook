@@ -16,6 +16,6 @@ Everything above is the cross-agent contract. This section is the only Claude-sp
   named for its file basename — `dotnet-api`, `react-frontend`, `postgres-specialist`,
   `trust-accounting`, `code-reviewer`, `azure-infrastructure`. Dispatch the one that owns the domain
   rather than only reading its file.
-- Skills, including `/ship` and `docs-updater`, are shared with Codex and described under
+- Skills, including `/open-pr` and `docs-updater`, are shared with Codex and described under
   **Agent skills**; they are session-scoped, so repository CI and the contributor checklist carry
   the enforceable guarantees.

@@ -160,7 +160,7 @@ const skillSettings = new Set(
     "human-follow-up",
     "docs",
     "releases",
-    "ship",
+    "open-pr",
     "handoffs",
   ].map((topic) => `docs/agents/${topic}.md`),
 );

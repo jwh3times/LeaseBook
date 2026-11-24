@@ -4,7 +4,7 @@ Required human actions left by completed agent work follow the `## Procedure` in
 skills' `human-follow-up` definition (for example
 `.agents/skills/end-session/settings/human-follow-up.md`), with the values below. The completing
 agent owns the follow-up before it reports the work complete, including work finished without
-`/ship` or `/end-session` (`AGENTS.md`, "Issue tracker"). Reconcile against both trackers: a
+`/open-pr` or `/end-session` (`AGENTS.md`, "Issue tracker"). Reconcile against both trackers: a
 private follow-up may cite a public issue, never the reverse. Keep the companion's locator, its
 issue and wiki links, and credential values out of public files, issues and PR bodies.
 

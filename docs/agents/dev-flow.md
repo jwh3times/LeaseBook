@@ -5,7 +5,7 @@
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-11-20
 
-The flow itself is `.agents/skills/ship/settings/dev-flow.md`, and `AGENTS.md` summarizes it. This file holds what this repository
+The flow itself is `.agents/skills/open-pr/settings/dev-flow.md`, and `AGENTS.md` summarizes it. This file holds what this repository
 adds.
 
 ## Docs and agent config

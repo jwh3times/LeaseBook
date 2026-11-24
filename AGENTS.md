@@ -170,7 +170,7 @@ Cross-cutting rules, module boundaries, organization-isolation model, and trust-
 apply to all work. If a domain guidance file conflicts with these invariants, the invariant wins.
 
 Documentation drift is the `docs-updater` skill's job (see "Shared skills" under "Agent skills"),
-not a guidance file's. The `/ship` skill runs it scoped to the branch's diff, and warns when a PR
+not a guidance file's. The `/open-pr` skill runs it scoped to the branch's diff, and warns when a PR
 opens with no issue link, or links one that is missing from the project board or on it with
 `Track`/`Gate` unset. Both are session-scoped — no harness is guaranteed to run them, and CI does
 not. When source changes affect docs, ports, ADR-worthy decisions, user workflows, commands, or

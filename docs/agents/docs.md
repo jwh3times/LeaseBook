@@ -140,7 +140,7 @@ is recreated.
   command, or an ignored path changes (`.gitignore`, `scripts/dev.ps1`, `scripts/sync-main.mjs`).
 - `docs/agents/releases.md` — release settings. **When:** `.github/workflows/version.yml`,
   `.github/workflows/changelog.yml`, `scripts/stamp-changelog.mjs` or the changelog policy changes.
-- `docs/agents/ship.md` — fast checks and the issue link. **When:** a required check or a CI step it
+- `docs/agents/open-pr.md` — fast checks and the issue link. **When:** a required check or a CI step it
   mirrors changes (`.github/workflows/ci.yml`, the ruleset), or the linking rule changes.
 - `docs/agents/handoffs.md` — handoff settings. **When:** machine-local state a session depends on
   changes.

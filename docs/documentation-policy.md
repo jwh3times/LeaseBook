@@ -94,7 +94,7 @@ the compliance drafts wait on an external review, `blueprint.md` is a frozen bas
 — is listed in that script's `reviewDateExempt` set with its reason.
 
 The settings files the shared agent skills read — `workspace.md`, `issue-tracker.md`,
-`human-follow-up.md`, `docs.md`, `releases.md`, `ship.md` and `handoffs.md` under `docs/agents/` —
+`human-follow-up.md`, `docs.md`, `releases.md`, `open-pr.md` and `handoffs.md` under `docs/agents/` —
 are configuration, not living documents: the skills write them without this metadata, so the script
 (`skillSettings`) exempts them from both the metadata and the review-date rules. They are still held
 to the authority-claim rule and listed in the `Doc map`.

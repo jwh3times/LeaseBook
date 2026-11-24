@@ -59,11 +59,13 @@ test("parseAdr reads every amender from a wrapped Amended by line", () => {
 test("skill files may name canonical commands like agent files", (context) => {
   const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));
-  const skill = ".claude/skills/ship/SKILL.md";
-  mkdirSync(path.join(root, ".claude", "skills", "ship"), { recursive: true });
+  const skill = ".claude/skills/open-pr/SKILL.md";
+  mkdirSync(path.join(root, ".claude", "skills", "open-pr"), {
+    recursive: true,
+  });
   writeFileSync(
     path.join(root, skill),
-    ["# Ship", "", "Run `npm run typecheck` before pushing."].join("\n"),
+    ["# Open PR", "", "Run `npm run typecheck` before pushing."].join("\n"),
   );
 
   const errors = validateRepository(root, [skill]);
