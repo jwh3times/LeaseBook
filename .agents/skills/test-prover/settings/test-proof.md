@@ -15,9 +15,11 @@ it tells a run that tested nothing from a pass. Each setting below is a `##` hea
     works everywhere; with `go test`, include `-v`, which prints the per-test lines the count
     comes from;
   - the line of output that gives the number of tests run (`Tests  3 passed (3)`), when it is not
-    one `mutate.mjs` reads already: node's test runner, Vitest, Jest, Playwright, `dotnet test`,
-    pytest's closing summary and `go test -v` (it reads `--count`, a regex written without
-    backslashes, for any other);
+    one `mutate.mjs` reads already: node's test runner, Vitest, Jest, Playwright, `dotnet test`
+    (VSTest and Microsoft Testing Platform), pytest's closing summary, `go test -v`, `cargo test`,
+    `deno test` and Python's `unittest` (it reads `--count`, a regex written without backslashes,
+    for any other). It counts only the tests that ran, passed or failed, never one skipped, todo,
+    filtered out or deselected, so a by-name run counts the one test, not the file's total;
   - what a scratch worktree needs before the command can run: dependency folders to link from the
     checkout (`node_modules`, `web/node_modules`), or a command (`dotnet restore`, `go mod
     download`); `none` when it needs nothing.
@@ -36,9 +38,10 @@ it tells a run that tested nothing from a pass. Each setting below is a `##` hea
 - **Value:** `none`, or bulleted lines of output that mean a run selected no tests at all, beyond
   the ones `mutate.mjs` knows (`No test files found`, `No test suite found`, `No tests found`, `no
   tests ran`, `no tests to run`, `[no test files]`, `[no tests to run]`, `No test matches the given
-  testcase filter`, `No test is available`, a test count of 0, and node's runner reporting the
-  test file itself as the one passing test, which it does when `--test-name-pattern` matches
-  nothing in it). Each is plain text in any case, matched where a runner prints it: at the start
+  testcase filter`, `No test is available`, `Could not find '` (node's runner given a file that
+  does not exist), a count of 0 tests run, which is what a filter that matches nothing or a run in
+  which every test skipped itself reads, and node's runner reporting the test file itself as the
+  one passing test, which it does when `--test-name-pattern` matches nothing in it). Each is plain text in any case, matched where a runner prints it: at the start
   of a line (after leading marks, `Error:` or `testing: warning:`), or at the end of one for a
   bracketed line, never inside a failure message. A failing run that counted its tests is red
   whatever it printed.
