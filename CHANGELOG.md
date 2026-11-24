@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.26] - 2026-11-23
+
+### Changed
+
+- docs(agents): add the test-proof settings and the Due board field (#834)
+
 ## [0.39.25] - 2026-11-23
 
 ### Changed
@@ -2619,7 +2625,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.25...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.26...HEAD
+[0.39.26]: https://github.com/jwh3times/LeaseBook/compare/v0.39.25...v0.39.26
 [0.39.25]: https://github.com/jwh3times/LeaseBook/compare/v0.39.24...v0.39.25
 [0.39.24]: https://github.com/jwh3times/LeaseBook/compare/v0.39.23...v0.39.24
 [0.39.23]: https://github.com/jwh3times/LeaseBook/compare/v0.39.22...v0.39.23
