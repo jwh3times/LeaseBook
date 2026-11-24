@@ -92,8 +92,9 @@ Board writes need the `gh` token's `project` scope, and fail silently without it
 `gh auth status` for `project` (not just `read:project`). If it is missing, report it and skip board
 writes; the fix (`gh auth refresh -h github.com -s project`) needs a real terminal.
 
-Read and write the `Board` only through `.agents/skills/end-session/board.mjs`, never
-`gh project item-edit` or `item-list`: it finds an item from its issue, matches field and option
+Read and write the `Board`'s items only through `.agents/skills/end-session/board.mjs`, never
+`gh project item-edit`, or `item-list` to find one (`records-audit` reads `item-list` only as a
+whole-board listing): it finds an item from its issue, matches field and option
 names whatever their case or dash, writes an item's fields in one request, and reads every write
 back. `<board>` below is the `Board` setting's two words:
 
