@@ -88,6 +88,7 @@ export const ZERO_MATCH_SIGNATURES = [
   "[no tests to run]", // go test
   "no test matches the given testcase filter", // dotnet test
   "no test is available", // dotnet test
+  "could not find '", // node --test, given a test file that does not exist
 ];
 // Exit codes a shell gives a command it could not find: sh and bash, then cmd.exe.
 const NOT_FOUND_EXIT_CODES = new Set([127, 9009]);
@@ -103,43 +104,141 @@ export const ZERO_MATCH_PATTERNS = [
   },
 ];
 
-// Patterns whose first group is the number of tests a runner ran; the last match of the first
-// pattern that matches is taken.
-// Each is anchored, with no two neighbouring quantifiers able to match the same text, so none
-// backtracks badly on a long log.
-export const COUNT_PATTERNS = [
-  /^[ \t]*[#ℹ] tests (\d+)[ \t]*$/gm, // node --test (TAP and spec reporters)
-  /^[ \t]*Tests[ \t]+[^ \t\n(][^\n(]*\((\d+)\)[ \t]*$/gm, // Vitest
-  /^Tests:[^\n]* (\d+) total$/gm, // Jest
-  /Total tests: (\d+)/g, // dotnet test (VSTest)
-  /\bTotal: +(\d+)/g, // dotnet test summary line
-  /\bRunning (\d+) tests? using/g, // Playwright
-];
+// The number of tests a run ran is read from its runner's summary by the first counter below that
+// finds one. A test counts only when it ran, passed or failed: one skipped, todo, ignored, filtered
+// out or deselected ran no assertion, so it proves nothing either way, and a filter that selected
+// none reads 0 (Vitest's and Jest's totals count the tests a `-t` filter skipped). Each pattern is
+// anchored, with no two neighbouring quantifiers able to match the same text, so none backtracks
+// badly on a long log.
 
-// pytest's closing summary, `==== 1 failed, 2 passed, 1 deselected in 0.05s ====`: the tests that
-// ran are the passed, failed, errored, skipped, xfailed and xpassed, never the deselected.
-const PYTEST_SUMMARY = /^=+ ([^=\n]+) in [0-9.]+s(?: \([0-9:]+\))? =+[ \t]*$/gm;
-const PYTEST_PART = /(\d+) (passed|failed|errors?|skipped|xfailed|xpassed)\b/g;
-// go test -v prints one `--- PASS|FAIL|SKIP: <name>` line per test and subtest it ran.
-const GO_RESULT = /^[ \t]*--- (?:PASS|FAIL|SKIP): /gm;
-
-function countPytest(text) {
+function lastMatch(pattern, text) {
   let last = null;
-  for (const match of text.matchAll(PYTEST_SUMMARY)) last = match[1];
-  if (last === null) return null;
+  for (const match of text.matchAll(pattern)) last = match;
+  return last;
+}
+
+// The sum of the `<n> <word>` parts of a summary whose word is one of `ran`, or null when the
+// summary names none of `known`.
+function sumParts(summary, ran, known) {
   let total = 0;
   let any = false;
-  for (const part of last.matchAll(PYTEST_PART)) {
-    total += Number(part[1]);
+  for (const part of summary.matchAll(/(\d+) ([a-z]+)/g)) {
+    if (!known.includes(part[2])) continue;
     any = true;
+    if (ran.includes(part[2])) total += Number(part[1]);
   }
   return any ? total : null;
 }
 
-function countGo(text) {
-  const found = text.match(GO_RESULT);
-  return found ? found.length : null;
+// node --test, spec and TAP reporters: `ℹ tests 3` / `# tests 3`, less the skipped and todo.
+function countNode(text) {
+  const tests = lastMatch(/^[ \t]*[#ℹ] tests (\d+)[ \t]*$/gm, text);
+  if (!tests) return null;
+  const skipped = lastMatch(/^[ \t]*[#ℹ] (?:skip|skipped) (\d+)[ \t]*$/gm, text);
+  const todo = lastMatch(/^[ \t]*[#ℹ] todo (\d+)[ \t]*$/gm, text);
+  return Number(tests[1]) - Number(skipped?.[1] ?? 0) - Number(todo?.[1] ?? 0);
 }
+
+// Vitest: `Tests  1 passed | 9 skipped (10)`, or `Tests  no tests`.
+function countVitest(text) {
+  const line = lastMatch(/^[ \t]*Tests[ \t]+(?:no tests|([^ \t\n(][^\n(]*)\((\d+)\))[ \t]*$/gm, text);
+  if (!line) return null;
+  if (line[2] === undefined) return 0;
+  return sumParts(line[1], ["passed", "failed"], ["passed", "failed", "skipped", "todo"]) ?? Number(line[2]);
+}
+
+// Jest: `Tests:       1 failed, 3 skipped, 1 passed, 5 total`.
+function countJest(text) {
+  const line = lastMatch(/^Tests:([^\n]*) (\d+) total[ \t]*$/gm, text);
+  if (!line) return null;
+  return sumParts(line[1], ["passed", "failed"], ["passed", "failed", "skipped", "todo"]) ?? Number(line[2]);
+}
+
+// dotnet test on VSTest: `Failed:     0, Passed:     2, Skipped:     1, Total:     3`, or the older
+// `Total tests: 5` block with its own `Skipped: 1` line.
+function countVsTest(text) {
+  const line = lastMatch(/\bFailed: +(\d+), Passed: +(\d+), Skipped: +(\d+), Total: +(\d+)/g, text);
+  if (line) return Number(line[1]) + Number(line[2]);
+  const total = lastMatch(/\bTotal tests: (\d+)/g, text);
+  if (!total) return null;
+  const skipped = lastMatch(/^[ \t]*Skipped: (\d+)[ \t]*$/gm, text.slice(total.index));
+  return Number(total[1]) - Number(skipped?.[1] ?? 0);
+}
+
+// dotnet test on Microsoft Testing Platform: the indented `total:`, `failed:`, `succeeded:` and
+// `skipped:` lines under the last `Test run summary:`.
+function countTestingPlatform(text) {
+  const summary = lastMatch(/^Test run summary:/gm, text);
+  if (!summary) return null;
+  const block = text.slice(summary.index);
+  const field = (name) => block.match(new RegExp(`^[ \\t]+${name}: (\\d+)[ \\t]*$`, "m"))?.[1];
+  const failed = field("failed");
+  const succeeded = field("succeeded");
+  if (failed !== undefined && succeeded !== undefined) return Number(failed) + Number(succeeded);
+  const total = field("total");
+  return total === undefined ? null : Number(total);
+}
+
+// Playwright: `Running 6 tests using 2 workers`.
+function countPlaywright(text) {
+  const line = lastMatch(/\bRunning (\d+) tests? using/g, text);
+  return line ? Number(line[1]) : null;
+}
+
+// pytest's closing summary, `==== 1 failed, 2 passed, 1 deselected in 0.05s ====`: the tests that
+// ran are the passed, failed, errored, xfailed and xpassed, never the skipped or deselected.
+function countPytest(text) {
+  const line = lastMatch(/^=+ ([^=\n]+) in [0-9.]+s(?: \([0-9:]+\))? =+[ \t]*$/gm, text);
+  if (!line) return null;
+  let total = 0;
+  for (const part of line[1].matchAll(/(\d+) (passed|failed|errors?|xfailed|xpassed)\b/g)) total += Number(part[1]);
+  return total;
+}
+
+// go test -v prints one `--- PASS|FAIL|SKIP: <name>` line per test and subtest; a SKIP did not run.
+function countGo(text) {
+  const lines = text.match(/^[ \t]*--- (?:PASS|FAIL|SKIP): /gm);
+  if (!lines) return null;
+  return lines.filter((line) => !line.includes("SKIP")).length;
+}
+
+// cargo test prints `test result: ok. 1 passed; 0 failed; 0 ignored; ...` for each test target
+// (the doc-tests' `running 0 tests` often last), so the targets are summed.
+function countCargo(text) {
+  let total = null;
+  for (const match of text.matchAll(/^test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed;/gm)) {
+    total = (total ?? 0) + Number(match[1]) + Number(match[2]);
+  }
+  return total;
+}
+
+// deno test: `ok | 1 passed (2 steps) | 0 failed | 6 filtered out (12ms)`.
+function countDeno(text) {
+  const line = lastMatch(/^(?:ok|FAILED) \| (\d+) passed(?: \(\d+ steps?\))? \| (\d+) failed/gm, text);
+  return line ? Number(line[1]) + Number(line[2]) : null;
+}
+
+// Python's unittest: `Ran 3 tests in 0.002s`, then `OK (skipped=1)` or `FAILED (failures=1, skipped=2)`.
+function countUnittest(text) {
+  const line = lastMatch(/^Ran (\d+) tests? in /gm, text);
+  if (!line) return null;
+  const skipped = text.slice(line.index).match(/^(?:OK|FAILED) \([^)\n]*\bskipped=(\d+)/m);
+  return Number(line[1]) - Number(skipped?.[1] ?? 0);
+}
+
+export const COUNTERS = [
+  countNode,
+  countVitest,
+  countJest,
+  countVsTest,
+  countTestingPlatform,
+  countPlaywright,
+  countPytest,
+  countGo,
+  countCargo,
+  countDeno,
+  countUnittest,
+];
 
 // The signature a line shows, matched at the start of the line once leading marks, `Error:` and
 // `testing: warning:` are taken off, or at its end for a bracketed signature.
@@ -297,15 +396,17 @@ export function detect(output, { zeroMatch = [], count = [] } = {}) {
   }
   signature ??= ZERO_MATCH_PATTERNS.find((entry) => entry.pattern.test(text))?.name ?? null;
   let testCount = null;
-  const patterns = [...count.map((source) => new RegExp(source, "gm")), ...COUNT_PATTERNS];
-  for (const pattern of patterns) {
-    const value = lastGroup(pattern, text);
+  for (const source of count) {
+    const value = lastGroup(new RegExp(source, "gm"), text);
     if (value !== null && Number.isFinite(value)) {
       testCount = value;
       break;
     }
   }
-  testCount ??= countPytest(text) ?? countGo(text);
+  for (const counter of COUNTERS) {
+    if (testCount !== null) break;
+    testCount = counter(text);
+  }
   return { zeroMatch: signature, testCount };
 }
 

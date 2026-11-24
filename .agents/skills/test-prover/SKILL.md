@@ -90,9 +90,11 @@ For each test under proof:
 node .agents/skills/test-prover/mutate.mjs run --root "$root" --cwd <folder> --command '<single-test command>'
 ```
 
-It must be `green` with a `testCount` of at least 1. `zero-match` means the filter or path selected
-nothing: the test as written never runs in that form, which is a finding, and the proof of that
-test stops there. `red` means it fails with the fix in place: report it and go on with the others.
+It must be `green` with a `testCount` of at least 1. `testCount` is the tests that ran, passed or
+failed; a skipped, todo or filtered-out test is not counted. `zero-match` means the filter or path
+selected nothing, or every test it selected skipped itself (a missing service or variable): the
+test as written never runs in that form, which is a finding, and the proof of that test stops
+there. `red` means it fails with the fix in place: report it and go on with the others.
 `error` means the command itself did not run: correct the command (and say which `Test commands`
 entry is wrong), or report the test unproven. A `testCount` of `null` means the runner printed no
 count this script reads: give it `--count`, or name the test as unproven for want of a count.
