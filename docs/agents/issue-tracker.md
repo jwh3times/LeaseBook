@@ -158,6 +158,8 @@ jwh3times 3
   future phases and low-impact work. Set it when an issue is added to the board.
 - `Rank`: a number giving the strict order across both trackers, lowest first, spaced by tens so a
   new item slots in between without renumbering. Sort the board by `Rank` for the priority order.
+- `Due` (date): set only when the action has a real deadline (an expiry, a renewal, an offer's end,
+  a date someone else set), never an aspirational one; empty otherwise.
 - Blocked work has no field: the `blocked` label marks an item that cannot move today
   (`triage-labels.md`). A native `blocked_by` dependency names the blocking issue when it is in the
   same tracker, and `blocked-by-human` marks one that waits on a person. Work that can be picked
