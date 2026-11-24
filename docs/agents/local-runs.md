@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-18
+- **Last reviewed:** 2026-11-24
 
 How to run builds, tests and gates on a development machine without a false green. The commands
 are in `AGENTS.md` and [`docs/runbooks/local-dev.md`](../runbooks/local-dev.md); this file holds

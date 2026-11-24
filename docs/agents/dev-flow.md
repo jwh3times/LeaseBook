@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-20
+- **Last reviewed:** 2026-11-24
 
 The flow itself is `.agents/skills/open-pr/settings/dev-flow.md`, and `AGENTS.md` summarizes it. This file holds what this repository
 adds.

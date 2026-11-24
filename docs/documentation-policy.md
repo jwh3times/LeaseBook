@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-20
+- **Last reviewed:** 2026-11-24
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.

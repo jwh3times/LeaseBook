@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-06
+- **Last reviewed:** 2026-11-24
 
 The labels and what they mean are in `.agents/skills/open-pr/settings/triage-labels.md`. A skill's role name is the GitHub label to apply.
 
