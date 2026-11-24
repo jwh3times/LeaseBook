@@ -12,10 +12,10 @@
     },
     "ci-triage": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/ci-triage/SKILL.md",
-      "computedHash": "7fec292ada01078f10f958982433ca78afec32447dcd87bfc8e08633c9d8d57b",
+      "computedHash": "ad1a0b2fbb51091acf5a4dba6970e0dd80acb7277c6aeada91521e0417957294",
       "installMode": "copy"
     },
     "code-review": {
@@ -38,10 +38,10 @@
     },
     "dependabot": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/dependabot/SKILL.md",
-      "computedHash": "ab4efb4d9d76935c5edcd5d913dee377fa73f5123414482a469ae34bf281f796",
+      "computedHash": "cc2365b7c6c4304295ffff19646033f591c78729d1a5c0dfca2a9ee484363089",
       "installMode": "copy"
     },
     "diagnosing-bugs": {
@@ -55,10 +55,10 @@
     },
     "docs-updater": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/docs-updater/SKILL.md",
-      "computedHash": "82735a24ee08001ce1fef6045eedd3db74835453f6518117f439ed8a2bf211ae",
+      "computedHash": "fa3c9099af568e2fc2ba663477180b9a1cce80d4217dd9f25a4f887068175a9f",
       "installMode": "copy"
     },
     "domain-modeling": {
@@ -72,10 +72,10 @@
     },
     "end-session": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/end-session/SKILL.md",
-      "computedHash": "2eacb11e9c2699895d159fd3a25c86ef7809965c8fc046ad591ead39bcfafe9a",
+      "computedHash": "4055d3643f31f3f86fd3e4162cc3595d70ec50801b761e5d5dbc4b8457693bbc",
       "installMode": "copy"
     },
     "grill-me": {
@@ -107,10 +107,10 @@
     },
     "handoff": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/handoff/SKILL.md",
-      "computedHash": "9a6f49b6c2a343308591d342214328fa4cdedcc90af6548cd13eb5bda35dea61",
+      "computedHash": "719f56f754ca21761ddd3a0ddd414616bdc0d88b55abc61dd9ce0f0a607cf525",
       "installMode": "copy"
     },
     "implement": {
@@ -133,18 +133,26 @@
     },
     "land": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/land/SKILL.md",
-      "computedHash": "e671d3d552f4ac2a2ed187a87f911a752d7b3d89406d00c2bafbddfa40bc4409",
+      "computedHash": "94c1290f28a18e985a26a0b6bc5df1866c3689cb5a9385595277c825370ca192",
       "installMode": "copy"
     },
     "lets-go": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/lets-go/SKILL.md",
-      "computedHash": "1e186071cdede6b6cc0da5623dc2f433f602780eb28d9393f279990ea56c0bbf",
+      "computedHash": "72274b9985f8d415b922f2d71f1fed736c76f01c2cfae26f62ef4a1126fcfea4",
+      "installMode": "copy"
+    },
+    "open-pr": {
+      "source": "jwh3times/skills",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
+      "sourceType": "github",
+      "skillPath": "skills/open-pr/SKILL.md",
+      "computedHash": "9871caa44a5cec5616673f73f0191e5f136a1e883dbe7f60409af36e6deb5c5f",
       "installMode": "copy"
     },
     "prototype": {
@@ -158,10 +166,10 @@
     },
     "records-audit": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/records-audit/SKILL.md",
-      "computedHash": "d80141a66ea5e7376ce25c2ff81305b6bfdbc821b4a0af9462f0280485a5e761",
+      "computedHash": "1969f525971c99f71a8b0461eca47ed0a71039811a8596f4eb50025d9f18dc8d",
       "installMode": "copy"
     },
     "research": {
@@ -180,14 +188,6 @@
       "sourceType": "github",
       "skillPath": "skills/engineering/setup-matt-pocock-skills/SKILL.md",
       "computedHash": "9659e7025d4cf1c0a0b40ddff32ed4b8debb87a4b20d7a52ff89c506a638df69",
-      "installMode": "copy"
-    },
-    "ship": {
-      "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
-      "sourceType": "github",
-      "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "d98a7c45940ec7ccaa4db22f97ba5573591a192943d7f86276fdec80e7b6f4f8",
       "installMode": "copy"
     },
     "tdd": {
@@ -210,10 +210,10 @@
     },
     "test-prover": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/test-prover/SKILL.md",
-      "computedHash": "8b077e04579307ff43c17339074773d006190d97e1593ca6abca3ecb9c8898e3",
+      "computedHash": "49e63327ca347be9fc8a9ba47053f9bf23c2d6ad23f7915a0208e1e93bfddefa",
       "installMode": "copy"
     },
     "to-questionnaire": {
@@ -272,10 +272,10 @@
     },
     "what-next": {
       "source": "jwh3times/skills",
-      "commit": "047787aa8cc210e2588f6f0a935fdc91c56686d5",
+      "commit": "6ee32d8e3fa8b097fe09bb2c1d9508f55f83d955",
       "sourceType": "github",
       "skillPath": "skills/what-next/SKILL.md",
-      "computedHash": "94a147dea768dbc16cbf6b6d0944e2525d53cc8855a435ae7def9af011563309",
+      "computedHash": "55b26a34503809272c7ad65924bf01a67f9501fa8a189a307cc81a264ec15d33",
       "installMode": "copy"
     },
     "wizard": {

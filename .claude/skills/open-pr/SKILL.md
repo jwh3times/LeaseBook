@@ -1,31 +1,31 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
-name: ship
-description: Ship the current branch — evaluate its SemVer release impact, refresh the docs, write the changelog entry for the version this merge will mint, file its human follow-ups, run the fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
+# GENERATED — do not edit. Source: .agents/skills/open-pr/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
+name: open-pr
+description: Take the current branch to an open pull request — evaluate its SemVer release impact, refresh the docs, write the changelog entry for the version this merge will mint, file its human follow-ups, run the fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
 metadata:
-  settings: workspace issue-tracker human-follow-up releases ship dev-flow triage-labels agents-md guard
+  settings: workspace issue-tracker human-follow-up releases open-pr dev-flow triage-labels agents-md guard
 ---
 
-# Ship
+# Open PR
 
 Take the current branch from "code is done" to "PR is open and green-able", with a changelog that
 names the version this merge will actually create.
 
-**Announce at start:** "I'm using the ship skill to open a PR for this branch."
+**Announce at start:** "I'm using the open-pr skill to open a PR for this branch."
 
 Run shell snippets in bash (Git Bash on Windows). Where `gh` is unavailable, use the equivalent
 GitHub MCP operation: a missing CLI changes the interface, not the step or its completion
 criterion.
 
-`ship` stops at "PR open". It never merges, never pushes to `main`, never force-pushes, and never
+`open-pr` stops at "PR open". It never merges, never pushes to `main`, never force-pushes, and never
 runs the full test suites: CI owns them, and running them here makes the skill slow.
 
 ## 0. Settings
 
 This skill reads `docs/agents/workspace.md`, `docs/agents/issue-tracker.md`,
-`docs/agents/human-follow-up.md`, `docs/agents/releases.md`, `docs/agents/ship.md` and
+`docs/agents/human-follow-up.md`, `docs/agents/releases.md`, `docs/agents/open-pr.md` and
 `docs/agents/dev-flow.md`. Follow
-`.agents/skills/ship/settings/README.md` to read them and complete any that are missing; the
+`.agents/skills/open-pr/settings/README.md` to read them and complete any that are missing; the
 definitions sit beside it. Resolve each `discover:` value once, here, and
 reuse it below.
 
@@ -127,7 +127,7 @@ carries a different line was bumped on purpose: ask before replacing it.
     done
   ```
 
-  If one does, name it in the report: whichever merges second renumbers on its next `ship`.
+  If one does, name it in the report: whichever merges second renumbers on its next `open-pr`.
 - **`cut-on-line`** — a build has no exact target: the next tag assigns it, whether a workflow tags
   each merge or a maintainer tags a release, and another merge can land first. A confirmed major or
   minor's target is the new line from step 2.
@@ -189,18 +189,18 @@ by following its step 0.
 range="$(git merge-base origin/main HEAD)..HEAD"
 ```
 
-Tell it what changed and why, that it was invoked by `ship` on an unmerged branch, and that this
+Tell it what changed and why, that it was invoked by `open-pr` on an unmerged branch, and that this
 skill writes the changelog and the `Version file`. It leaves its edits uncommitted and returns the
 human actions it found for step 6, and any wiki search it owes after the merge (the
 `Follow-up wiki`, or a `Doc map` item in a wiki).
 Companion edits are committed there as its own repository, never in this one: run the
-`## Procedure` in `.agents/skills/ship/settings/workspace.md`.
+`## Procedure` in `.agents/skills/open-pr/settings/workspace.md`.
 
 ## 6. Human follow-ups
 
-Run the `## Procedure` in `.agents/skills/ship/settings/human-follow-up.md` for every required human
+Run the `## Procedure` in `.agents/skills/open-pr/settings/human-follow-up.md` for every required human
 action this branch leaves, before the PR opens, including those `docs-updater` returned. Reconcile
-rather than duplicate; on a re-ship, reuse the records already made. A follow-up never lives only
+rather than duplicate; on a re-run, reuse the records already made. A follow-up never lives only
 in the changelog or the PR body. Its links go in the report and private records, never in the
 public PR.
 
@@ -218,7 +218,7 @@ see below):
 git diff origin/main...HEAD -- CHANGELOG.md | grep '^+## \['
 ```
 
-A section listed there is this branch's from an earlier `ship`: rewrite it in place, never stack a
+A section listed there is this branch's from an earlier `open-pr`: rewrite it in place, never stack a
 second. Entries this branch added to `Unreleased` are rewritten the same way.
 
 - **`per-merge`** — insert `## [<target>] - <date>` directly below `## [Unreleased]`, holding this
@@ -232,7 +232,7 @@ second. Entries this branch added to `Unreleased` are rewritten the same way.
   section, no `Version file` edit.
 - **`cut-on-line`, confirmed major or minor** — add the entries under `Unreleased`, move its whole
   content into `## [<target>] - <date>`, and restore the placeholder. When the cut is already there
-  from an earlier `ship`, rewrite this branch's entries inside it; never leave them both above and
+  from an earlier `open-pr`, rewrite this branch's entries inside it; never leave them both above and
   below the cut.
 - **`stamp-on-tag`** — write the entries to `changelog.d/<branch-slug>.md`, the branch name with
   each `/` replaced by `-`: only `### <Category>` headings and their bullets, with no version or
@@ -241,7 +241,7 @@ second. Entries this branch added to `Unreleased` are rewritten the same way.
   accepts is a backfill for a version already tagged with none, which only the move to this scheme
   writes; keep such a section. When the branch already made any other edit, stop and ask before
   undoing it. Never edit or delete another merge's fragment: the stamp
-  releases that merge's own copy, so the check rejects it. A fragment from an earlier `ship` is
+  releases that merge's own copy, so the check rejects it. A fragment from an earlier `open-pr` is
   rewritten in place:
   find it with `git diff --name-only origin/main...HEAD -- changelog.d/`.
 
@@ -273,12 +273,12 @@ here. A test it finds vacuous (green with the fix reverted), a surviving mutatio
 matched no tests or an asserted name missing from the source is reported, and the push waits for
 the user: fixing the test is a change to the branch, and pushing as it is is their call.
 
-Then run `Hook: before PR` from `docs/agents/ship.md`. Its findings go in the report and, where it
+Then run `Hook: before PR` from `docs/agents/open-pr.md`. Its findings go in the report and, where it
 says, the PR body.
 
 ## 9. Commit, push, and open or update the PR
 
-Commit only when `git status --porcelain` shows changes; a re-ship with nothing new makes no empty
+Commit only when `git status --porcelain` shows changes; a re-run with nothing new makes no empty
 commit. Staging everything is safe because step 1 proved the tree was clean, and the companion is
 ignored, never staged:
 
@@ -330,7 +330,7 @@ companion detail.
 - The `Release level:` line and its evidence; the version this merge will mint (`per-merge`), the
   new line (a `cut-on-line` cut), or that the next tag assigns the build (`cut-on-line`,
   `stamp-on-tag`), and the fragment written (`stamp-on-tag`). Name a competing PR
-  claiming the same version, and say the section is renumbered on a re-ship.
+  claiming the same version, and say the section is renumbered on a re-run.
 - What the docs refresh changed, the changelog entries written, and any sections backfilled. When
   docs-updater owes a wiki search after the merge, say so: the next `end-session` performs it.
 - Human follow-ups: verified issue and wiki links, what is unpublished and why, or that none remain.

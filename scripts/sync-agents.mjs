@@ -10,7 +10,7 @@
 // so a fresh clone works in both harnesses; CI runs this with `--check` and fails on drift.
 //
 // It also writes the shared blocks in AGENTS.md: the text between each pair of `shared:<name>`
-// markers comes from the block file `ship` installs, so every repository says the same thing.
+// markers comes from the block file `open-pr` installs, so every repository says the same thing.
 // Where `scripts/guard.mjs` exists, it registers it as a PreToolUse and a PostToolUse hook in
 // `.claude/settings.json`, keeping every other key and hook, and checks `docs/agents/guard.md`.
 //
@@ -41,7 +41,7 @@ const agentSourceDir = ".claude/agents";
 const agentTargetDir = ".codex/agents";
 const skillSourceDir = ".agents/skills";
 const skillTargetDir = ".claude/skills";
-const blockSource = ".agents/skills/ship/settings/agents-md.md";
+const blockSource = ".agents/skills/open-pr/settings/agents-md.md";
 const blockTarget = "AGENTS.md";
 const blockSetting = "docs/agents/workspace.md";
 const blockSettingHeading = "## AGENTS.md blocks";

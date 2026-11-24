@@ -68,7 +68,7 @@ Sort what remains into two groups:
 **If either group has anything, alert the user now**, before writing the document, under the
 heading `⚠ Work not merged to main`: one line per item with its repository, branch or path, and
 group. Say plainly that local-only work will not reach the other machine unless it is pushed, and
-ask whether to push it; offer the `ship` skill for a finished branch. The alert informs, it does
+ask whether to push it; offer the `open-pr` skill for a finished branch. The alert informs, it does
 not block: continue either way. With nothing to report, say "All work is on `origin/main`."
 
 ## 2. Write the document

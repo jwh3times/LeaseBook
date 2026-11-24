@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Verifies CHANGELOG.md for the merge this branch will make. The required changelog job runs it, and
-// `ship` runs it after writing the changelog. Which rule applies follows `Scheme` in
+// `open-pr` runs it after writing the changelog. Which rule applies follows `Scheme` in
 // `docs/agents/releases.md`.
 //
 //   node scripts/check-changelog.mjs                                # per-merge
@@ -95,7 +95,7 @@ export function checkPerMerge({ changelog, tags, next, skippedTags }) {
   if (documented[0] !== next) {
     errors.push(
       `This merge will mint v${next}, but the newest section is ` +
-        `${documented[0] ? `[${documented[0]}]` : "missing"}. Run the ship skill to write or ` +
+        `${documented[0] ? `[${documented[0]}]` : "missing"}. Run the open-pr skill to write or ` +
         `renumber it. If another branch merged first, it took the number.`,
     );
   }
@@ -109,7 +109,7 @@ export function checkPerMerge({ changelog, tags, next, skippedTags }) {
       .sort(compareVersions);
     if (missing.length > 0) {
       errors.push(
-        `Released with no section: ${missing.join(", ")}. Run the ship skill to backfill them, ` +
+        `Released with no section: ${missing.join(", ")}. Run the open-pr skill to backfill them, ` +
           `or list predating tags under the Skipped tags Ignore patterns.`,
       );
     }
@@ -253,7 +253,7 @@ export function checkStampOnTag({
   if (sources.length > 0 && fragments.length === 0 && touchesSource(changedFiles, sources)) {
     errors.push(
       `This branch changes ${sources.join(", ")} with no fragment in ${FRAGMENT_DIR}/. ` +
-        `Run the ship skill to write it.`,
+        `Run the open-pr skill to write it.`,
     );
   }
   return errors;

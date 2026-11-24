@@ -23,7 +23,7 @@ const blocks = `# Topic
 <!-- shared:shared-skills -->
 
 \`\`\`bash
-npx skills add jwh3times/skills -s ship -a codex --copy -y
+npx skills add jwh3times/skills -s open-pr -a codex --copy -y
 npx skills add mattpocock/skills#abc123 -s tdd \\
   -s wizard -a codex --copy -y
 node scripts/sync-agents.mjs
@@ -73,7 +73,7 @@ function repository(t, { skills, lock, version = 1 }) {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, content);
   };
-  write(".agents/skills/ship/settings/agents-md.md", blocks);
+  write(".agents/skills/open-pr/settings/agents-md.md", blocks);
   for (const [name, files] of Object.entries(skills)) {
     for (const [rel, content] of Object.entries(files))
       write(`.agents/skills/${name}/${rel}`, content);
@@ -86,11 +86,11 @@ const skillFiles = {
   "SKILL.md": "# A skill\n",
   "agents/openai.yaml": "a: 1\n",
 };
-const shipFiles = { "SKILL.md": "# Ship\n", "settings/agents-md.md": blocks };
+const openPrFiles = { "SKILL.md": "# Open PR\n", "settings/agents-md.md": blocks };
 
 function goodLock(overrides = {}, hashOf = cliHash) {
   return {
-    ship: { source: "jwh3times/skills", computedHash: hashOf(shipFiles) },
+    "open-pr": { source: "jwh3times/skills", computedHash: hashOf(openPrFiles) },
     tdd: {
       source: "mattpocock/skills",
       ref: "abc123",
@@ -105,11 +105,11 @@ function goodLock(overrides = {}, hashOf = cliHash) {
   };
 }
 
-const goodSkills = { ship: shipFiles, tdd: skillFiles, wizard: skillFiles };
+const goodSkills = { "open-pr": openPrFiles, tdd: skillFiles, wizard: skillFiles };
 
 test("reads each install command's source, ref and names, across a continued line", () => {
   assert.deepEqual(parseInstallCommands(blocks), [
-    { source: "jwh3times/skills", ref: null, names: ["ship"] },
+    { source: "jwh3times/skills", ref: null, names: ["open-pr"] },
     { source: "mattpocock/skills", ref: "abc123", names: ["tdd", "wizard"] },
   ]);
   assert.deepEqual(
@@ -134,7 +134,7 @@ test("refuses a block with no install command, or no block", () => {
 
 test("the catalog pins one snapshot by commit and lists the agreed set", () => {
   const text = readFileSync(
-    new URL("../.agents/skills/ship/settings/agents-md.md", import.meta.url),
+    new URL("../.agents/skills/open-pr/settings/agents-md.md", import.meta.url),
     "utf8",
   );
   const [shared, thirdParty, ...rest] = parseInstallCommands(text);
@@ -275,13 +275,13 @@ test("leaves a repository's own skill, and another source's matching one, alone"
   assert.deepEqual(checkSkills(root), []);
 });
 
-test("reports a missing lock or a missing ship skill", (t) => {
+test("reports a missing lock or a missing open-pr skill", (t) => {
   const noLock = repository(t, { skills: goodSkills, lock: goodLock() });
   rmSync(path.join(noLock, "skills-lock.json"));
   assert.deepEqual(checkSkills(noLock), ["skills-lock.json: not found"]);
-  const noShip = repository(t, { skills: goodSkills, lock: goodLock() });
-  rmSync(path.join(noShip, ".agents/skills/ship/settings/agents-md.md"));
-  assert.match(checkSkills(noShip)[0], /install the ship skill/);
+  const noOpenPr = repository(t, { skills: goodSkills, lock: goodLock() });
+  rmSync(path.join(noOpenPr, ".agents/skills/open-pr/settings/agents-md.md"));
+  assert.match(checkSkills(noOpenPr)[0], /install the open-pr skill/);
 });
 
 function folder(t, files) {
@@ -333,7 +333,7 @@ test("a version 2 lock is not read as version 1, nor the reverse", (t) => {
       repository(t, { skills: goodSkills, lock: goodLock(), version: 2 }),
     ),
     [
-      "ship: .agents/skills/ship differs from skills-lock.json",
+      "open-pr: .agents/skills/open-pr differs from skills-lock.json",
       "tdd: .agents/skills/tdd differs from skills-lock.json",
       "wizard: .agents/skills/wizard differs from skills-lock.json",
     ],

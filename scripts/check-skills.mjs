@@ -6,7 +6,7 @@
 //   node scripts/check-skills.mjs          # exit 1 and list every problem found
 //   node scripts/check-skills.mjs <root>   # check another checkout instead
 //
-// The expected set comes from the `npx skills add` commands in the `shared-skills` block, which `ship`
+// The expected set comes from the `npx skills add` commands in the `shared-skills` block, which `open-pr`
 // installs. A source those commands name holds exactly the skills they list, at the ref they pin, so
 // moving every repository to a new snapshot is one change there. A skill from any other source only
 // has to match its lock entry, and a folder with no lock entry is the repository's own.
@@ -40,7 +40,7 @@ const defaultRoot = path.resolve(path.dirname(scriptPath), "..");
 
 const LOCK = "skills-lock.json";
 const SKILLS = ".agents/skills";
-const BLOCKS = ".agents/skills/ship/settings/agents-md.md";
+const BLOCKS = ".agents/skills/open-pr/settings/agents-md.md";
 
 // Every `npx skills add` command in the block, as { source, ref, names }. A trailing backslash
 // continues a command on the next line.
@@ -187,7 +187,7 @@ export function checkSkills(root = defaultRoot) {
   const blocksPath = path.join(root, BLOCKS);
   if (!existsSync(lockPath)) return [`${LOCK}: not found`];
   if (!existsSync(blocksPath))
-    return [`${BLOCKS}: not found; install the ship skill`];
+    return [`${BLOCKS}: not found; install the open-pr skill`];
 
   const lock = JSON.parse(readFileSync(lockPath, "utf8"));
   const version = lock.version ?? 1;

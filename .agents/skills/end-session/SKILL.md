@@ -17,7 +17,7 @@ get wrong, and what it **left behind** (the workspace). Sweep those, in that ord
 Run shell snippets in bash (Git Bash on Windows). Where `gh` is unavailable, use the equivalent
 GitHub MCP operation: a missing CLI changes the interface, not the step.
 
-This skill leaves shipping to the `ship` skill: no version bump, changelog section, source push,
+This skill leaves shipping to the `open-pr` skill: no version bump, changelog section, source push,
 or PR. A finished branch is shipped first, then this runs; a mid-flight branch stays mid-flight,
 recorded where it stands.
 
@@ -150,15 +150,15 @@ issues the session never touched to the `triage` skill.
 
 Run the `## Procedure` in `.agents/skills/end-session/settings/human-follow-up.md` for every
 required human action left by the session's completed work, including ones other skills
-already started (docs-updater, `ship`): reconcile those rather than duplicating them.
+already started (docs-updater, `open-pr`): reconcile those rather than duplicating them.
 
 ## 5. Docs
 
 Run the `docs-updater` skill on the session's work, in a subagent where the harness has one, told to
 follow `.agents/skills/docs-updater/SKILL.md`; otherwise follow it yourself. A subagent cannot ask
 the user, so complete its settings first, here, by following its step 0. Use `fix` mode for work not
-yet merged, and `check` mode for work `ship` already refreshed and merged, recording any drift it
-reports as new work, as step 3 does. Merged work whose `ship` report owed a wiki search gets one
+yet merged, and `check` mode for work `open-pr` already refreshed and merged, recording any drift it
+reports as new work, as step 3 does. Merged work whose `open-pr` report owed a wiki search gets one
 more run in `fix` mode, limited to the wikis: those stale references are fixed, not filed.
 Tell it this is `end-session`, and give it the session's discoveries as a list of changes beside
 the diff: decisions and findings land in the `Doc map`
@@ -172,7 +172,7 @@ uncommitted work. Keep its report for step 7.
   directory in its place. Commit companion changes by the `## Procedure` in
   `.agents/skills/end-session/settings/workspace.md`.
 - **Changelog debt.** A behavior change committed this session without its `Unreleased` entry
-  (its `changelog.d/` fragment, with `Scheme: stamp-on-tag`) is debt to report; `ship` writes the
+  (its `changelog.d/` fragment, with `Scheme: stamp-on-tag`) is debt to report; `open-pr` writes the
   changelog.
 - **One tracker.** A backlog, roadmap, or TODO file the session added to the tree duplicates the
   issue tracker; offer to move its content into issues.
@@ -215,7 +215,7 @@ git worktree list
 
 Delete finished branches with `git branch -D` once the user agrees (`-d` refuses squashed ones). A
 branch with an open PR, no PR and commits of its own, or commits after its merged head holds work:
-keep it, and name `ship` in the report when it is ready. A remote branch still listed after the
+keep it, and name `open-pr` in the report when it is ready. A remote branch still listed after the
 prune gets the same check before `git push origin --delete`. Remove a finished worktree with
 `git worktree remove <path>`, then `git worktree prune`.
 

@@ -144,7 +144,7 @@ follow-up's body has `## Steps` and `## Done when`. Delete the clone when done.
 
 ## 4. Changelog
 
-With `Scheme: stamp-on-tag` (and for `per-merge`, whose sections are written by `ship`):
+With `Scheme: stamp-on-tag` (and for `per-merge`, whose sections are written by `open-pr`):
 
 ```bash
 git fetch -q --tags origin
@@ -158,7 +158,7 @@ changes nothing elsewhere.
 - Every three-part `v*` tag not matched by a `Skipped tags` **Ignore** pattern has a
   `## [x.y.z]` section, in `CHANGELOG.md` or in an archive file it links for older versions
   (`docs/changelog/0.x.md`), read the same way from `origin/main`; a tag with none is a finding,
-  fixed by a PR adding the section, as `ship`'s backfill writes one.
+  fixed by a PR adding the section, as `open-pr`'s backfill writes one.
 - A section with no tag is a finding unless it is `Unreleased`.
 - Where the file ends in link references (`[x.y.z]: https://...`), each version has one, each
   compares the right pair of tags, and `[Unreleased]` compares from the newest tag. A stale link is

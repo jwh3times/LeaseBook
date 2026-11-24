@@ -1,7 +1,7 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/docs-updater/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: docs-updater
-description: Bring the repository's documentation in line with the code — find where the docs and the code disagree, and fix the docs (or, in check mode, only report it). Use after a feature, fix, or architectural change; when the user asks to update or audit the docs; and from ship and end-session, which run it scoped to a branch's diff.
+description: Bring the repository's documentation in line with the code — find where the docs and the code disagree, and fix the docs (or, in check mode, only report it). Use after a feature, fix, or architectural change; when the user asks to update or audit the docs; and from open-pr and end-session, which run it scoped to a branch's diff.
 metadata:
   settings: docs workspace issue-tracker human-follow-up
 ---
@@ -30,7 +30,7 @@ Take both from the arguments or the caller's instructions:
 - **Scope** — a diff range (`<base>..HEAD`), a list of changes, or none for a full audit of every
   `Doc map` item.
 
-A caller may add constraints; follow them. From `ship`: the branch is not merged, so leave
+A caller may add constraints; follow them. From `open-pr`: the branch is not merged, so leave
 `ship-owned` documents alone and make no claim that the work shipped — no roadmap, archive, release
 or merge status, or board change. Describing what the branch implements is still in scope. From
 `end-session`: the session's work, merged or not, as it says.
@@ -71,7 +71,7 @@ wider than the `Doc map`, skipping generated copies and `frozen` documents:
 
 A hit in a document the `Doc map` lacks is fixed like any other and named in the report, so the map
 can be extended. A wiki waits for the merge, so its pages never point at a file that is not there
-yet: a run on an unmerged branch (every run from `ship`) skips it and reports that the wiki search
+yet: a run on an unmerged branch (every run from `open-pr`) skips it and reports that the wiki search
 is owed after the merge. The next `end-session`, or any run on the default branch, performs it and
 fixes what it finds.
 
@@ -97,7 +97,7 @@ Edit each drifted document, honoring its marker:
 - `frozen` — never edit. `append-only` — add, never change. `amend-only` — add a dated amendment
   note.
 - `owner-only` — report the drift; the user edits it.
-- `ship-owned` — leave it to `ship`. Outside `ship`, add an `Unreleased` changelog entry at most
+- `ship-owned` — leave it to `open-pr`. Outside `open-pr`, add an `Unreleased` changelog entry at most
   (with `Scheme: stamp-on-tag`, an entry in the branch's `changelog.d/` fragment instead, never
   `CHANGELOG.md`); never a version, date or dated section.
 - `pinned` — another check fingerprints it, and any edit, even to a link, fails that check until
@@ -135,7 +135,7 @@ or the user does when the skill ran on its own.
 ## 5. Human actions
 
 List every required human action the change leaves (access setup, a dashboard change, credentials,
-a manual check), or say that there are none. Run from `ship` or `end-session`, return the list to
+a manual check), or say that there are none. Run from `open-pr` or `end-session`, return the list to
 the caller, which runs the follow-up procedure once for all of it. Run on its own, run the
 `## Procedure` in `.agents/skills/docs-updater/settings/human-follow-up.md` yourself. Either way, a
 follow-up never lives only in a doc.

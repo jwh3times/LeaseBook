@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Prints the version the next merge to main will mint, as a bare SemVer ("1.2.11", no leading "v").
-// The tag workflow, the changelog guard and the `ship` skill all call this one computation.
+// The tag workflow, the changelog guard and the `open-pr` skill all call this one computation.
 //
 //   node scripts/next-version.mjs
 //

@@ -1,7 +1,7 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/test-prover/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: test-prover
-description: Prove that a change's new or changed tests catch what they were written for — run each one on its own and fail a run that matched no tests, put the base version of the fix back in a scratch worktree and confirm every new test goes red, break each changed guard one mutation at a time and confirm a test catches it, and check asserted names and strings against the source. Never changes the checkout it is called from. Use before committing a fix or feature that adds tests, in code review, and from ship when a branch adds tests.
+description: Prove that a change's new or changed tests catch what they were written for — run each one on its own and fail a run that matched no tests, put the base version of the fix back in a scratch worktree and confirm every new test goes red, break each changed guard one mutation at a time and confirm a test catches it, and check asserted names and strings against the source. Never changes the checkout it is called from. Use before committing a fix or feature that adds tests, in code review, and from open-pr when a branch adds tests.
 argument-hint: "A base ref (default: the merge-base with origin/main), and optionally the tests to prove"
 context: fork
 model: inherit
@@ -40,7 +40,7 @@ back. Never fix a test or the code: report, and the caller decides.
 
 This skill reads `docs/agents/test-proof.md`. Follow `.agents/skills/test-prover/settings/README.md`
 to read it; the definitions sit beside it. Running as a subagent, no user can answer: a missing
-setting with no default stops the run, and the report names it. A caller that can ask (`ship`, or a
+setting with no default stops the run, and the report names it. A caller that can ask (`open-pr`, or a
 session) completes this skill's settings first, by following this step, then runs it.
 
 Then read the `Guide` in full, when it is not `none`: its traps are checked in step 6.
