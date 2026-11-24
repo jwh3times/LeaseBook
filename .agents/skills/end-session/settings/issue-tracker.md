@@ -13,7 +13,7 @@
 
 ## Private issue repository
 
-- **Read by:** end-session, land, records-audit, ship, what-next
+- **Read by:** end-session, land, records-audit, open-pr, what-next
 - **Value:** `none`, a literal `owner/name`, or a `discover:` value — the repository that holds
   issues too sensitive for the public tracker.
 - **Default:** the `Private companion`'s repository; `none` without a companion.
@@ -23,7 +23,7 @@
 
 ## Board
 
-- **Read by:** end-session, land, records-audit, ship, what-next
+- **Read by:** end-session, land, records-audit, open-pr, what-next
 - **Value:** `none`, or the GitHub project as `<owner> <number>` (the arguments `gh project` takes),
   or a `discover:` value.
 - **Discover:** `gh project list --owner <owner>`, matched to the repository by title, and links to

@@ -67,7 +67,7 @@ Every required human action left by agent-completed work — including the deplo
 into the private **Public distribution: deployment and operational readiness** issue — is recorded
 as [Human follow-up](human-follow-up.md) says: its destination, labels, board fields and private
 wiki, and the shared procedure the installed skills carry. The completing agent owns the handoff
-before it reports the work complete, including work finished without `/ship` or `/end-session`.
+before it reports the work complete, including work finished without `/open-pr` or `/end-session`.
 
 ## Pull requests as a triage surface
 

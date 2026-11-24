@@ -1,12 +1,12 @@
-<!-- Generated from settings/ship.md in jwh3times/skills by scripts/build-settings.mjs; edit it there. -->
-# Topic: ship
+<!-- Generated from settings/open-pr.md in jwh3times/skills by scripts/build-settings.mjs; edit it there. -->
+# Topic: open-pr
 
-`docs/agents/ship.md` — what `ship` checks before it pushes, and how its PR links to an issue. Each
-setting below is a `##` heading in that file.
+`docs/agents/open-pr.md` — what `open-pr` checks before it pushes, and how its PR links to an
+issue. Each setting below is a `##` heading in that file.
 
 ## Fast checks
 
-- **Read by:** ship
+- **Read by:** open-pr
 - **Value:** bulleted list, one per check: the folder it runs from, the command, and optionally
   `only when <paths> changed` and the command that fixes a failure (e.g. `web/`: `npm run lint`;
   repo root: `npm run sync:agents:check`, fixed by `npm run sync:agents`, committing both sides).
@@ -26,8 +26,8 @@ setting below is a `##` heading in that file.
 
 ## Issue link
 
-- **Read by:** ship
-- **Value:** `none` — the PR body carries no issue link line, and `ship` writes it as before. Or:
+- **Read by:** open-pr
+- **Value:** `none` — the PR body carries no issue link line, and `open-pr` writes it as before. Or:
   - **Branch pattern** — how a branch names its issue, e.g. `<type>/<issue#>-<slug>`, with the
     types in use.
   - **Link line** — the PR body's first line: `Closes #N` when the PR finishes issue `N`, and the

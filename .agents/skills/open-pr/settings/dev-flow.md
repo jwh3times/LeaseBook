@@ -7,7 +7,7 @@ the flow. `/ask-matt` maps the flow skills themselves.
 
 ## Docs and agent config
 
-- **Read by:** ship
+- **Read by:** open-pr
 - **Value:** bulleted list of paths that count as docs and agent config, beyond the default.
 - **Default:** `*.md` files anywhere, and `.agents/`, `.claude/`, `.codex/` and `skills-lock.json`.
   Every other tracked path is code, including a non-Markdown file under `docs/`. A change touching
@@ -17,7 +17,7 @@ the flow. `/ask-matt` maps the flow skills themselves.
 
 ## Branch types
 
-- **Read by:** ship
+- **Read by:** open-pr
 - **Value:** the `<type>` values a branch may use, beyond the default.
 - **Default:** `feat`, `fix`, `refactor`, `test`, `docs`, `ci`, `build`, `perf`, `chore`.
 - **Discover:** `git branch -r` and recent merged PRs. Write the heading only for types the default
@@ -93,7 +93,7 @@ These need no ready issue, but still go through a topic branch and a PR:
 - **Dependency bumps:** a dependency bot's PRs, and a hand-made bump that changes only versions,
   with the edits it needs to pass the checks.
 - **Docs and agent config only:** every changed path is under the `Docs and agent config` setting.
-- **Release prep:** the changelog and version-file changes `ship` writes, on a branch that passed
+- **Release prep:** the changelog and version-file changes `open-pr` writes, on a branch that passed
   the gate or is exempt, or on a release-only branch.
 - **User waiver:** the user waives the flow for this change in their own words. The PR body opens
   with `Flow waived by the user: <reason>`, quoting their reason.

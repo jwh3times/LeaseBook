@@ -7,7 +7,7 @@ that file.
 
 ## Private companion
 
-- **Read by:** docs-updater, end-session, handoff, lets-go, records-audit, ship
+- **Read by:** docs-updater, end-session, handoff, lets-go, records-audit, open-pr
 - **Value:** `none`, or the companion's checkout path (normally `private/`, its own Git repository,
   ignored by this one) and its repository as a literal `owner/name` or a `discover:` value.
 - **Discover:** `private/.git` exists → `git -C private remote get-url origin`. Repositories that
@@ -16,7 +16,7 @@ that file.
 
 ## Workspace status command
 
-- **Read by:** end-session, handoff, lets-go, ship
+- **Read by:** end-session, handoff, lets-go, open-pr
 - **Value:** commands that show the state of the checkout and, when there is one, the companion.
 - **Default:** `git status --short --branch` and `git worktree list`; with the `Private companion`
   checked out, then `git -C <companion> fetch -q --prune origin` and
@@ -26,7 +26,7 @@ that file.
 
 ## Companion commit checks
 
-- **Read by:** end-session, ship
+- **Read by:** end-session, open-pr
 - **Value:** `none`, or a bulleted list of checks this repository adds to the `## Procedure` below
   before a companion commit: an index row to update, a docs check to run, records that must never
   be staged, an order between the two repositories.
@@ -110,7 +110,7 @@ that file.
 
 ## Procedure
 
-Committing changes in the `Private companion`, which `end-session` and `ship` run whenever the
+Committing changes in the `Private companion`, which `end-session` and `open-pr` run whenever the
 session left changes there. It is the same in every repository: the agent asks first, and no
 setting commits companion work without the user's yes.
 

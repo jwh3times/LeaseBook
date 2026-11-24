@@ -27,7 +27,7 @@ it tells a run that tested nothing from a pass. Each setting below is a `##` hea
   A suite that cannot run on one file or one test (it needs a service, a browser or a deployed
   stack the machine lacks) is named with the reason, and `test-prover` reports its tests as not
   proven rather than running them.
-- **Discover:** the `Fast checks` in `docs/agents/ship.md`, the `test` scripts in each
+- **Discover:** the `Fast checks` in `docs/agents/open-pr.md`, the `test` scripts in each
   `package.json` (and `*.csproj`, `go.mod`, `pyproject.toml`), the test jobs in
   `.github/workflows/`, and the repository's testing docs. Run one existing test with the proposed
   command to confirm it runs exactly that test and prints its count.

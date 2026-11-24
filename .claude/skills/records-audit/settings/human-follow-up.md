@@ -8,7 +8,7 @@ finds today's values.
 
 ## Follow-up destination
 
-- **Read by:** docs-updater, end-session, records-audit, ship
+- **Read by:** docs-updater, end-session, records-audit, open-pr
 - **Value:** where each follow-up becomes trackable: issues in a repository (`owner/name`, or a
   `discover:` value), or a checkbox in one public tracking issue (`owner/name#n`).
 - **Default:** issues in the `Private issue repository`, or in the `Public repository` when that is
@@ -18,7 +18,7 @@ finds today's values.
 
 ## Follow-up label
 
-- **Read by:** docs-updater, end-session, records-audit, ship
+- **Read by:** docs-updater, end-session, records-audit, open-pr
 - **Value:** the label a follow-up issue carries (`ready-for-human`, `human-action-required`, …),
   or `none` for a tracking-issue checkbox.
 - **Default:** `ready-for-human`; a conflicting `ready-for-agent` or `needs-triage` comes off.
@@ -26,7 +26,7 @@ finds today's values.
 
 ## Follow-up board
 
-- **Read by:** docs-updater, end-session, records-audit, ship
+- **Read by:** docs-updater, end-session, records-audit, open-pr
 - **Value:** `none`, `same as Board` (the `Board` setting in `issue-tracker.md`), or a separate
   project as `<owner> <number>` or a `discover:` value, with the fields to set.
 - **Default:** `same as Board`, with the fields its `Board fields` describe.
@@ -35,7 +35,7 @@ finds today's values.
 
 ## Follow-up wiki
 
-- **Read by:** docs-updater, end-session, records-audit, ship
+- **Read by:** docs-updater, end-session, records-audit, open-pr
 - **Value:** `none`, or the wiki that holds step-by-step instructions: its repository and index
   page (e.g. the destination repository's wiki, index `human-todo`), plus whether pushing to it is
   pre-authorized (`push without asking` or `ask before pushing`).

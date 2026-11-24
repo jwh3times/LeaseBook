@@ -318,7 +318,7 @@ test("the hook fires only for edits under an authored tree", () => {
   assert.equal(hookTouchesAuthoredTree(null, root), false);
 });
 
-const blockFile = ".agents/skills/ship/settings/agents-md.md";
+const blockFile = ".agents/skills/open-pr/settings/agents-md.md";
 const blockSource = [
   "# Topic",
   "",

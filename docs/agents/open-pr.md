@@ -1,4 +1,4 @@
-# Ship
+# Open PR
 
 ## Fast checks
 
@@ -39,7 +39,7 @@ Left to CI: the backend tests (`dotnet test` needs Docker for Testcontainers), *
 a blank DB**, **Load fixture seeds + pin holds**, **E2E (Playwright + a11y)** and **E2E (Stripe
 stand-in)** (Postgres and a seeded host), **Container build + full-stack smoke**, **Secret scan**
 (gitleaks is not installed here), and the ruleset's CodeQL, code-quality and Copilot review.
-**CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`, which `ship` runs after
+**CHANGELOG [Unreleased] updated** is the `Changelog check` in `releases.md`, which `open-pr` runs after
 writing the branch's changelog fragment.
 
 ## Hook: before PR

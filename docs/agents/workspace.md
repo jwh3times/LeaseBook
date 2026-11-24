@@ -1,6 +1,6 @@
 # Workspace
 
-Settings the shared `end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` skills read
+Settings the shared `end-session`, `handoff`, `lets-go`, `open-pr` and `docs-updater` skills read
 (installed from `jwh3times/skills`; each skill's `settings/` folder defines them). Each `##` heading
 is one setting.
 

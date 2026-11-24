@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-18
+- **Last reviewed:** 2026-11-24
 
 How to run builds, tests and gates on a development machine without a false green. The commands
 are in `AGENTS.md` and [`docs/runbooks/local-dev.md`](../runbooks/local-dev.md); this file holds
@@ -126,7 +126,7 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
   names it. `scripts/script-tests-listed.test.mjs` fails on a file that no workflow or
   `web/package.json` script names, but it reads names only: it can't prove the naming step runs in a
   required job.
-- **A red Windows result in ship's fast checks is your branch's.** They pass on a Windows checkout
+- **A red Windows result in open-pr's fast checks is your branch's.** They pass on a Windows checkout
   now. Run Playwright from a script through `scripts/playwright-cli.mjs`;
   `scripts/stripe-sandbox-run.mjs` still doesn't run on Windows.
 - **Replaying a gate in Docker from a linked worktree needs a clone**: a worktree's `.git` is a file

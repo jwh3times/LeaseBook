@@ -3,9 +3,9 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-20
+- **Last reviewed:** 2026-11-24
 
-Everything from an open pull request to a finished merge. `/ship` stops when the PR opens, and the
+Everything from an open pull request to a finished merge. `/open-pr` stops when the PR opens, and the
 maintainer merges by saying so. Each rule here comes from a merge that went wrong.
 
 ## What gates a merge
