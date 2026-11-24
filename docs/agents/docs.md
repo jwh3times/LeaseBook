@@ -147,6 +147,9 @@ is recreated.
 - `docs/agents/guard.md` — the commands and paths `scripts/guard.mjs` stops here, on top of its
   shared rules. **When:** a **Never run** command, a dev-stack command or a never-remove path in
   `workspace.md` changes, or an operator-gated command in `.claude/agents/azure-infrastructure.md`.
+- `docs/agents/test-proof.md` — how `test-prover` runs one test on its own and tells a run that
+  tested nothing from a pass. **When:** a test runner, its filter or count output, a test project,
+  or what a suite needs to run changes.
 - `docs/agents/docs.md` — this file. **When:** a document is added, removed or changes owner.
 - `infra/README.md` — Azure topology, the environment-variable contract, the first-apply table.
   **When:** `infra/**/*.bicep`, a parameter file or a deploy workflow changes.
