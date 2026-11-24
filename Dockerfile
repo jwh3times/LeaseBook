@@ -18,7 +18,7 @@ COPY web/ ./
 RUN npm run build
 
 # --- Stage 2: publish the ASP.NET Core host ---
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:8c6edfb26c85153f236d26efebd9ad349aec403583f343f201ee67838b23658d AS build
 WORKDIR /src
 # Copy build configuration first for layer caching, then source.
 COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
