@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.35] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `dotnet/aspnet` from `aac50ce` to `aac50ce` (#841)
+
 ## [0.39.34] - 2026-11-24
 
 ### Changed
@@ -2676,7 +2682,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.34...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.35...HEAD
+[0.39.35]: https://github.com/jwh3times/LeaseBook/compare/v0.39.34...v0.39.35
 [0.39.34]: https://github.com/jwh3times/LeaseBook/compare/v0.39.33...v0.39.34
 [0.39.33]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...v0.39.33
 [0.39.32]: https://github.com/jwh3times/LeaseBook/compare/v0.39.31...v0.39.32
