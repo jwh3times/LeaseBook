@@ -19,6 +19,30 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.32] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `dotnet/sdk` from `fe0fd4e` to `8c6edfb` (#803)
+
+## [0.39.31] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `dotnet/aspnet` from `12b1135` to `aac50ce` (#838)
+
+## [0.39.30] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump the `npm-minor-and-patch` group across 1 directory with 11 updates (#824)
+
+## [0.39.29] - 2026-11-24
+
+### Changed
+
+- ci(deps): Bump `actions/create-github-app-token` from `3.3.0` to `3.4.0` in the actions-minor-and-patch group across 1 directory (#823)
+
 ## [0.39.28] - 2026-11-24
 
 ### Changed
@@ -2637,7 +2661,11 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.28...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...HEAD
+[0.39.32]: https://github.com/jwh3times/LeaseBook/compare/v0.39.31...v0.39.32
+[0.39.31]: https://github.com/jwh3times/LeaseBook/compare/v0.39.30...v0.39.31
+[0.39.30]: https://github.com/jwh3times/LeaseBook/compare/v0.39.29...v0.39.30
+[0.39.29]: https://github.com/jwh3times/LeaseBook/compare/v0.39.28...v0.39.29
 [0.39.28]: https://github.com/jwh3times/LeaseBook/compare/v0.39.27...v0.39.28
 [0.39.27]: https://github.com/jwh3times/LeaseBook/compare/v0.39.26...v0.39.27
 [0.39.26]: https://github.com/jwh3times/LeaseBook/compare/v0.39.25...v0.39.26
