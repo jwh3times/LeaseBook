@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.37] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `@testing-library/jest-dom` from `7.0.1` to `8.0.0` in `/web` in the testing-library group across 1 directory (#842)
+
 ## [0.39.36] - 2026-11-24
 
 ### Changed
@@ -2688,7 +2694,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.36...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.37...HEAD
+[0.39.37]: https://github.com/jwh3times/LeaseBook/compare/v0.39.36...v0.39.37
 [0.39.36]: https://github.com/jwh3times/LeaseBook/compare/v0.39.35...v0.39.36
 [0.39.35]: https://github.com/jwh3times/LeaseBook/compare/v0.39.34...v0.39.35
 [0.39.34]: https://github.com/jwh3times/LeaseBook/compare/v0.39.33...v0.39.34

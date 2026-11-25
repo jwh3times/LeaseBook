@@ -989,7 +989,9 @@ describe('BankAdjustmentDialog', () => {
 
     expect(await screen.findByText(detail)).toBeInTheDocument();
     expect(amountField()).toHaveAttribute('aria-invalid', 'true');
-    expect(amountField()).toHaveAccessibleDescription(expect.stringContaining(detail));
+    // The description is the server's words, then the error's reference line.
+    const escaped = detail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(amountField()).toHaveAccessibleDescription(new RegExp(`^${escaped}`));
     expect(screen.getByText(REFERENCE, { exact: false })).toBeInTheDocument();
     expect(onPosted).not.toHaveBeenCalled();
   });
