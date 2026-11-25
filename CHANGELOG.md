@@ -19,6 +19,15 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.34] - 2026-11-24
+
+### Changed
+
+- Dependabot no longer proposes PostgreSQL majors for the local `postgres` image in
+  `docker-compose.yml`: they are ignored until the PostgreSQL 19 upgrade is chosen (#839), which
+  moves every PostgreSQL 18 pin together with production's Flexible Server version. Local
+  development and CI stay on the major production targets.
+
 ## [0.39.33] - 2026-11-24
 
 ### Changed
@@ -2667,7 +2676,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.33...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.34...HEAD
+[0.39.34]: https://github.com/jwh3times/LeaseBook/compare/v0.39.33...v0.39.34
 [0.39.33]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...v0.39.33
 [0.39.32]: https://github.com/jwh3times/LeaseBook/compare/v0.39.31...v0.39.32
 [0.39.31]: https://github.com/jwh3times/LeaseBook/compare/v0.39.30...v0.39.31
