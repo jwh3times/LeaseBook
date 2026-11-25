@@ -76,6 +76,12 @@ const TAIL_LINES = 60;
 const MANIFEST = "test-prover.json";
 const SCRATCH_PREFIX = "test-prover-";
 
+// A path resolved through links by the operating system. On Windows the JavaScript realpathSync
+// keeps an 8.3 short name (C:\Users\RUNNER~1, a CI runner's temporary folder) where git prints the
+// long one, so every path compared with git's output is resolved natively.
+const realPath = (value) => realpathSync.native(value);
+const realIfExists = (value) => (existsSync(value) ? realPath(value) : path.resolve(value));
+
 // Lower-case text that shows a run selected no tests, when a line starts with it (a bracketed one:
 // when a line ends with it).
 export const ZERO_MATCH_SIGNATURES = [
@@ -568,7 +574,7 @@ function sameDir(a, b) {
 // The manifest `setup` wrote beside the scratch worktree at `root`, or null when `root` is not one:
 // its parent folder must be named `test-prover-*` and hold a manifest naming this root.
 function readManifest(root) {
-  const resolved = path.resolve(root);
+  const resolved = realIfExists(root);
   const parent = path.dirname(resolved);
   const manifestPath = path.join(parent, MANIFEST);
   if (!path.basename(parent).startsWith(SCRATCH_PREFIX) || !existsSync(manifestPath)) return null;
@@ -578,7 +584,7 @@ function readManifest(root) {
   } catch {
     return null;
   }
-  if (typeof manifest.root !== "string" || !sameDir(manifest.root, resolved)) return null;
+  if (typeof manifest.root !== "string" || !sameDir(realIfExists(manifest.root), resolved)) return null;
   return { ...manifest, links: Array.isArray(manifest.links) ? manifest.links : [], parent };
 }
 
@@ -595,20 +601,20 @@ export function scratchTop(root) {
   if (!top) throw new MutateError(`${root} is not a git worktree; make a scratch worktree with setup`);
   const gitDir = git(root, ["rev-parse", "--absolute-git-dir"]).trim();
   const commonDir = path.resolve(root, git(root, ["rev-parse", "--git-common-dir"]).trim());
-  if (sameDir(gitDir, commonDir)) {
+  if (sameDir(realIfExists(gitDir), realIfExists(commonDir))) {
     throw new MutateError(`${root} is a checkout's main worktree, not a scratch worktree; make one with setup`);
   }
-  if (!sameDir(realpathSync(top.trim()), realpathSync(root))) {
+  if (!sameDir(realPath(top.trim()), realPath(root))) {
     throw new MutateError(`--root names the top of the scratch worktree, ${slash(top.trim())}`);
   }
-  return { root: realpathSync(root), links: manifest.links };
+  return { root: realPath(root), links: manifest.links };
 }
 
 // The nearest existing folder at or above `absolute`, resolved through links.
 function realParent(absolute) {
   let dir = absolute;
   while (!existsSync(dir)) dir = path.dirname(dir);
-  return realpathSync(dir);
+  return realPath(dir);
 }
 
 // The path inside the worktree, refusing one that leaves it, reaches into .git, or passes through a
@@ -624,7 +630,7 @@ function inside(root, file, { links = [], real = true } = {}) {
   const link = links.find((entry) => rel === entry || rel.startsWith(`${entry}/`));
   if (link) throw new MutateError(`${file} is inside ${link}, a linked folder from the checkout; it is never written`);
   if (real) {
-    const resolved = path.relative(realpathSync(root), realParent(absolute));
+    const resolved = path.relative(realPath(root), realParent(absolute));
     if (resolved.startsWith("..") || path.isAbsolute(resolved)) {
       throw new MutateError(`${file} resolves outside the worktree, through a link`);
     }
@@ -644,7 +650,7 @@ function copyInto(from, to) {
 function setup(options) {
   const repo = git(options.repo, ["rev-parse", "--show-toplevel"]).trim();
   const head = git(repo, ["rev-parse", "HEAD"]).trim();
-  const parent = mkdtempSync(path.join(os.tmpdir(), SCRATCH_PREFIX));
+  const parent = realPath(mkdtempSync(path.join(os.tmpdir(), SCRATCH_PREFIX)));
   const root = path.join(parent, "tree");
   git(repo, ["worktree", "add", "--detach", root, head]);
   const manifest = { repo: slash(repo), root: slash(root), head, links: [] };
