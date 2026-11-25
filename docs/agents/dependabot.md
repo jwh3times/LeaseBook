@@ -75,8 +75,9 @@ Under Node 26 (`.nvmrc`) and the .NET SDK `global.json` names, the installs CI r
   a major leaves the rest behind: the service containers in `ci.yml` (four jobs), `coverage.yml` and
   `update-visual-baselines.yml`; `PostgresFixture.cs` in `tests/LeaseBook.Tests.Common/`
   (Testcontainers); `infra/db/Dockerfile` (`postgres:18-bookworm`, digest-pinned, which no
-  Dependabot entry scans); and `version` in `infra/modules/database.bicep`. The compose data volume
-  is mounted at `/var/lib/postgresql`.
+  Dependabot entry scans); and `version` in `infra/modules/database.bicep`. The `postgres` ignore
+  rule in `.github/dependabot.yml` comes out with them (#839). The compose data volume is mounted at
+  `/var/lib/postgresql`.
 - The Node 26 pins: the `Dockerfile` web stage, `.nvmrc`, `web/.nvmrc`, `engines` in
   `package.json`, `web/package.json` and `web/codegen/package.json`, and `node-version` in the
   workflows.
