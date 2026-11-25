@@ -1,3 +1,4 @@
+using DotNet.Testcontainers.Builders;
 using LeaseBook.SharedKernel.Tenancy;
 using LeaseBook.Web.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -20,8 +21,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         .WithUsername("postgres")
         .WithPassword("dev_postgres_pw")
         .WithResourceMapping(
-            new FileInfo(Path.Combine(AppContext.BaseDirectory, "bootstrap.sql")),
-            "/docker-entrypoint-initdb.d/")
+            FilePath.Of(Path.Combine(AppContext.BaseDirectory, "bootstrap.sql")),
+            DirectoryPath.Of("/docker-entrypoint-initdb.d/"))
         .Build();
 
     private ApiFactory? _api;
