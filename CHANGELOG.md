@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.33] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `CsvHelper` and 3 others (#826)
+
 ## [0.39.32] - 2026-11-24
 
 ### Changed
@@ -2661,7 +2667,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.33...HEAD
+[0.39.33]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...v0.39.33
 [0.39.32]: https://github.com/jwh3times/LeaseBook/compare/v0.39.31...v0.39.32
 [0.39.31]: https://github.com/jwh3times/LeaseBook/compare/v0.39.30...v0.39.31
 [0.39.30]: https://github.com/jwh3times/LeaseBook/compare/v0.39.29...v0.39.30
