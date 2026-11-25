@@ -9,8 +9,17 @@
 // `list` gives every open Dependabot pull request, oldest first, or only `--pr <n>`. For each:
 //   - `updates`: each dependency with `from`, `to` and `kind` (major, minor, patch, digest, suffix,
 //     downgrade, removed or unknown), read from the body Dependabot wrote, or from the title when a
-//     person has replaced the body; `parsed` is false when neither names one, and `kind` is the
-//     furthest-reaching update's.
+//     person has replaced the body. A pinned update (`Pinned <name> at <version>`) has `from: null`
+//     and `kind` unknown.
+//   - `expected`: how many dependencies the title, or the body's first line, says the PR updates
+//     (null when neither says), and `missing`: the ones the title names that no update line gave.
+//   - `parsed`: false when no update was read, when fewer distinct dependencies were read than
+//     `expected`, or when `missing` is not empty (a body a person replaced, or one GitHub cut off).
+//     `kind` is the furthest-reaching update's, and never nearer than unknown while `parsed` is
+//     false.
+//   - `manifestReviewMarker`, when `parsed` is false: the line a verdict carries once the PR was
+//     reviewed from its manifest diff. It is a hash of the PR's title and diff, so it changes when
+//     Dependabot retargets the PR, and not when it only rebases it.
 //   - `ecosystem`, `directory` and `group`, from the branch name and the body.
 //   - `checks`: every check run and commit status on the current head, by its full sha, as
 //     `failed`, `cancelled`, `pending` and `passed`, with each failed check's run and job ids for
@@ -19,10 +28,14 @@
 //     computing them (null and `unknown`, which they stay if it never finishes).
 //   - `maintainedByDependabot`: false once a commit by anyone else is on the branch (a branch
 //     update merging `main` in, or a fix), after which Dependabot no longer rebases it.
-//   - `verdict`: the latest comment carrying the review marker, its `kind` (low-risk or
-//     needs-effort, by its first character) and `versionsNamed`, true when it names every update's
-//     new version, and `current`: false for a low-risk verdict that no longer names the versions
-//     or whose PR's checks have since failed; `comments`: the other comments people wrote.
+//   - `verdict`: the latest comment carrying the review marker by the repository's owner, a member
+//     or a collaborator (`author_association`), its `kind` (low-risk or
+//     needs-effort, by its first character), `versionsNamed`, true when it names every update's
+//     new version, `manifestReviewed`, when `parsed` is false: whether it carries the current
+//     `manifestReviewMarker` (null otherwise), and `current`: false for a low-risk verdict that no
+//     longer names the versions, lacks the current manifest marker, or whose PR's checks have
+//     since failed. `ignoredVerdicts`: each marked comment by anyone else, with its author,
+//     association and link, which never counts. `comments`: the other comments people wrote.
 // `marker` is the closing line a verdict comment carries, with `--label` (default: the repository's
 // name) as the name in it.
 //
@@ -33,6 +46,7 @@
 // object, and exits 1 with `{ "error": ... }` on failure.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,6 +59,10 @@ const PASSED = new Set(["success", "neutral", "skipped"]);
 // Furthest-reaching first: a PR's `kind` is the first of these any of its updates has.
 export const KIND_ORDER = ["major", "unknown", "downgrade", "suffix", "minor", "patch", "digest", "removed"];
 const MARKER = /Dependabot PR review by the (.+?) routine/;
+// Who can write a verdict: the repository's owner, an organization member or a collaborator, as
+// GitHub's `author_association` names them.
+const REVIEWERS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+const MANIFEST_MARKER = /^<!-- dependabot-manifest-review: [0-9a-f]{64} -->$/;
 
 export class DependabotError extends Error {}
 
@@ -130,6 +148,8 @@ const UPDATE_LINES = [
   // A single dependency, linked or plain (container images); never "Bumps the <group> group".
   new RegExp(`^Bumps (?:\\[([^\\]]+)\\]\\([^)]*\\)|(?!the )([^\\s\\[]+)) from ${VERSION} to ${VERSION}\\.?$`),
 ];
+// NuGet with transitive pinning: the new version only, linked or plain.
+const PINNED_LINE = new RegExp(`^Pinned (?:\\[([^\\]]+)\\]\\([^)]*\\)|([^\\s\\[]+)) at ${VERSION}\\.?$`);
 const TITLE_UPDATE = new RegExp(`\\bbump (\\S+) from ${VERSION} to ${VERSION}(?:\\s|$)`, "i");
 
 export function parseUpdates(title, body) {
@@ -139,13 +159,19 @@ export function parseUpdates(title, body) {
     const key = `${name} ${from} ${to}`;
     if (seen.has(key)) return;
     seen.add(key);
-    updates.push({ name, from, to, kind: from === null ? "removed" : classify(from, to) });
+    const kind = to === null ? "removed" : from === null ? "unknown" : classify(from, to);
+    updates.push({ name, from, to, kind });
   };
   for (const raw of (body || "").split(/\r?\n/)) {
     const line = raw.trim();
     const removed = line.match(/^Removes `([^`]+)`\.?$/);
     if (removed) {
       add(removed[1], null, null);
+      continue;
+    }
+    const pinned = line.match(PINNED_LINE);
+    if (pinned) {
+      add(pinned[1] ?? pinned[2], null, pinned[3]);
       continue;
     }
     for (const pattern of UPDATE_LINES) {
@@ -162,6 +188,60 @@ export function parseUpdates(title, body) {
     if (match) add(match[1], match[2], match[3]);
   }
   return updates;
+}
+
+// What Dependabot's title says the PR updates: how many dependencies, and the ones it names
+// ("Bump a from 1 to 2", "Bump a and b", "Bump a, b and c", "Bump a and 3 others", "Bump the g
+// group with 4 updates"). A grouped PR's count falls back to the body's first line, which GitHub
+// keeps when it cuts a long body off. Null when neither says.
+export function expectedUpdates(title, body) {
+  const bump = ((title || "").trim().match(/\bbump\s+(.+)$/i)?.[1] ?? "").replace(/\s+in\s+\/\S*$/, "");
+  let names = [];
+  let count = null;
+  let match;
+  if (/^the\s/i.test(bump)) {
+    count = Number(bump.match(/\bwith (\d+) updates?\b/i)?.[1]) || null;
+  } else if ((match = bump.match(/^(\S+) from \S+ to \S+$/i))) {
+    names = [match[1]];
+  } else if ((match = bump.match(/^(\S+) and (\d+) others?$/i))) {
+    names = [match[1]];
+    count = Number(match[2]) + 1;
+  } else if ((match = bump.match(/^((?:[^\s,]+, )*[^\s,]+),? and ([^\s,]+)$/i))) {
+    names = [...match[1].split(", "), match[2]];
+  } else if ((match = bump.match(/^(\S+)$/))) {
+    names = [match[1]];
+  }
+  count ??= names.length || Number((body || "").match(/^Bumps the \S+ group\b.*? with (\d+) updates?\b/m)?.[1]) || null;
+  return count === null ? null : { count, names };
+}
+
+// The updates a PR's body and title give, and whether they are all it has. Dependencies are counted
+// by name, as the title counts them: one dependency updated in two directories is one. While some
+// are missing, `kind` is never nearer than unknown, so the PR is always investigated.
+export function readUpdates(title, body) {
+  const updates = parseUpdates(title, body);
+  const expected = expectedUpdates(title, body);
+  const names = new Set(updates.map((update) => update.name.toLowerCase()));
+  const missing = (expected?.names ?? []).filter((name) => !names.has(name.toLowerCase()));
+  const parsed = updates.length > 0 && missing.length === 0 && names.size >= (expected?.count ?? 0);
+  const furthest = furthestKind(updates);
+  const kind = parsed || KIND_ORDER.indexOf(furthest) <= KIND_ORDER.indexOf("unknown") ? furthest : "unknown";
+  return { updates, expected: expected?.count ?? null, missing, parsed, kind };
+}
+
+// Ties a review read from the manifest diff to what it read: the PR, its title and each file's
+// changed lines, never the base or head sha, so a rebase that changes none of them keeps the review
+// and a retarget does not. A file too large for GitHub to give its patch counts by its blob.
+export function manifestReviewMarker(repo, pr, files) {
+  const changed = [...files]
+    .sort((a, b) => (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0))
+    .map((file) => [
+      file.filename,
+      file.status,
+      typeof file.patch === "string" ? file.patch.split(/\r?\n/).filter((line) => /^[+-]/.test(line)) : file.sha ?? null,
+    ]);
+  const state = JSON.stringify([repo.toLowerCase(), pr.number, pr.title ?? "", changed]);
+  return `<!-- dependabot-manifest-review: ${createHash("sha256").update(state).digest("hex")} -->`;
 }
 
 function numericPrefix(version) {
@@ -244,35 +324,53 @@ function versionNamed(text, version) {
   return text.includes(version);
 }
 
-export function readVerdict(comments, updates) {
+// With `manifestReviewMarker` (a PR whose updates were not all read), the verdict must also carry
+// that marker, and a version counts as named only outside the marker's line, whose hex could hold it.
+// A marked comment by anyone else is never a verdict: it is listed in `ignored`, for the skill to
+// report, and a missing `author_association` counts as anyone else.
+export function readVerdict(comments, updates, { manifestReviewMarker = null } = {}) {
   let verdict = null;
   const others = [];
+  const ignored = [];
   for (const comment of comments) {
     const body = comment.body ?? "";
     const marker = body.match(MARKER);
-    if (marker) {
+    if (marker && !REVIEWERS.has(comment.author_association)) {
+      ignored.push({
+        author: comment.user?.login ?? null,
+        association: comment.author_association ?? null,
+        url: comment.html_url ?? null,
+        createdAt: comment.created_at ?? null,
+      });
+    } else if (marker) {
       const first = body.trimStart();
+      const lines = body.split(/\r?\n/).map((line) => line.trim());
+      const text = lines.filter((line) => !MANIFEST_MARKER.test(line)).join("\n");
       verdict = {
         kind: first.startsWith("✅") ? "low-risk" : first.startsWith("⚠") ? "needs-effort" : "unknown",
         label: marker[1],
         url: comment.html_url ?? null,
         createdAt: comment.created_at ?? null,
-        versionsNamed: updates.length > 0 && updates.filter((update) => update.to).every((update) => versionNamed(body, update.to)),
+        versionsNamed:
+          (updates.length > 0 || manifestReviewMarker !== null) &&
+          updates.filter((update) => update.to).every((update) => versionNamed(text, update.to)),
+        manifestReviewed: manifestReviewMarker === null ? null : lines.includes(manifestReviewMarker),
       };
     } else if (comment.user?.type !== "Bot") {
       others.push({ author: comment.user?.login ?? null, createdAt: comment.created_at ?? null, body: body.slice(0, 500) });
     }
   }
-  return { verdict, comments: others };
+  return { verdict, comments: others, ignored };
 }
 
 // A low-risk verdict was reached on a green PR for the versions it names. It stops counting when
-// Dependabot retargets the PR or when the PR's checks fail afterwards (a new `main`, a rerun), so a
-// stale "safe to merge" is never read as current. A needs-effort verdict stays current.
+// Dependabot retargets the PR (for a PR reviewed from its manifest diff, when the diff or the title
+// changes) or when the PR's checks fail afterwards (a new `main`, a rerun), so a stale "safe to
+// merge" is never read as current. A needs-effort verdict stays current.
 export function verdictCurrent(verdict, checks) {
   if (!verdict) return false;
   if (verdict.kind !== "low-risk") return true;
-  return verdict.versionsNamed && checks.state !== "failed";
+  return verdict.versionsNamed && verdict.manifestReviewed !== false && checks.state !== "failed";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -289,14 +387,17 @@ function readOne(rest, sleep, options, pr) {
     full = rest(`repos/${options.repo}/pulls/${full.number}`);
   }
   const head = full.head.sha;
-  const updates = parseUpdates(full.title, full.body);
+  const { updates, expected, missing, parsed, kind } = readUpdates(full.title, full.body);
+  const marker = parsed
+    ? null
+    : manifestReviewMarker(options.repo, full, rest(`repos/${options.repo}/pulls/${full.number}/files?per_page=100`));
   const checkRuns = rest(`repos/${options.repo}/commits/${head}/check-runs?per_page=100`).check_runs ?? [];
   const status = rest(`repos/${options.repo}/commits/${head}/status`);
   const commits = rest(`repos/${options.repo}/pulls/${full.number}/commits?per_page=100`);
   const comments = rest(`repos/${options.repo}/issues/${full.number}/comments?per_page=100`);
   const othersCommitted = commits.filter((commit) => commit.author?.login !== BOT).map((commit) => commit.sha);
   const checks = summarizeChecks(checkRuns, status);
-  const { verdict, comments: others } = readVerdict(comments, updates);
+  const { verdict, comments: others, ignored } = readVerdict(comments, updates, { manifestReviewMarker: marker });
   if (verdict) verdict.current = verdictCurrent(verdict, checks);
   return {
     number: full.number,
@@ -311,14 +412,18 @@ function readOne(rest, sleep, options, pr) {
     headRef: full.head.ref,
     ...describeBranch(full.head.ref, full.title, full.body),
     updates,
-    parsed: updates.length > 0,
-    kind: furthestKind(updates),
+    expected,
+    missing,
+    parsed,
+    manifestReviewMarker: marker,
+    kind,
     mergeable: full.mergeable ?? null,
     mergeableState: full.mergeable_state ?? "unknown",
     checks,
     maintainedByDependabot: othersCommitted.length === 0,
     othersCommitted,
     verdict,
+    ignoredVerdicts: ignored,
     comments: others,
   };
 }
