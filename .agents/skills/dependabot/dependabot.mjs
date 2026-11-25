@@ -328,7 +328,7 @@ function versionNamed(text, version) {
 // that marker, and a version counts as named only outside the marker's line, whose hex could hold it.
 // A marked comment by anyone else is never a verdict: it is listed in `ignored`, for the skill to
 // report, and a missing `author_association` counts as anyone else.
-export function readVerdict(comments, updates, { manifestReviewMarker = null } = {}) {
+export function readVerdict(comments, updates, { manifestReviewMarker: reviewMarker = null } = {}) {
   let verdict = null;
   const others = [];
   const ignored = [];
@@ -352,9 +352,9 @@ export function readVerdict(comments, updates, { manifestReviewMarker = null } =
         url: comment.html_url ?? null,
         createdAt: comment.created_at ?? null,
         versionsNamed:
-          (updates.length > 0 || manifestReviewMarker !== null) &&
+          (updates.length > 0 || reviewMarker !== null) &&
           updates.filter((update) => update.to).every((update) => versionNamed(text, update.to)),
-        manifestReviewed: manifestReviewMarker === null ? null : lines.includes(manifestReviewMarker),
+        manifestReviewed: reviewMarker === null ? null : lines.includes(reviewMarker),
       };
     } else if (comment.user?.type !== "Bot") {
       others.push({ author: comment.user?.login ?? null, createdAt: comment.created_at ?? null, body: body.slice(0, 500) });
