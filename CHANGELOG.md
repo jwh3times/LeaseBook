@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.39.36] - 2026-11-24
+
+### Changed
+
+- build(deps): Bump `oxlint-tsgolint` from `7.0.2007` to `7.0.2008` in `/web` in the npm-minor-and-patch group (#843)
+
 ## [0.39.35] - 2026-11-24
 
 ### Changed
@@ -2682,7 +2688,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.35...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.39.36...HEAD
+[0.39.36]: https://github.com/jwh3times/LeaseBook/compare/v0.39.35...v0.39.36
 [0.39.35]: https://github.com/jwh3times/LeaseBook/compare/v0.39.34...v0.39.35
 [0.39.34]: https://github.com/jwh3times/LeaseBook/compare/v0.39.33...v0.39.34
 [0.39.33]: https://github.com/jwh3times/LeaseBook/compare/v0.39.32...v0.39.33
