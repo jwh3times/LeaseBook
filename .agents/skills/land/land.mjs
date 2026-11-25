@@ -303,9 +303,25 @@ export function parseRules(rules) {
 const KEYWORD = String.raw`(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)`;
 const REF = String.raw`(?:([\w.-]+\/[\w.-]+))?#(\d+)`;
 
-// The link line the development flow asks a PR body to open with: `Closes #N` or `Part of #N`.
+// A line holding only link references: `Closes #109`, `Part of #12.`, `Fixes #3 and closes #4`.
+const LINK_ONLY = new RegExp(String.raw`^(?:(?:${KEYWORD}:?|part of)\s+${REF}[\s,.;]*(?:and\s+)?)+$`, "i");
+
+// The link line the development flow asks a PR body to open with: `Closes #N` or `Part of #N`. A
+// PR that finishes several issues may give each its own line at the top, so the link line runs on
+// through each line directly below it that holds only link references. A blank line or any other
+// text ends it: a keyword further down the body is still one the PR may not mean.
 export function parseLinkLine(body, repo) {
-  const line = (body ?? "").split(/\r?\n/).find((text) => text.trim() !== "") ?? "";
+  const lines = (body ?? "").split(/\r?\n/).map((text) => text.trim());
+  const start = lines.findIndex((text) => text !== "");
+  const block = [];
+  if (start !== -1) {
+    block.push(lines[start]);
+    for (const text of lines.slice(start + 1)) {
+      if (!LINK_ONLY.test(text)) break;
+      block.push(text);
+    }
+  }
+  const line = block.join("\n");
   const here = `${repo.owner}/${repo.name}`.toLowerCase();
   const refs = (pattern) =>
     [...line.matchAll(new RegExp(pattern, "gi"))].map((match) => ({
@@ -314,7 +330,7 @@ export function parseLinkLine(body, repo) {
     }));
   const closes = refs(String.raw`\b${KEYWORD}:?\s+${REF}`);
   const partOf = refs(String.raw`\bpart of\s+${REF}`);
-  return { text: line.trim(), closes, partOf };
+  return { text: line, closes, partOf };
 }
 
 // Same-repository `#N` references in the body that the merge will not close.

@@ -31,7 +31,8 @@ issue. Each setting below is a `##` heading in that file.
   - **Branch pattern** — how a branch names its issue, e.g. `<type>/<issue#>-<slug>`, with the
     types in use.
   - **Link line** — the PR body's first line: `Closes #N` when the PR finishes issue `N`, and the
-    line for one slice of a spec that stays open (e.g. `Part of #N`).
+    line for one slice of a spec that stays open (e.g. `Part of #N`). A PR that finishes several
+    issues may give each its own line, directly below the first.
   - **Waiver line** — what opens the body when the user waived the flow, e.g.
     `Flow waived by the user: <reason>`.
   - **Exempt** — bulleted kinds of work whose branch carries no number and whose body has no link

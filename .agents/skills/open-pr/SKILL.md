@@ -310,7 +310,9 @@ template leaves for it:
   `gh issue view <N> --json title,state,labels,body`.
 - The finishing line (`Closes #N`) when this PR finishes the issue; the slice line (`Part of #N`)
   when it is one slice of a spec that stays open. Each finished issue gets its own keyword:
-  GitHub links only the first issue in `Closes #1 and #2`.
+  GitHub links only the first issue in `Closes #1 and #2`. Several may each take a line of their
+  own, directly below the first with no blank line between: `land` reads a closing keyword after a
+  blank line or other text as one the PR may not mean.
 - A branch with no number: the **Waiver line** when the user waived the flow; no link line for an
   **Exempt** kind, or for work from a ready issue in the `Private issue repository`.
 - When the branch's number and the issue disagree, or finishing versus slice is unclear, ask before
