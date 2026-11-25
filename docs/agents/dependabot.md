@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-22
+- **Last reviewed:** 2026-11-24
 
 What reviewing a Dependabot pull request takes here, read by the `dependabot` skill in a session
 and in the scheduled review. These facts apply to this repository only. How a dependency PR merges
@@ -31,7 +31,9 @@ is in [`merging.md`](merging.md#dependency-pull-requests).
   `npm` at `/web` and, weekly, at `/web/codegen`. Minor and patch bumps are grouped per ecosystem,
   except Stripe.net, which gets its own PR. Majors open one PR each, except the peer-locked families
   (`xunit.v3*`; `react`; `@tanstack/*`; `vite`, `vitest` and `@vitejs/plugin-react`;
-  `@testing-library/*`; `oxlint`), which travel together.
+  `@testing-library/*`; `oxlint`), which travel together. Ignore rules hold back the .NET 11 majors
+  (#761), the `web/codegen` TypeScript major (ADR-030) and `postgres` majors in `docker-compose`
+  (#839).
 
 ## Review triggers
 
@@ -49,7 +51,8 @@ is in [`merging.md`](merging.md#dependency-pull-requests).
 - **The `dotnet/*` base images, any bump, digests included.** Their majors are ignored, so a PR is
   normally a digest refresh of the `10.0` tags; read its diff for a tag change.
 - **`postgres`, any bump.** The compose tag is the bare major, so a bump is a major (see
-  `Grounding facts`).
+  `Grounding facts`). Its majors are ignored until the PostgreSQL 19 upgrade (#839), so a
+  `postgres` PR appears only once that ignore is removed or the tag changes form.
 - **`vite`, `vitest`, `react`, `react-dom`, `typescript` and `@tanstack/react-query`, any
   bump.** The SPA's build, type-check and test toolchain.
 - **`oxlint`, `oxlint-tsgolint` and `cspell`, any bump.** They are CI gates, so a new rule or
