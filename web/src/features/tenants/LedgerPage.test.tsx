@@ -938,3 +938,179 @@ describe('LedgerPage add a lease', () => {
     expect(await within(dialog).findByRole('option', { name: '#1A · vacant' })).toBeInTheDocument();
   });
 });
+
+describe('LedgerPage edit the tenant (#783)', () => {
+  interface TenantSent {
+    id: string;
+    displayName: string;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    lifecycleStatus: string;
+  }
+
+  /**
+   * Serves the tenant and records each save. A successful save changes what the next tenant read
+   * returns, as the server does.
+   */
+  function serveEdit(
+    options: {
+      detail?: typeof DETAIL | object;
+      refuse?: { status: number; body: object };
+      /** Holds the save's answer until it resolves, so a test can see the dialog while it saves. */
+      hold?: Promise<void>;
+    } = {},
+  ) {
+    const sent: TenantSent[] = [];
+    let detail = { ...(options.detail ?? DETAIL) } as typeof DETAIL;
+    server.use(
+      http.get('/api/directory/tenants/t1', () => HttpResponse.json(detail)),
+      ledgerHandler([]),
+      http.put('/api/directory/tenants/:id', async ({ request, params }) => {
+        const body = (await request.json()) as TenantSent;
+        sent.push({ ...body, id: String(params.id) });
+        await options.hold;
+        if (options.refuse)
+          return HttpResponse.json(options.refuse.body, {
+            status: options.refuse.status,
+            headers: { 'content-type': 'application/problem+json' },
+          });
+        detail = {
+          ...detail,
+          displayName: body.displayName,
+          contact: { email: body.contactEmail, phone: body.contactPhone },
+          lifecycleStatus: body.lifecycleStatus,
+        } as typeof DETAIL;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    return sent;
+  }
+
+  async function openEdit() {
+    const open = await screen.findByRole('button', { name: 'Edit' });
+    open.focus();
+    await userEvent.keyboard('{Enter}');
+    return screen.getByRole('dialog', { name: 'Edit Jasmine Carter' });
+  }
+
+  it('edits by keyboard from the header, opening on the stored values, and the header shows the change', async () => {
+    const sent = serveEdit();
+    renderLedger();
+
+    const dialog = await openEdit();
+    const name = within(dialog).getByLabelText('Display name');
+    expect(name).toHaveFocus();
+    expect(name).toHaveValue('Jasmine Carter');
+    expect(within(dialog).getByLabelText('Email')).toHaveValue('');
+    expect(within(dialog).getByLabelText('Phone')).toHaveValue('828-555-0100');
+    const lifecycle = within(dialog).getByLabelText('Lifecycle');
+    expect(lifecycle).toHaveValue('current');
+    expect(
+      within(lifecycle)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Current', 'Evicting', 'Past']);
+
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Jasmine Carter-Ode');
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'jasmine@example.test');
+    await userEvent.selectOptions(lifecycle, 'evicting');
+    await userEvent.type(within(dialog).getByLabelText('Phone'), '{Enter}');
+
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([
+      {
+        id: 't1',
+        displayName: 'Jasmine Carter-Ode',
+        contactEmail: 'jasmine@example.test',
+        contactPhone: '828-555-0100',
+        lifecycleStatus: 'evicting',
+      },
+    ]);
+    expect(await screen.findByRole('heading', { name: 'Jasmine Carter-Ode' })).toBeVisible();
+    expect(screen.getByText('Evicting')).toBeVisible();
+  });
+
+  it('says it is saving and takes no second save until the first is answered', async () => {
+    let release = () => {};
+    const sent = serveEdit({ hold: new Promise<void>((resolve) => (release = resolve)) });
+    renderLedger();
+
+    const dialog = await openEdit();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save tenant' }));
+    const saving = await within(dialog).findByRole('button', { name: 'Saving…' });
+    expect(saving).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Phone'), '{Enter}');
+    expect(sent).toHaveLength(1);
+
+    release();
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toHaveLength(1);
+  });
+
+  it('clears an emptied contact field instead of saving an empty string', async () => {
+    const sent = serveEdit();
+    renderLedger();
+
+    const dialog = await openEdit();
+    await userEvent.clear(within(dialog).getByLabelText('Phone'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save tenant' }));
+
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ contactEmail: null, contactPhone: null });
+  });
+
+  it('requires a display name and a well-formed email before anything is sent', async () => {
+    const sent = serveEdit();
+    renderLedger();
+
+    const dialog = await openEdit();
+    const name = within(dialog).getByLabelText('Display name');
+    expect(name).toBeRequired();
+    expect(name).toHaveAttribute('maxLength', '200');
+    expect(within(dialog).getByLabelText('Email')).toHaveAttribute('type', 'email');
+
+    await userEvent.clear(name);
+    await userEvent.type(within(dialog).getByLabelText('Phone'), '{Enter}');
+    expect((name as HTMLInputElement).validity.valueMissing).toBe(true);
+    await userEvent.type(name, 'Jasmine Carter');
+    const email = within(dialog).getByLabelText<HTMLInputElement>('Email');
+    await userEvent.type(email, 'not-an-email{Enter}');
+    expect(email.validity.typeMismatch).toBe(true);
+    expect(screen.getByRole('dialog')).toBe(dialog);
+
+    // Once the email is corrected, the next save is the only one the server ever receives.
+    await userEvent.clear(email);
+    await userEvent.type(email, 'jasmine@example.test{Enter}');
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent.map((body) => body.contactEmail)).toEqual(['jasmine@example.test']);
+  });
+
+  it('shows the server’s refusal with its support reference and keeps the dialog open', async () => {
+    const detail = 'Lifecycle status must be one of: current, evicting, past.';
+    serveEdit({
+      refuse: {
+        status: 400,
+        body: { code: 'validation_failed', detail, correlationId: 'corr-783t' },
+      },
+    });
+    renderLedger();
+
+    const dialog = await openEdit();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save tenant' }));
+
+    expect(await within(dialog).findByText(new RegExp(detail))).toBeVisible();
+    expect(within(dialog).getByText(/Reference: corr-783t/)).toBeVisible();
+    expect(screen.getByRole('dialog')).toBe(dialog);
+  });
+
+  it('offers Edit for a tenant with no lease, where there are no late fees to set', async () => {
+    serveEdit({
+      detail: { ...DETAIL, lease: null, unitLabel: null, propertyAddress: null, balance: 0 },
+    });
+    renderLedger();
+
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Late fees' })).toBeNull();
+  });
+});

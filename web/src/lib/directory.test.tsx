@@ -4,7 +4,7 @@ import { http, HttpResponse, type JsonBodyType } from 'msw';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { useRunPreview } from '@/features/operations/useRuns';
+import { useRunPreview, useRunPreviewIssuedCoverage } from '@/features/operations/useRuns';
 import { useReportPreview, useStatement } from '@/features/reports/reports';
 import { useDashboard } from './dashboard';
 import { useSearch } from './search';
@@ -22,6 +22,8 @@ import {
   useTenants,
   useUnits,
   useUpdateOwner,
+  useUpdateProperty,
+  useUpdateTenant,
   useUpdateUnit,
 } from './directory';
 
@@ -52,6 +54,7 @@ beforeEach(() => {
     countedRead('property p2', '/api/directory/properties/p2', { id: 'p2', ownerId: 'o2' }),
     countedRead('tenants', '/api/directory/tenants', page),
     countedRead('tenant t1', '/api/directory/tenants/t1', { id: 't1', displayName: 'Ana Ruiz' }),
+    countedRead('tenant t2', '/api/directory/tenants/t2', { id: 't2', displayName: 'Ben Ode' }),
     countedRead('search', '/api/search', []),
     countedRead('dashboard', '/api/dashboard', {}),
     // The units read names its property in the query string, so one handler counts each property's.
@@ -63,6 +66,11 @@ beforeEach(() => {
     countedRead('rent roll', '/api/reports/rent-roll/preview', { columns: [], rows: [] }),
     countedRead('statement o1', '/api/statements/o1', {}),
     countedRead('disbursement preview', '/api/operations/runs/disbursement/preview', {}),
+    countedRead('rent preview', '/api/operations/runs/rent/preview', {}),
+    countedRead('late-fee preview', '/api/operations/runs/latefee/preview', {}),
+    countedRead('rent coverage', '/api/operations/runs/rent/preview/issued-coverage', {
+      rows: [],
+    }),
     http.post('/api/directory/properties', () => HttpResponse.json({ id: 'pNew' })),
     http.post('/api/directory/owners', () => HttpResponse.json({ id: 'oNew' })),
     http.post('/api/directory/tenants', () => HttpResponse.json({ id: 'tNew' })),
@@ -70,6 +78,8 @@ beforeEach(() => {
     http.put('/api/directory/units/:id', () => new HttpResponse(null, { status: 204 })),
     http.post('/api/directory/leases', () => HttpResponse.json({ id: 'lNew' })),
     http.put('/api/directory/owners/:id', () => new HttpResponse(null, { status: 204 })),
+    http.put('/api/directory/properties/:id', () => new HttpResponse(null, { status: 204 })),
+    http.put('/api/directory/tenants/:id', () => new HttpResponse(null, { status: 204 })),
   );
 });
 
@@ -93,6 +103,7 @@ async function mountWithReads<T>(mutate: () => T) {
       otherProperty: usePropertyDetail('p2'),
       tenants: useTenants(),
       tenant: useTenantDetail('t1'),
+      otherTenant: useTenantDetail('t2'),
       search: useSearch('Har'),
       dashboard: useDashboard(),
       units: useUnits('p1'),
@@ -100,6 +111,9 @@ async function mountWithReads<T>(mutate: () => T) {
       rentRoll: useReportPreview('rent-roll', {}),
       statement: useStatement('o1', { basis: 'cash', year: 2026, month: 10 }),
       disbursements: useRunPreview('disbursement', 2026, 10),
+      rentRun: useRunPreview('rent', 2026, 10),
+      lateFeeRun: useRunPreview('latefee', 2026, 10),
+      rentCoverage: useRunPreviewIssuedCoverage('rent', 2026, 10),
       mutation: mutate(),
     }),
     { wrapper },
@@ -114,6 +128,7 @@ async function mountWithReads<T>(mutate: () => T) {
       'property p2': 1,
       tenants: 1,
       'tenant t1': 1,
+      'tenant t2': 1,
       search: 1,
       dashboard: 1,
       'units p1': 1,
@@ -121,6 +136,9 @@ async function mountWithReads<T>(mutate: () => T) {
       'rent roll': 1,
       'statement o1': 1,
       'disbursement preview': 1,
+      'rent preview': 1,
+      'late-fee preview': 1,
+      'rent coverage': 1,
     }),
   );
   return result;
@@ -346,6 +364,97 @@ describe('owner writes', () => {
       'property p2': 1,
       tenants: 1,
       'units p1': 1,
+    });
+  });
+});
+
+describe('property writes', () => {
+  // Property p1 belongs to owner o1, and t1 is its tenant today; t2 lives elsewhere.
+  const property = { id: 'p1', ownerId: 'o1', tenants: [{ id: 't1' }] };
+
+  it("editing a property's address refetches every read that shows it, and no other property's", async () => {
+    const result = await mountWithReads(() => useUpdateProperty(property));
+    await result.current.mutation.mutateAsync({
+      id: 'p1',
+      address: '14 Oak Street',
+      city: 'Durham',
+      state: 'NC',
+      zip: '27701',
+      mgmtFeeBps: null,
+    });
+
+    await waitFor(() =>
+      expect(reads).toMatchObject({
+        // The property's own page and its list row.
+        'property p1': 2,
+        properties: 2,
+        // Its owner's page lists it by address.
+        'owner o1': 2,
+        // Its tenants' pages show the address under their unit.
+        'tenant t1': 2,
+        search: 2,
+        // Statements print the address, the owner's and (after a transfer) a former owner's, as
+        // does the rent roll.
+        'statement o1': 2,
+        'rent roll': 2,
+        // A run's issued-statement check names each affected property by its address.
+        'rent coverage': 2,
+      }),
+    );
+    // Another property, its owner, another tenant, the lists that show no address, and the reads
+    // that name no property are untouched.
+    expect(reads).toMatchObject({
+      'property p2': 1,
+      'owner o2': 1,
+      'tenant t2': 1,
+      owners: 1,
+      tenants: 1,
+      'units p1': 1,
+      dashboard: 1,
+      'disbursement preview': 1,
+      'rent preview': 1,
+    });
+  });
+});
+
+describe('tenant writes', () => {
+  it("editing a tenant refetches every read that shows its name or lifecycle, and no other tenant's", async () => {
+    const result = await mountWithReads(() => useUpdateTenant('t1'));
+    await result.current.mutation.mutateAsync({
+      id: 't1',
+      displayName: 'Ana Ruiz-Ode',
+      contactEmail: 'ana@example.test',
+      contactPhone: null,
+      lifecycleStatus: 'evicting',
+    });
+
+    await waitFor(() =>
+      expect(reads).toMatchObject({
+        // The tenant's own ledger header and its list row.
+        'tenant t1': 2,
+        tenants: 2,
+        // Property pages list their tenants by name and lifecycle; the tenant read names no
+        // property, so every property page refetches.
+        'property p1': 2,
+        'property p2': 2,
+        search: 2,
+        // The rent and late-fee runs label each row with the tenant's name, as the rent roll does.
+        'rent preview': 2,
+        'late-fee preview': 2,
+        'rent roll': 2,
+      }),
+    );
+    // Another tenant, the owner reads, the dashboard and the owner-level run are untouched.
+    expect(reads).toMatchObject({
+      'tenant t2': 1,
+      owners: 1,
+      'owner o1': 1,
+      properties: 1,
+      dashboard: 1,
+      'statement o1': 1,
+      'disbursement preview': 1,
+      // A run's issued-statement check names owners and properties, never tenants.
+      'rent coverage': 1,
     });
   });
 });

@@ -25,6 +25,7 @@ import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/component
 import { AddLeaseDialog } from './AddLeaseDialog';
 import { ApplyModal } from './ApplyModal';
 import { AuditDrawer } from './AuditDrawer';
+import { EditTenantDialog } from './EditTenantDialog';
 import { LeaseLateFeeBadge, LeaseLateFeeModal } from './LeaseLateFeeModal';
 import { LedgerComposer } from './LedgerComposer';
 import { LedgerTable } from './LedgerTable';
@@ -77,6 +78,7 @@ export function LedgerPage() {
 
   const [lateFeeOpen, setLateFeeOpen] = useState(false);
   const [addLeaseOpen, setAddLeaseOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
   // #377: the most recent post, whose issued-statement coverage the notice reports. The composer and
   // dialogs close on success, so the notice lives here; it persists until dismissed or navigation.
@@ -216,6 +218,9 @@ export function LedgerPage() {
                     </Button>
                   </span>
                 )}
+                <Button variant="ghost" size="sm" onClick={() => setEditOpen(true)}>
+                  Edit
+                </Button>
                 {/*
                   Always offered: a tenant with a lease may be given the next one, and the server's
                   overlap check refuses a term that collides with it (#781).
@@ -430,6 +435,9 @@ export function LedgerPage() {
           tenantName={detail.data.displayName}
           onClose={() => setAddLeaseOpen(false)}
         />
+      )}
+      {editOpen && detail.data && (
+        <EditTenantDialog tenant={detail.data} onClose={() => setEditOpen(false)} />
       )}
       {lateFeeOpen && detail.data?.lease && (
         <LeaseLateFeeModal

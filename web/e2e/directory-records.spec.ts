@@ -1,5 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { orgToday, SCENARIO_ADMIN, SCENARIO_STAFF, signIn } from './helpers';
+import {
+  openPalette,
+  orgToday,
+  paletteOptions,
+  SCENARIO_ADMIN,
+  SCENARIO_STAFF,
+  signIn,
+} from './helpers';
 import { test } from './test';
 
 // Creating directory records (#544), driven in the scenario organization (`seed --org scenario`,
@@ -88,7 +95,7 @@ function unitsCard(page: Page): Locator {
  */
 async function expectRefusedInPlace(
   field: Locator,
-  constraint: 'rangeOverflow' | 'typeMismatch',
+  constraint: 'rangeOverflow' | 'typeMismatch' | 'valueMissing',
 ): Promise<void> {
   await expect(field).toBeFocused();
   expect(await field.evaluate((el: HTMLInputElement, c) => el.validity[c], constraint)).toBe(true);
@@ -534,4 +541,137 @@ test('edits an owner by keyboard: the fee rate as a percent, the reserve and the
   await expect(field('ReserveAmount').locator('td').nth(1)).toHaveText(/"Amount": 0(\.00)?,/);
   await expect(field('ReserveAmount').locator('td').nth(2)).toHaveText(/"Amount": 500(\.00)?,/);
   await expect(field('Name').locator('td').nth(2)).toHaveText(renamed);
+});
+
+/** Opens the palette on `term` and returns its result rows, closing nothing. */
+async function searchFor(page: Page, term: string): Promise<Locator> {
+  const search = await openPalette(page);
+  await search.fill(term);
+  return paletteOptions(page).locator('.label');
+}
+
+/**
+ * The result labels that read exactly `text`. A tenant's record row is followed by its contextual
+ * actions ("Record payment → <name>"), whose labels contain the name too.
+ */
+function exactly(labels: Locator, text: string): Locator {
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return labels.filter({ hasText: new RegExp(`^${escaped}$`) });
+}
+
+test('corrects a property and a tenant by keyboard: a blank address is refused, and each change follows on its page, its list, its owner and in search @scenario:directory-edit-property-tenant', async ({
+  page,
+}) => {
+  const id = runId();
+  let propertyWrites = 0;
+  let tenantWrites = 0;
+  page.on('request', (request) => {
+    if (request.method() !== 'PUT') return;
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/directory/properties/')) propertyWrites += 1;
+    if (path.startsWith('/api/directory/tenants/')) tenantWrites += 1;
+  });
+
+  await signIn(page, SCENARIO_STAFF);
+  const { owner, address } = await newOwnerAndProperty(page, id);
+  const moved = `${100 + Math.floor(Math.random() * 900)} e2e Lane ${id}`;
+
+  // Search finds the property by this run's id under the address it was created with. The search is
+  // read again below within its 30-second stale time, so seeing the new address there means the
+  // save refreshed it.
+  let results = await searchFor(page, id);
+  await expect(exactly(results, address)).toHaveCount(1);
+  await page.keyboard.press('Escape');
+
+  // Edit opens from its focused button on the property as it is. A blank address is refused in the
+  // browser and nothing is sent.
+  await page.getByRole('button', { name: 'Edit', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const editProperty = page.getByRole('dialog', { name: `Edit ${address}` });
+  await expect(editProperty.getByLabel('Address')).toHaveValue(address);
+  await expect(editProperty.getByLabel('City')).toHaveValue('');
+  await editProperty.getByLabel('Address').fill('');
+  await page.keyboard.press('Enter');
+  await expectRefusedInPlace(editProperty.getByLabel('Address'), 'valueMissing');
+  await expect(editProperty).toBeVisible();
+  expect(propertyWrites).toBe(0);
+
+  // Keyboard path: the new address, a city, state and zip, and Enter in the last field.
+  await editProperty.getByLabel('Address').fill(moved);
+  await editProperty.getByLabel('City').fill('Raleigh');
+  await editProperty.getByLabel('State').fill('NC');
+  await editProperty.getByLabel('Zip').fill('27601');
+  await page.keyboard.press('Enter');
+  await expect(editProperty).toBeHidden();
+  expect(propertyWrites).toBe(1);
+
+  // The page follows with no reload, its owner unchanged.
+  await expect(page.getByRole('heading', { name: moved, level: 2 })).toBeVisible();
+  const content = page.locator('.pf-page');
+  await expect(content).toContainText(`Raleigh, NC, 27601 · Owner: ${owner}`);
+
+  // So do the list, the owner's page (read when the property was created) and search.
+  await openList(page, 'Properties');
+  const propertyRow = await onlyRow(page, 'Properties', id);
+  await expect(propertyRow.locator('td').nth(0)).toHaveText(moved);
+  await expect(propertyRow.locator('td').nth(1)).toHaveText('Raleigh');
+  await openList(page, 'Owners');
+  await (await onlyRow(page, 'Owners', owner)).click();
+  await expect(page.getByRole('heading', { name: owner, level: 2 })).toBeVisible();
+  await expect(content.locator('tbody tr').filter({ hasText: moved })).toContainText('Raleigh');
+  await expect(content).not.toContainText(address);
+  results = await searchFor(page, id);
+  await expect(exactly(results, moved)).toHaveCount(1);
+  await expect(exactly(results, address)).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // A tenant of this run's own, current, with no lease, so no run picks it up.
+  const tenant = `e2e Tenant ${id}`;
+  const renamed = `e2e Tenant ${id} Ode`;
+  await openList(page, 'Tenants');
+  await page.getByRole('button', { name: 'New tenant' }).click();
+  const create = page.getByRole('dialog', { name: 'New tenant' });
+  await create.getByLabel('Display name').fill(tenant);
+  await create.getByLabel('Phone').fill('919-555-0142');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: tenant, level: 2 })).toBeVisible();
+
+  // Read the list and search under the name it was created with, then return to its ledger.
+  await openList(page, 'Tenants');
+  await expect((await onlyRow(page, 'Tenants', tenant)).locator('td').nth(4)).toHaveText('Current');
+  results = await searchFor(page, tenant);
+  await expect(exactly(results, tenant)).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await (await onlyRow(page, 'Tenants', tenant)).click();
+  await expect(page.getByRole('heading', { name: tenant, level: 2 })).toBeVisible();
+
+  // Edit opens from its focused button on the tenant as it is. Rename, add an email, mark the tenant
+  // evicting, and press Enter in the phone field.
+  await page.getByRole('button', { name: 'Edit', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const editTenant = page.getByRole('dialog', { name: `Edit ${tenant}` });
+  await expect(editTenant.getByLabel('Display name')).toHaveValue(tenant);
+  await expect(editTenant.getByLabel('Phone')).toHaveValue('919-555-0142');
+  await expect(editTenant.getByLabel('Lifecycle')).toHaveValue('current');
+  await editTenant.getByLabel('Display name').fill(renamed);
+  await editTenant.getByLabel('Email').fill(`e2e-tenant-${id}@example.test`);
+  await editTenant.getByLabel('Lifecycle').selectOption('Evicting');
+  await editTenant.getByLabel('Phone').focus();
+  await page.keyboard.press('Enter');
+  await expect(editTenant).toBeHidden();
+  expect(tenantWrites).toBe(1);
+
+  // The ledger header follows with no reload.
+  await expect(page.getByRole('heading', { name: renamed, level: 2 })).toBeVisible();
+  const header = page.locator('.pf-tenant-hd');
+  await expect(header.locator('.pf-badge').first()).toHaveText('Evicting');
+  await expect(header).toContainText('919-555-0142');
+
+  // So do the list and search, both read under the old name moments ago.
+  await openList(page, 'Tenants');
+  const tenantRow = await onlyRow(page, 'Tenants', renamed);
+  await expect(tenantRow.locator('td').nth(4)).toHaveText('Evicting');
+  results = await searchFor(page, tenant);
+  await expect(exactly(results, renamed)).toHaveCount(1);
+  await expect(exactly(results, tenant)).toHaveCount(0);
 });
