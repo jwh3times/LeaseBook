@@ -4,7 +4,7 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { Modal } from '@/components/Modal';
 import { Button, Input } from '@/design';
 import { num, useUpdateOwner, type OwnerDetail } from '@/lib/directory';
-import { reportFirstInvalidField } from '@/lib/fieldConstraints';
+import { optionalText, reportFirstInvalidField } from '@/lib/fieldConstraints';
 
 /** Basis points as the percent the field shows: 833 is "8.33", and no rate is an empty field. */
 function percentOf(bps: number | string | null): string {
@@ -15,9 +15,6 @@ function percentOf(bps: number | string | null): string {
 function bpsOf(percent: string): number | null {
   return percent.trim() === '' ? null : Math.round(Number(percent) * 100);
 }
-
-/** An emptied optional field is cleared, not saved as an empty string. */
-const orNull = (value: string): string | null => (value.trim() === '' ? null : value.trim());
 
 /**
  * Corrects an owner (#782). `UpdateOwner` replaces the whole owner, so every field is prefilled from
@@ -49,9 +46,9 @@ export function EditOwnerDialog({ owner, onClose }: { owner: OwnerDetail; onClos
       await update.mutateAsync({
         id: owner.id,
         name: name.trim(),
-        initials: orNull(initials),
-        contactEmail: orNull(email),
-        contactPhone: orNull(phone),
+        initials: optionalText(initials),
+        contactEmail: optionalText(email),
+        contactPhone: optionalText(phone),
         defaultMgmtFeeBps: bpsOf(feePercent),
         reserveAmount: Number(reserve),
       });

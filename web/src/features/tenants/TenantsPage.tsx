@@ -6,9 +6,13 @@ import { Button, Input, Money, Select, type TableColumn } from '@/design';
 import { IndexView } from '@/components/IndexView';
 import { Modal } from '@/components/Modal';
 import { TenantFinancialStandingBadges, TenantLifecycleBadge } from '@/components/StatusBadge';
-import { num, useCreateTenant, useTenants, type TenantListRow } from '@/lib/directory';
-
-const TENANT_LIFECYCLE_STATUSES = ['current', 'evicting', 'past'] as const;
+import {
+  num,
+  TENANT_LIFECYCLE_STATUSES,
+  useCreateTenant,
+  useTenants,
+  type TenantListRow,
+} from '@/lib/directory';
 
 function tenantMatches(row: TenantListRow, q: string): boolean {
   return (
