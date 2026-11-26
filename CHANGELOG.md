@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.40.1] - 2026-11-26
+
+### Changed
+
+- docs(agents): record the Vitest name filter and two e2e traps (#850)
+
 ## [0.40.0] - 2026-11-26
 
 ### Added
@@ -2738,7 +2744,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.1...HEAD
+[0.40.1]: https://github.com/jwh3times/LeaseBook/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/jwh3times/LeaseBook/compare/v0.39.40...v0.40.0
 [0.39.40]: https://github.com/jwh3times/LeaseBook/compare/v0.39.39...v0.39.40
 [0.39.39]: https://github.com/jwh3times/LeaseBook/compare/v0.39.38...v0.39.39
