@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-24
+- **Last reviewed:** 2026-11-26
 
 How to run builds, tests and gates on a development machine without a false green. The commands
 are in `AGENTS.md` and [`docs/runbooks/local-dev.md`](../runbooks/local-dev.md); this file holds
@@ -67,6 +67,17 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
   never the main checkout's `leasebook-db`.
 - **The payment fixture isn't reset between runs**, so a spec that counts rows page-wide fails the
   second time: scope every assertion to the payment's own reference.
+- **Every test fails at launch after a Playwright version bump**, because the browser build the new
+  version needs isn't installed; the one-time install in the runbook was for the old version. Run
+  `npx playwright install chromium` from `web/` again.
+- **A stale e2e template can fail a few specs that the code doesn't break.** A full
+  `npm run e2e:fresh` run once failed only the owner-portal statement-PDF tests, with the statement
+  PDF answering 503, and all four passed after a rebuild; why the template was stale wasn't
+  established. The template rebuilds itself only when a migration, a seeder or the bootstrap SQL
+  changes. Before debugging a red that CI doesn't show, run
+  `node scripts/e2e-db.mjs reset --rebuild` from the repository root, which drops and rebuilds
+  `leasebook_e2e_template` (bootstrap, migrate, seed) whatever its fingerprint says and recreates
+  the copy from it, then run again.
 - **Grep the specs before adding a control.** Playwright's `getByLabel` and `getByRole` names match
   substrings, case-insensitively, so a new "Finalize May 2026 again" button broke an unrelated
   `name: 'Finalize'` click. Run `grep -rn "name: '<word>'" web/e2e` for each word of a new name,
