@@ -623,8 +623,8 @@ describe('Edit a property (#783)', () => {
 
     const address = within(dialog).getByLabelText('Address');
     await userEvent.clear(address);
-    await userEvent.type(address, '16 Harborview Ln');
-    // A field is saved trimmed.
+    // Fields are saved trimmed: the required address as well as an optional field.
+    await userEvent.type(address, '  16 Harborview Ln  ');
     await userEvent.type(within(dialog).getByLabelText('Zip'), '  28401  {Enter}');
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

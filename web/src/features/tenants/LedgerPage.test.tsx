@@ -1012,7 +1012,8 @@ describe('LedgerPage edit the tenant (#783)', () => {
     ).toEqual(['Current', 'Evicting', 'Past']);
 
     await userEvent.clear(name);
-    await userEvent.type(name, 'Jasmine Carter-Ode');
+    // The name is saved trimmed.
+    await userEvent.type(name, '  Jasmine Carter-Ode  ');
     await userEvent.type(within(dialog).getByLabelText('Email'), 'jasmine@example.test');
     await userEvent.selectOptions(lifecycle, 'evicting');
     await userEvent.type(within(dialog).getByLabelText('Phone'), '{Enter}');
