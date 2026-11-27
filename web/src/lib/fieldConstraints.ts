@@ -17,3 +17,12 @@ export function reportFirstInvalidField(container: HTMLElement | null): boolean 
   invalid.focus();
   return false;
 }
+
+/**
+ * An optional text field's value to send: trimmed, and an emptied field as null, so clearing it
+ * clears the stored value rather than saving an empty string.
+ */
+export function optionalText(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}

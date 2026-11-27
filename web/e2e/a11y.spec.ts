@@ -205,6 +205,39 @@ for (const theme of THEMES) {
       await page.waitForURL(/\/properties\//);
       await runA11y(page);
     });
+
+    // #783: the property edit dialog over the property page, prefilled. Opening it saves nothing.
+    test('no WCAG AA violations with the edit property dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/properties', { waitUntil: 'networkidle' });
+      const row = page.locator('tbody tr').first();
+      const address = (await row.locator('td').first().innerText()).trim();
+      await row.click();
+      await page.waitForURL(/\/properties\//);
+      await expect(page.getByRole('heading', { name: address, level: 2 })).toBeVisible();
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: `Edit ${address}` });
+      await expect(dialog.getByLabel('Address')).toHaveValue(address);
+      await runA11y(page);
+    });
+
+    // #783: the tenant edit dialog over the ledger, prefilled. Opening it saves nothing.
+    test('no WCAG AA violations with the edit tenant dialog open @scenario:accessibility-staff-pages', async ({
+      page,
+    }) => {
+      await seedTheme(page, theme);
+      await signIn(page, DEMO_ADMIN);
+      await page.goto('/tenants', { waitUntil: 'networkidle' });
+      await page.getByText('Jasmine Carter').click();
+      await page.waitForURL(/\/tenants\/[^/]+$/);
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Edit Jasmine Carter' });
+      await expect(dialog.getByLabel('Display name')).toHaveValue('Jasmine Carter');
+      await runA11y(page);
+    });
   });
 
   test.describe(`a11y (${theme}) — command palette`, () => {

@@ -558,3 +558,181 @@ describe('Add and edit a unit (#780)', () => {
     expect(screen.getByRole('dialog')).toBe(dialog);
   });
 });
+
+interface PropertySent {
+  id: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  mgmtFeeBps: number | string | null;
+}
+
+/**
+ * Serves the property, carrying a management-fee override the page does not show, and records each
+ * save. A successful save changes what the next property read returns, as the server does.
+ */
+function serveEdit(
+  options: {
+    mgmtFeeBps?: number | null;
+    refuse?: { status: number; body: Record<string, unknown> };
+    /** Holds the save's answer until it resolves, so a test can see the dialog while it saves. */
+    hold?: Promise<void>;
+  } = {},
+) {
+  const sent: PropertySent[] = [];
+  let property: Omit<typeof PROPERTY, keyof PropertySent> & PropertySent = {
+    ...PROPERTY,
+    mgmtFeeBps: options.mgmtFeeBps === undefined ? 650 : options.mgmtFeeBps,
+  };
+  server.use(
+    http.get('/api/directory/properties/:id', () => HttpResponse.json(property)),
+    http.put('/api/directory/properties/:id', async ({ request, params }) => {
+      const body = (await request.json()) as PropertySent;
+      sent.push({ ...body, id: String(params.id) });
+      await options.hold;
+      if (options.refuse)
+        return HttpResponse.json(options.refuse.body, {
+          status: options.refuse.status,
+          headers: { 'content-type': 'application/problem+json' },
+        });
+      property = { ...property, ...body };
+      return new HttpResponse(null, { status: 204 });
+    }),
+  );
+  return sent;
+}
+
+async function openEdit() {
+  await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+  return screen.getByRole('dialog', { name: 'Edit 14 Harborview Ln' });
+}
+
+describe('Edit a property (#783)', () => {
+  it('opens on the stored address, and the header shows the saved change', async () => {
+    const sent = serveEdit();
+    renderProperty();
+
+    const dialog = await openEdit();
+    expect(within(dialog).getByLabelText('Address')).toHaveValue('14 Harborview Ln');
+    expect(within(dialog).getByLabelText('City')).toHaveValue('Wilmington');
+    expect(within(dialog).getByLabelText('State')).toHaveValue('NC');
+    expect(within(dialog).getByLabelText('Zip')).toHaveValue('');
+    // The override is not offered: nothing applies it today.
+    expect(within(dialog).queryByLabelText(/fee/i)).toBeNull();
+
+    const address = within(dialog).getByLabelText('Address');
+    await userEvent.clear(address);
+    // Fields are saved trimmed: the required address as well as an optional field.
+    await userEvent.type(address, '  16 Harborview Ln  ');
+    await userEvent.type(within(dialog).getByLabelText('Zip'), '  28401  {Enter}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([
+      {
+        id: 'p1',
+        address: '16 Harborview Ln',
+        city: 'Wilmington',
+        state: 'NC',
+        zip: '28401',
+        mgmtFeeBps: 650,
+      },
+    ]);
+    expect(await screen.findByRole('heading', { name: '16 Harborview Ln' })).toBeVisible();
+    expect(screen.getByText(/Wilmington, NC, 28401/)).toBeVisible();
+  });
+
+  it('sends the management-fee override back exactly as stored, and clears an emptied field', async () => {
+    const sent = serveEdit();
+    renderProperty();
+
+    const dialog = await openEdit();
+    await userEvent.clear(within(dialog).getByLabelText('City'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save property' }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ city: null, mgmtFeeBps: 650 });
+  });
+
+  it('keeps a property with no override at none, never a zero override', async () => {
+    const sent = serveEdit({ mgmtFeeBps: null });
+    renderProperty();
+
+    const dialog = await openEdit();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save property' }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]!.mgmtFeeBps).toBeNull();
+  });
+
+  it('says it is saving and takes no second save until the first is answered', async () => {
+    let release = () => {};
+    const sent = serveEdit({ hold: new Promise<void>((resolve) => (release = resolve)) });
+    renderProperty();
+
+    const dialog = await openEdit();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save property' }));
+    const saving = await within(dialog).findByRole('button', { name: 'Saving…' });
+    expect(saving).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Zip'), '{Enter}');
+    expect(sent).toHaveLength(1);
+
+    release();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toHaveLength(1);
+  });
+
+  it('requires an address and bounds every field before anything is sent', async () => {
+    const sent = serveEdit();
+    renderProperty();
+
+    const dialog = await openEdit();
+    const address = within(dialog).getByLabelText('Address');
+    expect(address).toBeRequired();
+    expect(address).toHaveAttribute('maxLength', '200');
+    expect(within(dialog).getByLabelText('City')).toHaveAttribute('maxLength', '100');
+    expect(within(dialog).getByLabelText('State')).toHaveAttribute('maxLength', '50');
+    expect(within(dialog).getByLabelText('Zip')).toHaveAttribute('maxLength', '20');
+
+    await userEvent.clear(address);
+    await userEvent.type(within(dialog).getByLabelText('City'), '{Enter}');
+    expect((address as HTMLInputElement).validity.valueMissing).toBe(true);
+    expect(screen.getByRole('dialog')).toBe(dialog);
+
+    // Once the address is filled in, the next save is the only one the server ever receives.
+    await userEvent.type(address, '16 Harborview Ln{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent.map((body) => body.address)).toEqual(['16 Harborview Ln']);
+  });
+
+  it('shows the server’s refusal with its support reference and keeps the dialog open', async () => {
+    const detail = 'Address must be 200 characters or fewer.';
+    serveEdit({
+      refuse: {
+        status: 400,
+        body: { code: 'validation_failed', detail, correlationId: 'corr-783p' },
+      },
+    });
+    renderProperty();
+
+    const dialog = await openEdit();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save property' }));
+
+    expect(await within(dialog).findByText(new RegExp(detail))).toBeVisible();
+    expect(within(dialog).getByText(/Reference: corr-783p/)).toBeVisible();
+    expect(screen.getByRole('dialog')).toBe(dialog);
+  });
+
+  it('closes on Cancel without saving', async () => {
+    const sent = serveEdit();
+    renderProperty();
+
+    const dialog = await openEdit();
+    await userEvent.type(within(dialog).getByLabelText('Address'), ' Rear');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(sent).toHaveLength(0);
+    expect(screen.getByRole('heading', { name: '14 Harborview Ln' })).toBeVisible();
+  });
+});
