@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type Query,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import {
   getApiDirectoryOwners,
   getApiDirectoryOwnersById,
@@ -15,6 +21,8 @@ import {
   postApiDirectoryUnits,
   putApiDirectoryLeasesById,
   putApiDirectoryOwnersById,
+  putApiDirectoryPropertiesById,
+  putApiDirectoryTenantsById,
   putApiDirectoryUnitsById,
   type CreateLease,
   type CreateOwner,
@@ -35,6 +43,8 @@ import {
   type UnitRow,
   type UpdateLease,
   type UpdateOwner,
+  type UpdateProperty,
+  type UpdateTenant,
   type UpdateUnit,
   unwrap,
 } from '@/api';
@@ -55,6 +65,9 @@ export type {
 // boundary so money/quantities reach `<Money>` and arithmetic as real numbers.
 export const num = (value: number | string | null | undefined): number =>
   value == null ? 0 : typeof value === 'number' ? value : Number(value);
+
+/** A tenant's operational lifecycle, in the order the screens offer it (TenantLifecycleStatus). */
+export const TENANT_LIFECYCLE_STATUSES = ['current', 'evicting', 'past'] as const;
 
 // At demo/Pro scale (≤ 300 units) the UI loads one ample page and filters client-side instantly (P42),
 // so the hooks fetch a large first page and the screens narrow it in memory.
@@ -235,6 +248,96 @@ export function useTransferPropertyOwnership(propertyId: string) {
         qc.invalidateQueries({ queryKey: ['properties'] }),
         qc.invalidateQueries({ queryKey: ['owners'] }),
         qc.invalidateQueries({ queryKey: ['owner'] }),
+      ]),
+  });
+}
+
+// The operations feature owns the run keys: `runPreviewKey` is ['operations', 'preview', type, year,
+// month], and `runPreviewIssuedCoverageKey` adds 'issued-coverage'. A prefix cannot pick one without
+// the other, so these predicates do.
+
+/** The run previews of the named run types, without their issued-statement checks. */
+const runPreviewsOf =
+  (types: readonly string[]) =>
+  ({ queryKey }: Query): boolean =>
+    queryKey.length === 5 &&
+    queryKey[0] === 'operations' &&
+    queryKey[1] === 'preview' &&
+    types.includes(String(queryKey[2]));
+
+/** Every run's issued-statement check, which names each affected owner and property. */
+const runIssuedCoverage = ({ queryKey }: Query): boolean =>
+  queryKey[0] === 'operations' &&
+  queryKey[1] === 'preview' &&
+  queryKey.at(-1) === 'issued-coverage';
+
+/** The property an edit belongs to: its owner, and the tenants whose pages show its address. */
+export interface PropertyEditTarget {
+  id: string;
+  ownerId: string;
+  tenants: readonly { id: string }[];
+}
+
+/**
+ * Corrects a property's address (#783). `UpdateProperty` replaces every field, the management-fee
+ * override included, so callers send the override back exactly as the read returned it.
+ *
+ * The address shows on the property's page and list row, its owner's page, the pages of its tenants
+ * today (the property read lists exactly the tenants whose page names it), search, statements (a
+ * former owner's too, for the months before a transfer), the rent roll and a run's issued-statement
+ * check. No count, balance or run line changes.
+ */
+export function useUpdateProperty(property: PropertyEditTarget) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateProperty) =>
+      unwrap(
+        putApiDirectoryPropertiesById({ path: { id }, body: { id, ...body } }),
+        'Failed to save the property.',
+        { allowNoContent: true },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['property', property.id] }),
+        qc.invalidateQueries({ queryKey: ['properties'] }),
+        qc.invalidateQueries({ queryKey: ['owner', property.ownerId] }),
+        ...property.tenants.map((tenant) =>
+          qc.invalidateQueries({ queryKey: ['tenant', tenant.id] }),
+        ),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+        qc.invalidateQueries({ queryKey: ['statement'] }),
+        qc.invalidateQueries({ queryKey: ['report-preview'] }),
+        qc.invalidateQueries({ predicate: runIssuedCoverage }),
+      ]),
+  });
+}
+
+/**
+ * Corrects a tenant (#783): display name, contact and lifecycle status. `UpdateTenant` replaces all
+ * four, so callers send the tenant back whole. Lifecycle is operational only; nothing it changes
+ * posts or moves money.
+ *
+ * The name and lifecycle show on the tenant's ledger header and list row and on the property page
+ * listing it, which the tenant read does not name, so every property page refetches. The name also
+ * shows in search, on the rent and late-fee run previews' rows and in the rent roll.
+ */
+export function useUpdateTenant(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: UpdateTenant) =>
+      unwrap(
+        putApiDirectoryTenantsById({ path: { id }, body: { id, ...body } }),
+        'Failed to save the tenant.',
+        { allowNoContent: true },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['tenant', tenantId] }),
+        qc.invalidateQueries({ queryKey: ['tenants'] }),
+        qc.invalidateQueries({ queryKey: ['property'] }),
+        qc.invalidateQueries({ queryKey: ['search'] }),
+        qc.invalidateQueries({ predicate: runPreviewsOf(['rent', 'latefee']) }),
+        qc.invalidateQueries({ queryKey: ['report-preview'] }),
       ]),
   });
 }

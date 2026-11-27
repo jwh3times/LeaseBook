@@ -213,6 +213,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # PostgreSQL 19 is held back until we choose to upgrade (#839). Production targets Flexible
+    # Server 18 (infra/modules/database.bicep), and a lone compose bump would leave the other
+    # postgres:18 pins behind and strand local data. Remove this block as the upgrade's first step.
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
 
   # Action versions pinned in .github/workflows/*.yml (ci, deploy-dev, deploy-prod).
   - package-ecosystem: "github-actions"

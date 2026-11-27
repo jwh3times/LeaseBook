@@ -16,6 +16,7 @@ import {
   type TenantListRow,
   type UnitRow,
 } from '@/lib/directory';
+import { EditPropertyDialog } from './EditPropertyDialog';
 import { TransferOwnershipDialog, type TransferredOwnership } from './TransferOwnershipDialog';
 import { UnitDialog } from './UnitDialog';
 
@@ -26,6 +27,7 @@ export function PropertyDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const query = usePropertyDetail(id);
+  const [editing, setEditing] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [transferred, setTransferred] = useState<TransferredOwnership | null>(null);
   const [unitEdit, setUnitEdit] = useState<UnitEdit | null>(null);
@@ -106,13 +108,19 @@ export function PropertyDetailPage() {
       title={(p) => p.address}
       sub={(p) => `${[p.city, p.state, p.zip].filter(Boolean).join(', ')} · Owner: ${p.ownerName}`}
       actions={() => (
-        <Button variant="ghost" size="sm" icon="owners" onClick={() => setTransferring(true)}>
-          Transfer ownership
-        </Button>
+        <>
+          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="sm" icon="owners" onClick={() => setTransferring(true)}>
+            Transfer ownership
+          </Button>
+        </>
       )}
     >
       {(p) => (
         <div className="col gap16">
+          {editing && <EditPropertyDialog property={p} onClose={() => setEditing(false)} />}
           {transferring && (
             <TransferOwnershipDialog
               property={p}

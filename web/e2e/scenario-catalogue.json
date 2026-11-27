@@ -231,6 +231,14 @@
       "routes": ["PUT /api/directory/owners/{id}"]
     },
     {
+      "id": "directory-edit-property-tenant",
+      "workflow": "Correct a property's address and a tenant's name, contact and lifecycle by keyboard, with a blank address refused, and see the property on its page, its list, its owner's page and in search, and the tenant on its ledger, its list and in search, with no reload",
+      "area": "Directory",
+      "spec": "directory-records.spec.ts",
+      "events": [],
+      "routes": ["PUT /api/directory/properties/{id}", "PUT /api/directory/tenants/{id}"]
+    },
+    {
       "id": "error-and-empty-states",
       "workflow": "An expired session, a failed query, a failed post and an empty list each show their designed state",
       "area": "Error states",
@@ -938,18 +946,6 @@
         "route": "GET /api/accounting/trust-equation",
         "reason": "No screen requests it; the screens that show these figures get them from other routes.",
         "date": "2026-10-12"
-      },
-      {
-        "route": "PUT /api/directory/properties/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
-      },
-      {
-        "route": "PUT /api/directory/tenants/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 558
       },
       {
         "route": "GET /api/health",

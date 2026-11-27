@@ -3,7 +3,7 @@
 - **Audience:** Coding agents and maintainers configuring engineering skills
 - **Status:** Living configuration
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-23
+- **Last reviewed:** 2026-11-26
 
 How `test-prover` runs one test on its own here, and how it tells a run that tested nothing from a
 pass.
@@ -26,6 +26,14 @@ pass.
     `tests/<Project>/bin/Debug/net10.0/<Project>.exe -class <FQN>` runs the class instead.
 - `web/`: Vitest, `src/**/*.{test,spec}.{ts,tsx}`.
   - One file: `npx vitest run <file>`; one test by name: `npx vitest run <file> -t "<name>"`.
+  - **A `-t` pattern that matches nothing reports every test skipped** (`Tests  N skipped (N)`),
+    not a failure. `-t` is a regular expression over the test's full name, which Vitest 5 joins
+    with a spaced `>`: `-t "<describe> > <test>"`. The describe and test names joined by a plain
+    space match nothing, and so does an unescaped `(`: the describe `Edit a property (#783)` needs
+    `-t "Edit a property \(#783\) > closes on Cancel without saving"`. A bare test name works, but
+    it runs every test of that name, and names repeat across describe blocks (two in
+    `PropertyDetailPage.test.tsx` each have a "shows the server’s refusal with its support
+    reference…" test).
   - The count is Vitest's `Tests  N passed (N)` line, which `mutate.mjs` reads already.
   - The scratch worktree links `web/node_modules`.
 - repo root: `scripts/*.test.mjs`, node's built-in test runner.
