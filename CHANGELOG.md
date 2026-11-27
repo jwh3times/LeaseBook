@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.40.2] - 2026-11-26
+
+### Changed
+
+- build(deps): Bump the `npm-minor-and-patch` group in `/web` with 3 updates (#847)
+
 ## [0.40.1] - 2026-11-26
 
 ### Changed
@@ -2744,7 +2750,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.1...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.2...HEAD
+[0.40.2]: https://github.com/jwh3times/LeaseBook/compare/v0.40.1...v0.40.2
 [0.40.1]: https://github.com/jwh3times/LeaseBook/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/jwh3times/LeaseBook/compare/v0.39.40...v0.40.0
 [0.39.40]: https://github.com/jwh3times/LeaseBook/compare/v0.39.39...v0.39.40
