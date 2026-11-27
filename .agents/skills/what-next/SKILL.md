@@ -60,7 +60,8 @@ node .agents/skills/handoff/handoff-map.mjs get --key <Map key>
 
 - **`file` is null** (or `inMap` is false): no handoff waits for this repository.
 - **`file` is set and `exists` is true**: a handoff waits to be resumed. Read the document's
-  **Where you are** and first **Next step** for the report; do not act on them.
+  **Where you are** and first **Next step** for the report; do not act on them. Keep `writtenBy`
+  and `writtenHere` (the machine that wrote it, and whether that is this one) for the report line.
 - **`file` is set and `exists` is false**: the document has not reached this machine yet (the
   `note` says why). Report it as pending.
 - **`conflicts` not empty**: report that the map has conflicting copies, which `lets-go` resolves
@@ -174,10 +175,12 @@ checks' state.
 **Private work** is classified and routed like the rest, and marked `[private]` in the report.
 
 **An active handoff** heads **Finish first**, routed to `/lets-go`: another session parked its work
-for this one to resume, and its document names the next step. A pending one (its document not here
-yet) is listed there too, with no route. The map does not record which machine wrote a handoff, so
-the report names the document and its date: a handoff this machine wrote is waiting for the other
-one, and is left alone.
+for this one to resume, and its document names the next step. That holds whichever machine wrote
+it: a handoff moves work to the other machine, or closes a session so a fresh one can start on the
+same machine, and either way the next session resumes it. The machine only labels the report line:
+"written here" when `writtenHere` is true, "written on `<writtenBy>`" when it is false, and no
+note when `writtenBy` is null.
+A pending one (its document not here yet) is listed there too, with no route.
 
 ## 3. Rank
 
@@ -223,8 +226,8 @@ alone. List at most ten items per bucket and count the rest. Leave out an empty 
 **Next:** <title> (#<n>) <[private]> — run `<command> <n>`. <One line: why this, above the rest.>
 
 ### Finish first
-- Active handoff `<file>` (<date>) — <its first next step> — `/lets-go`, unless this machine wrote
-  it <or: pending, not on this machine yet>
+- Active handoff `<file>` (<date><, written on `<writtenBy>`, or: written here>) — <its first next
+  step> — `/lets-go` <or: pending, not on this machine yet>
 - <title> (#<n>) — <PR state, or "assigned, no PR"> — <what finishing takes>
 
 ### Ready for an agent (<count>)

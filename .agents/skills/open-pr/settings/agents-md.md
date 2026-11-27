@@ -40,9 +40,10 @@ no ready issue exists. `/ask-matt` maps the flow itself.
   `/dependabot` read a red check with `/ci-triage`, which never re-runs anything.
   `/records-audit` checks the board, the trackers, the follow-up wiki and the changelog against
   each other; run it weekly, and `/what-next` says when it is due.
-- **`/handoff` is the shared skill.** It parks the session for another machine or harness, closes it
-  out with `/end-session`, and `/lets-go` resumes it. It does not write the portable file `/ask-matt`
-  describes, so a `/prototype` detour stays in the session or uses a branch.
+- **`/handoff` is the shared skill.** It parks the session for the next one, on either machine or
+  harness, closes it out with `/end-session`, and `/lets-go` resumes it. It does not write the
+  portable file `/ask-matt` describes, so a `/prototype` detour stays in the session or uses a
+  branch.
 - **A wizard is not the record.** A step only a human can take follows the `## Procedure` in
   `.agents/skills/open-pr/settings/human-follow-up.md`, whose instructions stand without the script.
 - **Research goes where it is safe to keep.** `/research` findings that would expose private material
