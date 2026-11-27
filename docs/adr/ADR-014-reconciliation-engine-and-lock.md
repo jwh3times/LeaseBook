@@ -195,7 +195,10 @@ stamped before, since a bank line cannot be dated after the organization's today
 it again, which opens that month's reconcile view in place. The statement ending balance is prefilled
 from the one stored and can be changed, and a change is audited. The view offers every unreconciled
 line dated through the month's last day, cleared or not, with none ticked, and shows the difference as
-lines are ticked. Ticking an uncleared line clears it and assigns it. Lines the month stamped when it
+lines are ticked. The lines of a processor payout that finalize would refuse for the month, such as one
+with a line dated after its last day, are offered unticked and cannot be ticked, with finalize's reason
+beside them: the lines read and finalize run the same check, so the difference never counts a line that
+finalize then refuses (#775). Ticking an uncleared line clears it and assigns it. Lines the month stamped when it
 was first finalized stay stamped, as decision 4 says. Staff may finalize it again, as they may finalize
 any month: the administrator's decision, and its reason, is the unlock.
 

@@ -63,9 +63,11 @@ export function FinalizeAgainPanel({
   const statementNum = Number.parseFloat(statement);
   const statementCents = Number.isFinite(statementNum) ? toCents(statementNum) : null;
   const rows = lines.data?.lines ?? [];
-  const tickedCents = rows
-    .filter((l) => ticked.has(l.journalLineId))
-    .reduce((sum, l) => sum + toCents(num(l.amount)), 0);
+  // A line counts as ticked only while the month may take it: a re-read after a refusal can mark a
+  // ticked payout not assignable, and then neither the difference nor finalize counts it (#775).
+  const isTicked = (line: ReconciliationLine) =>
+    !line.notAssignableReason && ticked.has(line.journalLineId);
+  const tickedCents = rows.filter(isTicked).reduce((sum, l) => sum + toCents(num(l.amount)), 0);
   const throughCents = lines.isSuccess ? toCents(num(lines.data.reconciledThrough)) : null;
   const differenceCents =
     statementCents === null || throughCents === null
@@ -73,6 +75,7 @@ export function FinalizeAgainPanel({
       : statementCents - (throughCents + tickedCents);
 
   const toggle = (line: ReconciliationLine) => {
+    if (line.notAssignableReason) return;
     const group = line.payoutReference
       ? rows.filter((l) => l.payoutReference === line.payoutReference)
       : [line];
@@ -207,6 +210,10 @@ export function FinalizeAgainPanel({
                   {rows.map((line) => {
                     const meta = lineStatus(line);
                     const description = line.description ?? 'Bank line';
+                    // A payout finalize would refuse for this month (#775): shown, never tickable, and
+                    // the server's reason said beside it, so the difference never counts it.
+                    const reason = line.notAssignableReason ?? null;
+                    const reasonId = `${ids}-reason-${line.journalLineId}`;
                     return (
                       <tr key={line.journalLineId}>
                         <td>
@@ -214,8 +221,9 @@ export function FinalizeAgainPanel({
                             type="checkbox"
                             className="pf-check"
                             aria-label={`Assign ${description} (${line.entryDate})`}
-                            checked={ticked.has(line.journalLineId)}
-                            disabled={finalize.isPending}
+                            aria-describedby={reason ? reasonId : undefined}
+                            checked={isTicked(line)}
+                            disabled={finalize.isPending || reason !== null}
                             onChange={() => toggle(line)}
                           />
                         </td>
@@ -226,6 +234,11 @@ export function FinalizeAgainPanel({
                           {description}
                           {line.payoutReference && (
                             <div className="t3 fs12">Payout {line.payoutReference}</div>
+                          )}
+                          {reason && (
+                            <div id={reasonId} className="t3 fs12">
+                              Not in {period}: {reason}
+                            </div>
                           )}
                         </td>
                         <td>
@@ -265,9 +278,7 @@ export function FinalizeAgainPanel({
             onClick={() => {
               if (statementCents === null) return;
               // Only lines still on offer: a re-read after a refusal can drop one that was ticked.
-              const assigned = rows
-                .filter((l) => ticked.has(l.journalLineId))
-                .map((l) => l.journalLineId);
+              const assigned = rows.filter(isTicked).map((l) => l.journalLineId);
               finalize.mutate({ statementCents, ids: assigned });
             }}
           >

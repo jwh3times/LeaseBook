@@ -427,6 +427,62 @@ describe('ReconciliationHistory finalize again (#656)', () => {
     expect(started).toBe(0);
   });
 
+  it('offers a payout with a line after the month end unticked and says why, so the difference matches finalize (#775)', async () => {
+    // A payout with one line on 31 August and one on 1 September. The read lists only lines dated
+    // through 31 August, and marks this one with the refusal finalize would give for the whole payout.
+    const reason =
+      'A line dated 2026-09-01 is after the end of 2026-08, so it cannot be reconciled in that month.';
+    const straddling = {
+      journalLineId: 'l-po3',
+      entryDate: '2026-08-31',
+      description: 'Payout — Unit 7D',
+      amount: 500,
+      status: 'cleared',
+      payoutReference: 'po_3',
+      notAssignableReason: reason,
+    };
+    let finalizeBody: unknown;
+    server.use(
+      staff(),
+      historyOf(() => [REOPENED]),
+      http.get('/api/accounting/reconciliations/:id/lines', () =>
+        HttpResponse.json({ ...LINES, lines: [...LINES.lines, straddling] }),
+      ),
+      http.post('/api/accounting/reconciliations/:id/finalize', async ({ request }) => {
+        finalizeBody = await request.json();
+        return HttpResponse.json({ ...LINES.reconciliation, status: 'finalized', difference: 0 });
+      }),
+    );
+    renderHistory();
+
+    const panel = await openAugust();
+    const finalize = within(panel).getByRole('button', { name: 'Finalize Aug 2026' });
+    const difference = within(panel).getByLabelText('Difference');
+    const box = within(panel).getByRole('checkbox', { name: /Payout — Unit 7D/ });
+
+    // Its $500.00 alone would meet the statement, which is the zero finalize then refused.
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription(`Not in Aug 2026: ${reason}`);
+    await userEvent.click(box);
+    expect(box).not.toBeChecked();
+    expect(difference).toHaveTextContent(/^\+\$500\.00$/);
+    expect(finalize).toBeDisabled();
+
+    // The month's own lines meet it, and finalize is sent only those.
+    for (const name of [/Payout — Unit 4A/, /Deposit — Unit 2B/, /Check 1041/]) {
+      await userEvent.click(within(panel).getByRole('checkbox', { name }));
+    }
+    expect(difference).toHaveTextContent(/^\$0\.00$/);
+    await userEvent.click(finalize);
+    await waitFor(() => expect(finalizeBody).toBeDefined());
+    expect([...(finalizeBody as { assignedLineIds: string[] }).assignedLineIds].sort()).toEqual([
+      'l-chk',
+      'l-dep',
+      'l-po1',
+      'l-po2',
+    ]);
+  });
+
   it('sets a corrected statement balance before finalizing against it', async () => {
     const calls: { route: string; body: unknown }[] = [];
     server.use(
@@ -548,6 +604,72 @@ describe('ReconciliationHistory finalize again (#656)', () => {
     // The view and its button are gone, so the keyboard lands on the month it just closed.
     expect(await screen.findByText('Finalized')).toBeInTheDocument();
     expect(screen.getByText('Aug 2026')).toHaveFocus();
+  });
+
+  it('stops counting a ticked payout the re-read marks not assignable, and never finalizes it (#775)', async () => {
+    // The payout's 1 September line posted after the panel first read the lines: the first read
+    // offers its 31 August line plainly, finalize refuses it, and the re-read marks it.
+    const reason =
+      'A line dated 2026-09-01 is after the end of 2026-08, so it cannot be reconciled in that month.';
+    const straddling = {
+      journalLineId: 'l-po3',
+      entryDate: '2026-08-31',
+      description: 'Payout — Unit 7D',
+      amount: 500,
+      status: 'cleared',
+      payoutReference: 'po_3',
+    };
+    let reads = 0;
+    let attempt = 0;
+    let finalizeBody: { assignedLineIds?: string[] } | undefined;
+    server.use(
+      staff(),
+      historyOf(() => [REOPENED]),
+      http.get('/api/accounting/reconciliations/:id/lines', () => {
+        reads += 1;
+        const line = reads === 1 ? straddling : { ...straddling, notAssignableReason: reason };
+        return HttpResponse.json({ ...LINES, lines: [...LINES.lines, line] });
+      }),
+      http.post('/api/accounting/reconciliations/:id/finalize', async ({ request }) => {
+        attempt += 1;
+        if (attempt === 1)
+          return HttpResponse.json(
+            { code: 'reconciliation_line_not_assignable', detail: reason },
+            { status: 422 },
+          );
+        finalizeBody = (await request.json()) as { assignedLineIds?: string[] };
+        return HttpResponse.json({ ...LINES.reconciliation, status: 'finalized', difference: 0 });
+      }),
+    );
+    renderHistory();
+
+    const panel = await openAugust();
+    const finalize = within(panel).getByRole('button', { name: 'Finalize Aug 2026' });
+    const difference = within(panel).getByLabelText('Difference');
+    const box = within(panel).getByRole('checkbox', { name: /Payout — Unit 7D/ });
+    await userEvent.click(box);
+    expect(difference).toHaveTextContent(/^\$0\.00$/);
+    await userEvent.click(finalize);
+    await within(panel).findByRole('alert');
+
+    // Re-read, the payout is not August's: still listed, no longer ticked, no longer counted.
+    await waitFor(() => expect(box).toBeDisabled());
+    expect(box).not.toBeChecked();
+    expect(difference).toHaveTextContent(/^\+\$500\.00$/);
+    expect(finalize).toBeDisabled();
+
+    for (const name of [/Payout — Unit 4A/, /Deposit — Unit 2B/, /Check 1041/]) {
+      await userEvent.click(within(panel).getByRole('checkbox', { name }));
+    }
+    expect(difference).toHaveTextContent(/^\$0\.00$/);
+    await userEvent.click(finalize);
+    await waitFor(() => expect(finalizeBody).toBeDefined());
+    expect([...(finalizeBody?.assignedLineIds ?? [])].sort()).toEqual([
+      'l-chk',
+      'l-dep',
+      'l-po1',
+      'l-po2',
+    ]);
   });
 
   it('reads the lines again after a refusal, and finalizes only lines still on offer', async () => {

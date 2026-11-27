@@ -1,5 +1,6 @@
 using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Domain;
+using LeaseBook.Modules.Accounting.Features.Banking;
 using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Persistence;
 using LeaseBook.Modules.Accounting.Posting;
@@ -17,10 +18,13 @@ public sealed record ReconciliationView(
 /// deposit positive, a withdrawal negative) and clearance status (<c>cleared</c> or <c>uncleared</c>).
 /// <paramref name="PayoutReference"/> names the processor payout it belongs to, or is null: a payout's
 /// lines are one statement line at the bank, so finalize assigns them together (ADR-053), and a screen
-/// ticks them together.
+/// ticks them together. <paramref name="NotAssignableReason"/> is null when the month a read was made
+/// for may be assigned the line, and otherwise says why finalize would refuse it: a payout with a line
+/// dated after the month's last day reconciles in a later month (#775).
 /// </summary>
 public sealed record ReconciliationLine(
-    Guid JournalLineId, DateOnly EntryDate, string? Description, decimal Amount, string Status, string? PayoutReference);
+    Guid JournalLineId, DateOnly EntryDate, string? Description, decimal Amount, string Status, string? PayoutReference,
+    string? NotAssignableReason = null);
 
 /// <summary>
 /// An account's months finalize and unlock in order, and none is reconciled before it ends (#656, the
@@ -151,6 +155,34 @@ internal static class ReconciliationSql
 
     private sealed record UnreconciledRow(
         Guid JournalLineId, DateOnly EntryDate, string? Description, string? SourceRef, decimal Amount, string Status);
+
+    /// <summary>
+    /// The lines finalize assigns the month when it is named <paramref name="named"/>, widened to whole
+    /// payouts (ADR-053), or why it cannot assign them: each must be an unreconciled bank line of the
+    /// account dated through the month's last day. Finalize throws the refusal; the lines read reports it
+    /// on each line of a payout it offers, so that the two can never disagree (#775).
+    /// </summary>
+    public static async Task<(List<ReconciliationLine> Lines, ReconciliationLineNotAssignableException? Refusal)> AssignmentAsync(
+        DbContext db, BankReconciliation recon, IReadOnlyCollection<Guid> named, CancellationToken ct)
+    {
+        var (year, month) = (recon.PeriodYear, recon.PeriodMonth);
+        var ids = await PayoutLines.WithWholePayoutsAsync(db, named.Distinct().ToArray(), ct);
+
+        // Read the named lines without the month bound, so a line dated after it is named as such.
+        var lines = await UnreconciledByIdAsync(db, recon.BankAccountId, ids, ct);
+        if (lines.Count != ids.Length)
+        {
+            var reconciled = await db.Set<BankLineState>().AnyAsync(
+                s => ids.Contains(s.JournalLineId) && s.Status == BankLineStatus.Reconciled, ct);
+            return (lines, new ReconciliationLineNotAssignableException(
+                reconciled ? ReconciliationLineProblem.AlreadyReconciled : ReconciliationLineProblem.NotOnAccount, year, month));
+        }
+
+        var late = lines.Where(l => l.EntryDate > MonthEnd(year, month)).OrderBy(l => l.EntryDate).FirstOrDefault();
+        return late is null
+            ? (lines, null)
+            : (lines, new ReconciliationLineNotAssignableException(ReconciliationLineProblem.AfterMonthEnd, year, month, late.EntryDate));
+    }
 
     /// <summary>Whether a month is the organization's current one.</summary>
     public static bool IsCurrentMonth(BankReconciliation recon, DateOnly today) =>

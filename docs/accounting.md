@@ -405,7 +405,9 @@ offers **Finalize again**, which opens that month's reconcile view in place: the
 prefilled from the stored one and editable, every unreconciled line dated through the month's last day,
 cleared or not and none ticked, and the live difference the engine will compute. Lines of one payout tick
 together, ticking an uncleared line clears it as the month finalizes, and Finalize is offered only at a zero
-difference; a refusal is shown in the view with the month it names.
+difference; a refusal is shown in the view with the month it names. A payout the engine would refuse for the
+month, such as one with a line dated after its last day, is listed but cannot be ticked, with the engine's
+reason beside it, so the difference never counts a line finalize would then refuse (#775).
 
 **Months finalize in order.** Per bank account, a month cannot be finalized or unlocked while a later month
 is finalized (`reconciliation_later_month_finalized`), and cannot be finalized while an earlier one is
