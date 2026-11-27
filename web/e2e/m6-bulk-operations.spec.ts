@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { SCENARIO_STAFF, signIn } from './helpers';
 import { test } from './test';
 
 // M6 full-month exit-criteria e2e (§D WP-7 — the M6 milestone gate).
@@ -378,5 +379,46 @@ test.describe.serial('M6 full-month cycle', () => {
     });
 
     await page.screenshot({ path: 'e2e-results/m6-run-history.png', fullPage: true });
+  });
+});
+
+// ── Run detail (#573) — the scenario org, whose seeded runs record exclusions ─────────────────────
+//
+// The scenario seeder confirms every row of a run that is not already done, so its March 2026
+// disbursement run records the owners it could not pay: Stillwater Properties is parked exactly at its
+// reserve floor and Meridian Estates holds negative equity, every month (ScenarioSeeder's tripwires).
+// The demo-org runs above select only eligible rows, so they record no exclusion to read.
+test.describe('Run detail', () => {
+  test('opens a confirmed run from the run history and says why each unpaid owner was excluded @scenario:run-detail', async ({
+    page,
+  }) => {
+    await signIn(page, SCENARIO_STAFF);
+    await page.goto('/operations?tab=history');
+
+    // The seeded run is the scenario org's only March disbursement: no spec confirms another. A
+    // second one would make this locator ambiguous, and Playwright's strict mode then fails loudly
+    // rather than opening whichever run happens to sort last.
+    await page.getByRole('link', { name: 'Disbursement run, March 2026' }).click();
+    await expect(page.getByRole('heading', { name: 'Disbursement run — March 2026' })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    const owner = (name: string) =>
+      page.getByRole('row').filter({ has: page.getByRole('link', { name, exact: true }) });
+    await expect(owner('Stillwater Properties')).toContainText('Excluded');
+    await expect(owner('Stillwater Properties')).toContainText('Below reserve floor');
+    await expect(owner('Meridian Estates')).toContainText('Excluded');
+    await expect(owner('Meridian Estates')).toContainText('Non-positive equity');
+    await expect(owner('Stillwater Properties').getByRole('link')).toHaveAttribute(
+      'href',
+      /^\/owners\/[0-9a-f-]{36}$/,
+    );
+
+    // Narrowed to what could not be done, no posted owner is left in the list. The run pays some
+    // owners, so first prove there was a posted row to filter away.
+    await expect(page.getByRole('row').filter({ hasText: 'Posted' })).not.toHaveCount(0);
+    await page.getByRole('button', { name: /^Excluded \(\d+\)$/ }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'Posted' })).toHaveCount(0);
+    await expect(owner('Stillwater Properties')).toBeVisible();
   });
 });

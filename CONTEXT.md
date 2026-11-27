@@ -453,6 +453,13 @@ else — it holds no loop, no posting and no persistence, and it is what a run t
 its preview.
 _Avoid_: batch (a plan is not sized or chunked), work list, queue, job
 
+**Run outcome**:
+What a confirmed run did for one target: _posted_ (its entries posted), _skipped_ (the work was
+already done — a repeat run, or rent already charged for the period) or _excluded_ (the work could
+not be done — a locked period, zero rent, a balance below the reserve floor). A skipped or excluded
+outcome always carries its reason.
+_Avoid_: status (too broad), result, failed (an exclusion is not a failure)
+
 ### Reports
 
 **Report catalog**:

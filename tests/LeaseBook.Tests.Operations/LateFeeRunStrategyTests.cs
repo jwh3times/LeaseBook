@@ -39,7 +39,7 @@ public sealed class LateFeeRunStrategyTests
         else
         {
             var exclusion = plan.ShouldHaveSingleItem().ShouldBeOfType<PlannedExclusion>();
-            exclusion.Detail["reason"].ShouldBe("before_late_fee_eligibility");
+            exclusion.Reason.Code().ShouldBe("before_late_fee_eligibility");
         }
     }
 
@@ -238,7 +238,7 @@ public sealed class LateFeeRunStrategyTests
 
         var exclusion = plan.ShouldHaveSingleItem().ShouldBeOfType<PlannedExclusion>();
         exclusion.Status.ShouldBe(RunItemStatus.Excluded);
-        exclusion.Detail["reason"].ShouldBe("no_policy");
+        exclusion.Reason.Code().ShouldBe("no_policy");
     }
 
     [Fact]

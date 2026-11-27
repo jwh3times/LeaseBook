@@ -254,9 +254,7 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         await using var _ = scope;
 
         var posting = new NoOpBatchPosting();
-        var excluded = new PlannedExclusion(
-            RunTargetKind.Lease, _t1, RunItemStatus.Excluded,
-            new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = "rent_zero" });
+        var excluded = new PlannedExclusion(RunTargetKind.Lease, _t1, RunReason.RentZero);
 
         var engine = new RunEngine(
             scope.Db, [new PlanFromStrategy([excluded, Post(_t2, 900m)])], posting,
@@ -285,6 +283,32 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         excludedRow.Status.ShouldBe(RunItemStatus.Excluded);
         excludedRow.Amount.ShouldBe(0m);
         excludedRow.SnapshotJson.ShouldBe("""{"reason":"rent_zero"}""");
+    }
+
+    /// <summary>
+    /// The engine records why nothing posted; a strategy that writes its own <c>reason</c> into the
+    /// detail would otherwise put its word in the run log in place of the plan's (#573).
+    /// </summary>
+    [Fact]
+    public async Task Confirm_refuses_a_strategy_detail_that_carries_its_own_reason()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scope = await OrgScope.CreateAsync(fixture, ct);
+        await using var _ = scope;
+
+        var excluded = new PlannedExclusion(
+            RunTargetKind.Lease, _t1, RunReason.RentZero,
+            new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = "no_policy" });
+        var engine = new RunEngine(
+            scope.Db, [new PlanFromStrategy([excluded])], new NoOpBatchPosting(),
+            TimeProvider.System, new RunPeriodLock(scope.Db), new StubCapabilitySnapshot());
+
+        var refused = await Should.ThrowAsync<InvalidOperationException>(() => scope.RunAsync(
+            () => engine.ConfirmAsync(
+                RunType.Rent, new RunPeriod(2026, 6), [_t1],
+                expectedCapabilitiesVersion: null, acknowledgeCapabilityChange: false, ct),
+            ct));
+        refused.Message.ShouldContain("must not carry its own 'reason'");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

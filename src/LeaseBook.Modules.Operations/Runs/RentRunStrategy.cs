@@ -132,7 +132,7 @@ public sealed class RentRunStrategy(
         {
             if (!byLeaseId.TryGetValue(leaseId, out var row))
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "lease_not_in_schedule"));
+                plan.Add(new PlannedExclusion(RunTargetKind.Lease, leaseId, RunReason.LeaseNotInSchedule));
                 continue;
             }
 
@@ -142,7 +142,7 @@ public sealed class RentRunStrategy(
             var decision = Decide(row, period);
             if (decision is IneligibleForRent ineligible)
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, ineligible.Code));
+                plan.Add(new PlannedExclusion(RunTargetKind.Lease, leaseId, ineligible.Reason));
                 continue;
             }
 
@@ -150,7 +150,7 @@ public sealed class RentRunStrategy(
             // tenant in the period, regardless of source_ref (manual, seed, import, or other run).
             if (alreadyChargedTenants.Contains(row.TenantId))
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Skipped, "already_charged_in_period"));
+                plan.Add(new PlannedExclusion(RunTargetKind.Lease, leaseId, RunReason.AlreadyChargedInPeriod));
                 continue;
             }
 
@@ -191,10 +191,6 @@ public sealed class RentRunStrategy(
         }
 
         return plan;
-
-        static PlannedExclusion Exclude(Guid leaseId, RunItemStatus status, string reason) =>
-            new(RunTargetKind.Lease, leaseId, status,
-                new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason });
     }
 
     // ── the decision ─────────────────────────────────────────────────────────
@@ -212,11 +208,11 @@ public sealed class RentRunStrategy(
     private sealed record ChargeRent(decimal Amount, bool Prorated) : RentDecision;
 
     /// <summary>
-    /// Do not charge this lease, and why — in <b>both</b> vocabularies at once. <paramref name="Code"/>
+    /// Do not charge this lease, and why — in <b>both</b> vocabularies at once. <paramref name="Reason"/>
     /// is what the run log records; <paramref name="Explanation"/> is what the operator reads in the
     /// preview. Built together so the two cannot drift apart (#199).
     /// </summary>
-    private sealed record IneligibleForRent(string Code, string Explanation) : RentDecision;
+    private sealed record IneligibleForRent(RunReason Reason, string Explanation) : RentDecision;
 
     /// <summary>
     /// The one statement of rent chargeability and amount, projected by <see cref="PreviewAsync"/>
@@ -235,7 +231,7 @@ public sealed class RentRunStrategy(
     {
         if (row.Rent == 0m)
         {
-            return new IneligibleForRent("rent_zero", $"{row.TenantName}: rent is 0 — skipped.");
+            return new IneligibleForRent(RunReason.RentZero, $"{row.TenantName}: rent is 0 — skipped.");
         }
 
         var amount = Proration.Charge(row.Rent, period.Year, period.Month, row.StartDate, row.EndDate);

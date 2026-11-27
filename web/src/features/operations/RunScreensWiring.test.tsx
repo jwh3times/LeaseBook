@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import type { ComponentType } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
@@ -86,7 +87,9 @@ describe.each(cases)('$name after a capability conflict', ({ type, Screen, confi
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Screen />
+        <MemoryRouter>
+          <Screen />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
 

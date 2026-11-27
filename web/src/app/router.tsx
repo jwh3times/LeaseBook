@@ -17,7 +17,7 @@ import { OwnerDetailPage } from '@/features/owners/OwnerDetailPage';
 import { OwnersPage } from '@/features/owners/OwnersPage';
 import { PropertiesPage } from '@/features/properties/PropertiesPage';
 import { PropertyDetailPage } from '@/features/properties/PropertyDetailPage';
-import { OperationsPage } from '@/features/operations';
+import { OperationsPage, RunDetailPage } from '@/features/operations';
 import { ReportsPage, StatementPage } from '@/features/reports';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { LedgerPage } from '@/features/tenants/LedgerPage';
@@ -54,6 +54,7 @@ const detailRoutes = [
   { path: '/owners/:id', element: <OwnerDetailPage /> },
   { path: '/owners/:id/statement', element: <StatementPage /> },
   { path: '/properties/:id', element: <PropertyDetailPage /> },
+  { path: '/operations/runs/:id', element: <RunDetailPage /> },
   { path: '/onboarding', element: <OnboardingPage /> },
   { path: '/onboarding/parallel-run', element: <ParallelRunReference /> },
   { path: '/portal/test-inbox', element: <PortalTestInboxPage /> },

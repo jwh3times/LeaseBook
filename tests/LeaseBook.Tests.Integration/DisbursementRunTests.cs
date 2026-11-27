@@ -97,7 +97,7 @@ public sealed class DisbursementRunTests(PostgresFixture fixture)
         preview.ShouldNotBeNull();
         var row = preview!.Rows.FirstOrDefault(r => r.TargetId == ctx.OwnerId);
         row.ShouldNotBeNull("owner row must appear in preview even when excluded");
-        row!.ExcludedReason.ShouldBe("below_reserve_floor");
+        row!.ExcludedReason.ShouldBe(RunReason.BelowReserveFloor);
         row.Amount.ShouldBe(0m);
 
         // Confirm with the excluded owner — must produce Excluded, not error.

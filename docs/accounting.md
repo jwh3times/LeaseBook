@@ -3,7 +3,7 @@
 - **Audience:** Contributors, operators, and reviewers
 - **Status:** Living accounting guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-14
+- **Last reviewed:** 2026-11-27
 
 This is the canonical public explanation of the shipped trust-accounting model, written so a
 property manager, bookkeeper, or attorney can evaluate it without reading C#. The Accounting module
@@ -728,10 +728,18 @@ rent-obligation entry id for a late fee) into the correct Accounting events (`Re
 
 ### Run history
 
-Every confirmed run writes an auditable `bulk_runs` row (who ran, period, run type, summary
-counts) and one `bulk_run_items` row per target (status: `Posted` / `Skipped` / `Excluded`,
-snapshot JSON with the amounts and entry id). The run history view lists all completed runs
-for the organization, most recent first.
+Every confirmed run writes an auditable `bulk_runs` row (period, run type, summary counts; who ran
+it is in the audit trail, not on the row) and one `bulk_run_items` row per target (its run
+outcome — `Posted` / `Skipped` / `Excluded` — and snapshot JSON with the amounts and entry id). A
+skipped or excluded item also records its reason, one code from a fixed list in which each reason
+decides the outcome: a repeat run or rent already charged is a skip, a locked period or a balance
+below the reserve floor is an exclusion (ADR-019, the addendum under §4b). The run history view
+lists all completed runs for the organization, most recent first, and
+`GET /api/operations/runs/{id}` returns one run's items with each outcome, its reason and the
+tenant or owner it names as Directory reads them today — excluded first, then skipped, then posted.
+Each run in the history, and the result shown after a run is confirmed, opens that run's page,
+which lists every target in that order with its outcome, amount and reason, and narrows the list
+by outcome.
 
 ### Period locking
 

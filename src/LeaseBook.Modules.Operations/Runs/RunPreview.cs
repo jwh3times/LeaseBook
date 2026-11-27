@@ -20,7 +20,10 @@ public sealed record RunPeriod(int Year, int Month)
 /// <param name="Label">Human-readable label (tenant name, owner name, etc.).</param>
 /// <param name="Amount">Amount that would be posted.</param>
 /// <param name="AlreadyDone">True when a source_ref match exists — confirming would produce a Skipped item.</param>
-/// <param name="ExcludedReason">Non-null when this target is ineligible and should not be selected.</param>
+/// <param name="ExcludedReason">
+/// Non-null when this target is ineligible and should not be selected: the reason confirming it would
+/// record, from the one list of run reasons.
+/// </param>
 /// <param name="Detail">Strategy-specific key/value metadata shown in the UI.</param>
 /// <param name="OwnerId">The owner whose equity the posting would move.</param>
 /// <param name="Caution">
@@ -34,7 +37,7 @@ public sealed record PreviewRow(
     string Label,
     decimal Amount,
     bool AlreadyDone,
-    string? ExcludedReason,
+    RunReason? ExcludedReason,
     IReadOnlyDictionary<string, string> Detail,
     Guid? OwnerId = null,
     string? Caution = null);

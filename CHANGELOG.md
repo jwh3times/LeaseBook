@@ -19,6 +19,39 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.41.0] - 2026-11-27
+
+### Added
+
+- **Open a confirmed run and see what it did to each tenant or owner** (#573). Run history counted
+  "3 skipped" with no way to find which three, or why. Each run in history now opens its own page,
+  from its period, and the panel shown after confirming a run links to it too. The page lists every
+  target the run touched: posted, skipped or excluded, the amount, and in plain words why each one
+  that did not post was skipped or excluded. Targets that need attention come first, each linked to
+  the tenant's ledger or the owner's page; one that can no longer be found is still listed. A filter
+  narrows the list to one outcome. When the run posted into a month whose owner statement was
+  already issued, the page carries the same warning as the confirm panel.
+
+### Changed
+
+- The run preview and the run page word every reason a run records the same way, from one list. A
+  reason the server adds without wording now fails the build instead of reaching a screen as code.
+
+## [0.40.6] - 2026-11-27
+
+### Changed
+
+- **The run-detail API says what a confirmed run did to each target** (#573, step 1 of 2).
+  `GET /api/operations/runs/{id}` now returns every target's run outcome (posted, skipped or
+  excluded), the reason for each one that did not post, and who the target is today: the tenant and
+  unit for a lease, the owner for an owner. A lease or owner that can no longer be found is still
+  listed, without a name. Targets come back excluded first, then skipped, then posted, by name
+  within each. Nothing calls it yet; the run page that shows it follows in the next step.
+- The fourteen reasons a run records for a target it did not post are one published list, and each
+  reason decides whether that target is skipped or excluded. The API contract publishes them, the
+  run outcome and the target kind as enums, on the run detail and on the run preview's excluded
+  reason. What runs post and what they store are unchanged.
+
 ## [0.40.5] - 2026-11-26
 
 ### Fixed
@@ -2773,7 +2806,9 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.5...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.41.0...HEAD
+[0.41.0]: https://github.com/jwh3times/LeaseBook/compare/v0.40.6...v0.41.0
+[0.40.6]: https://github.com/jwh3times/LeaseBook/compare/v0.40.5...v0.40.6
 [0.40.5]: https://github.com/jwh3times/LeaseBook/compare/v0.40.4...v0.40.5
 [0.40.4]: https://github.com/jwh3times/LeaseBook/compare/v0.40.3...v0.40.4
 [0.40.3]: https://github.com/jwh3times/LeaseBook/compare/v0.40.2...v0.40.3

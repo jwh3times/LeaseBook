@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { RunHistoryView } from './RunHistoryView';
@@ -10,7 +11,7 @@ const RUNS = {
   runs: [
     {
       id: 'r1',
-      runType: 'rent',
+      runType: 'Rent',
       periodYear: 2026,
       periodMonth: 2,
       summaryJson: JSON.stringify({ posted: 12, skipped: 0, excluded: 0, total: 17400 }),
@@ -25,13 +26,32 @@ function renderHistory() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <RunHistoryView />
+      <MemoryRouter initialEntries={['/operations?tab=history']}>
+        <Routes>
+          <Route path="/operations" element={<RunHistoryView />} />
+          <Route path="/operations/runs/:id" element={<p>Run page for the run</p>} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
 beforeEach(() => {
   document.body.innerHTML = '';
+});
+
+describe('RunHistoryView — opening a run (#573)', () => {
+  it('opens the run from its period, from the keyboard', async () => {
+    server.use(http.get('/api/operations/runs', () => HttpResponse.json(RUNS)));
+    renderHistory();
+
+    const link = await screen.findByRole('link', { name: 'Rent run, February 2026' });
+    expect(link).toHaveAttribute('href', '/operations/runs/r1');
+    link.focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByText('Run page for the run')).toBeVisible();
+  });
 });
 
 describe('RunHistoryView when the history cannot load', () => {
