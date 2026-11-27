@@ -364,16 +364,9 @@ public sealed class RunEngine(
             switch (planned)
             {
                 case PlannedExclusion exclusion:
-                    if (exclusion.Status == RunItemStatus.Posted)
-                    {
-                        throw new InvalidOperationException(
-                            $"A PlannedExclusion for target {exclusion.TargetId} claims Posted status, " +
-                            "but nothing was posted for it. An item that posts is a PlannedPosting.");
-                    }
-
                     items.Add(BulkRunItem.Create(
                         run.Id, exclusion.TargetKind, exclusion.TargetId, exclusion.Status, 0m,
-                        Serialize(exclusion.Detail), run.CreatedAt));
+                        Serialize(WithReason(exclusion.Reason, exclusion.Detail)), run.CreatedAt));
                     break;
 
                 case PlannedPosting intended:
@@ -394,7 +387,7 @@ public sealed class RunEngine(
 
     /// <summary>
     /// Posts one planned intent and turns the outcome into the row that records it. The engine
-    /// contributes exactly four keys to <c>snapshot_json</c> — <c>entryId</c>, <c>feeEntryId</c> and
+    /// contributes three keys to <c>snapshot_json</c> — <c>entryId</c>, <c>feeEntryId</c> and
     /// <c>reason</c> — because only it has the outcome; everything else on the item is the strategy's
     /// own vocabulary, copied through unread.
     /// </summary>
@@ -422,37 +415,57 @@ public sealed class RunEngine(
                 Serialize(detail), run.CreatedAt, resultingJournalEntryId: outcome.EntryId);
         }
 
-        var (status, reason) = Classify(outcome.Status);
-        var refusal = new Dictionary<string, object?>(planned.RefusedDetail, StringComparer.Ordinal)
-        {
-            ["reason"] = reason,
-        };
+        var reason = Classify(outcome.Status);
 
         // Zero, not the planned amount: nothing was posted, so nothing may count toward the run total.
         return BulkRunItem.Create(
-            run.Id, planned.TargetKind, planned.TargetId, status, 0m,
-            Serialize(refusal), run.CreatedAt);
+            run.Id, planned.TargetKind, planned.TargetId, reason.Outcome(), 0m,
+            Serialize(WithReason(reason, planned.RefusedDetail)), run.CreatedAt);
     }
 
     /// <summary>
-    /// The one place a posting refusal becomes a run-item status and an operator-readable reason. It
+    /// The one place a posting refusal becomes a run reason, and through it a run-item status. It
     /// was three places — one per strategy — each mapping the same four cases identically, and each
     /// free to drift.
     /// </summary>
-    private static (RunItemStatus Status, string Reason) Classify(PostStatus status) => status switch
+    private static RunReason Classify(PostStatus status) => status switch
     {
         // The run is being repeated. ADR-019 §2 makes that the designed recovery path, so it is a
         // skip: the work exists, this run simply did not do it.
-        PostStatus.DuplicateSourceRef => (RunItemStatus.Skipped, "duplicate_source_ref"),
-        PostStatus.PeriodLocked => (RunItemStatus.Excluded, "period_locked"),
-        PostStatus.PeriodClosed => (RunItemStatus.Excluded, "period_closed"),
-        PostStatus.ReserveFloor => (RunItemStatus.Excluded, "reserve_floor"),
+        PostStatus.DuplicateSourceRef => RunReason.DuplicateSourceRef,
+        PostStatus.PeriodLocked => RunReason.PeriodLocked,
+        PostStatus.PeriodClosed => RunReason.PeriodClosed,
+        PostStatus.ReserveFloor => RunReason.ReserveFloor,
 
         // Posted is handled by the caller and never reaches here; anything else is a PostStatus added
         // without a decision about what it means for a run item, which is a money-path question.
         _ => throw new InvalidOperationException(
             $"No run-item classification for posting outcome {status}."),
     };
+
+    /// <summary>
+    /// The strategy's detail with the reason's code under <c>reason</c>, first — the key the
+    /// run-detail read takes it back from (<see cref="RunReasons.FromCode"/>).
+    /// </summary>
+    private static Dictionary<string, object?> WithReason(
+        RunReason reason, IReadOnlyDictionary<string, object?> detail)
+    {
+        // Overwriting would silently record the strategy's word for why nothing posted instead of the
+        // reason the plan or the posting outcome actually gave.
+        if (detail.ContainsKey("reason"))
+        {
+            throw new InvalidOperationException(
+                "A strategy's run-item detail must not carry its own 'reason'; the engine records it.");
+        }
+
+        var withReason = new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason.Code() };
+        foreach (var (key, value) in detail)
+        {
+            withReason.Add(key, value);
+        }
+
+        return withReason;
+    }
 
     private static string Serialize(IReadOnlyDictionary<string, object?> detail) =>
         JsonSerializer.Serialize(detail);

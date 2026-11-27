@@ -175,11 +175,14 @@ export type BulkRunDetailResponse = {
 
 export type BulkRunItemSpa = {
     id: string;
-    targetKind: string;
+    targetKind: 'Lease' | 'Owner';
     targetId: string;
-    status: string;
+    outcome: 'Posted' | 'Skipped' | 'Excluded';
     amount: number | string;
-    createdAt: string;
+    reason: 'duplicate_source_ref' | 'period_locked' | 'period_closed' | 'reserve_floor' | 'already_charged_in_period' | 'lease_not_in_schedule' | 'rent_zero' | 'lease_not_delinquent' | 'rent_obligation_not_found' | 'no_policy' | 'before_late_fee_eligibility' | 'owner_not_found' | 'non_positive_equity' | 'below_reserve_floor' | null;
+    targetName: null | string;
+    unitLabel: null | string;
+    tenantId: null | string;
 };
 
 export type BulkRunSpa = {
@@ -857,7 +860,7 @@ export type PreviewRowSpa = {
     label: string;
     amount: number | string;
     alreadyDone: boolean;
-    excludedReason: null | string;
+    excludedReason: 'duplicate_source_ref' | 'period_locked' | 'period_closed' | 'reserve_floor' | 'already_charged_in_period' | 'lease_not_in_schedule' | 'rent_zero' | 'lease_not_delinquent' | 'rent_obligation_not_found' | 'no_policy' | 'before_late_fee_eligibility' | 'owner_not_found' | 'non_positive_equity' | 'below_reserve_floor' | null;
     detail: {
         [key: string]: string;
     };
@@ -3842,6 +3845,15 @@ export type GetApiOperationsRunsByIdData = {
     query?: never;
     url: '/api/operations/runs/{id}';
 };
+
+export type GetApiOperationsRunsByIdErrors = {
+    /**
+     * Not Found
+     */
+    404: ProblemDetails;
+};
+
+export type GetApiOperationsRunsByIdError = GetApiOperationsRunsByIdErrors[keyof GetApiOperationsRunsByIdErrors];
 
 export type GetApiOperationsRunsByIdResponses = {
     /**

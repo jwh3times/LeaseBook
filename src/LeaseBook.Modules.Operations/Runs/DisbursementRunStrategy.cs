@@ -100,8 +100,8 @@ public sealed class DisbursementRunStrategy(
 
             var (rowAmount, excludedReason) = decision switch
             {
-                DisburseOwner disbursement => (disbursement.Amounts.AfterReserve, (string?)null),
-                IneligibleForDisbursement ineligible => (0m, ineligible.Code),
+                DisburseOwner disbursement => (disbursement.Amounts.AfterReserve, (RunReason?)null),
+                IneligibleForDisbursement ineligible => (0m, (RunReason?)ineligible.Reason),
                 _ => throw new InvalidOperationException(
                     $"Unknown disbursement decision case '{decision.GetType().Name}'."),
             };
@@ -142,10 +142,7 @@ public sealed class DisbursementRunStrategy(
         {
             if (!byOwnerId.TryGetValue(ownerId, out var owner))
             {
-                plan.Add(Exclude(ownerId, new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    ["reason"] = "owner_not_found",
-                }));
+                plan.Add(new PlannedExclusion(RunTargetKind.Owner, ownerId, RunReason.OwnerNotFound));
                 continue;
             }
 
@@ -155,11 +152,10 @@ public sealed class DisbursementRunStrategy(
             {
                 var detail = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
-                    ["reason"] = ineligible.Code,
                     ["equity"] = equity,
                 };
 
-                if (ineligible.Code == "below_reserve_floor")
+                if (ineligible.Reason == RunReason.BelowReserveFloor)
                 {
                     detail["fee"] = ineligible.Amounts.Fee;
                     detail["netBeforeReserve"] = ineligible.Amounts.NetBeforeReserve;
@@ -167,7 +163,7 @@ public sealed class DisbursementRunStrategy(
                     detail["disburse"] = ineligible.Amounts.AfterReserve;
                 }
 
-                plan.Add(Exclude(ownerId, detail));
+                plan.Add(new PlannedExclusion(RunTargetKind.Owner, ownerId, ineligible.Reason, detail));
                 continue;
             }
 
@@ -207,11 +203,6 @@ public sealed class DisbursementRunStrategy(
         }
 
         return plan;
-
-        // Every disbursement refusal the strategy itself decides is an exclusion: an owner with no
-        // equity or below the floor has nothing to post, as opposed to something already posted.
-        static PlannedExclusion Exclude(Guid ownerId, Dictionary<string, object?> detail) =>
-            new(RunTargetKind.Owner, ownerId, RunItemStatus.Excluded, detail);
     }
 
     // ── the decision ─────────────────────────────────────────────────────────
@@ -226,7 +217,7 @@ public sealed class DisbursementRunStrategy(
         : DisbursementDecision(Amounts);
 
     private sealed record IneligibleForDisbursement(
-        string Code,
+        RunReason Reason,
         DisbursementAmountResult Amounts)
         : DisbursementDecision(Amounts);
 
@@ -236,12 +227,12 @@ public sealed class DisbursementRunStrategy(
 
         if (equity <= 0m)
         {
-            return new IneligibleForDisbursement("non_positive_equity", amounts);
+            return new IneligibleForDisbursement(RunReason.NonPositiveEquity, amounts);
         }
 
         if (amounts.AfterReserve <= 0m)
         {
-            return new IneligibleForDisbursement("below_reserve_floor", amounts);
+            return new IneligibleForDisbursement(RunReason.BelowReserveFloor, amounts);
         }
 
         return new DisburseOwner(amounts);

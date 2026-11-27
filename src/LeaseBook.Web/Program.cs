@@ -290,6 +290,8 @@ builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IBatchPosting,
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ICapabilitySnapshot, CapabilitySnapshotAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILeaseScheduleData, LeaseScheduleDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IPostedSourceRefs, PostedSourceRefsAdapter>();
+// #573: who a run's targets are today, for the run-detail read (Directory via ISender).
+builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IRunTargetNames, RunTargetNamesAdapter>();
 // WP-3: Late-fee run ports — policy resolution and delinquency signal (ADR-007 / WP-3).
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.ILateFeePolicyData, LateFeePolicyDataAdapter>();
 builder.Services.AddScoped<LeaseBook.Modules.Operations.Contracts.IDelinquencyData, DelinquencyDataAdapter>();
@@ -340,7 +342,10 @@ builder.Services.AddScoped<LeaseBook.Web.Audit.AuditLogReader>();
 // OpenAPI document (P11). The SPA's client is generated from the *build-time* document, not from
 // this endpoint — `npm run api:generate` emits it via scripts/emit-openapi.mjs (ADR-012, #369).
 builder.Services.AddOpenApi(options =>
-    options.AddSchemaTransformer(BudgetTasks.PublishAsTaskEnum));
+{
+    options.AddSchemaTransformer(BudgetTasks.PublishAsTaskEnum);
+    options.AddSchemaTransformer(LeaseBook.Web.Operations.RunDetailContract.PublishEnums);
+});
 builder.Services.AddScoped<FluentValidation.IValidator<BudgetTelemetryRequest>, BudgetTelemetryRequestValidator>();
 
 // Telemetry baseline: emit the CQRS ActivitySource (+ request spans). The Azure Monitor exporter
