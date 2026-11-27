@@ -9,7 +9,8 @@ import { ApiErrorNotice } from '@/components/ApiErrorNotice';
 import { QueryErrorState } from '@/components/QueryErrorState';
 import { PeriodPicker } from './PeriodPicker';
 import { RunConflictNotice } from './RunConflictNotice';
-import { RunResultPanel, excludedLabel } from './RunPreviewGrid';
+import { RunResultPanel } from './RunPreviewGrid';
+import { runReasonLabel } from './runReasons';
 import { RunPreviewIssuedStatementNotice } from './RunPreviewIssuedStatementNotice';
 import { useRunFlow } from './useRunFlow';
 import type { PreviewRowSpa } from './useRuns';
@@ -161,7 +162,7 @@ export function DisbursementRunScreen() {
                       <td>
                         {isExcluded ? (
                           <Badge tone="warn" icon="alert">
-                            {excludedLabel(row.excludedReason!)}
+                            {runReasonLabel(row.excludedReason!)}
                           </Badge>
                         ) : isAlreadyDone ? (
                           <Badge tone="accent" icon="check">

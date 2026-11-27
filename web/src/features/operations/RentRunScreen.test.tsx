@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/test/mocks/server';
 import { RentRunScreen } from './RentRunScreen';
@@ -33,7 +34,9 @@ function renderScreen() {
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <RentRunScreen />
+      <MemoryRouter>
+        <RentRunScreen />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

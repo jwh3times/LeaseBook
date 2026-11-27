@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { server } from '@/test/mocks/server';
-import { RunPreviewGrid } from './RunPreviewGrid';
+import { RunPreviewGrid, RunResultPanel } from './RunPreviewGrid';
 
 const row = (targetId: string, label: string, extra: Record<string, unknown> = {}) => ({
   targetId,
@@ -66,5 +67,63 @@ describe('RunPreviewGrid — a tenant with a payment in transit', () => {
     show(['a']);
     expect(screen.getByRole('checkbox', { name: 'Select all eligible' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Select Ben Tenant' })).not.toBeChecked();
+  });
+});
+
+describe('RunPreviewGrid — an excluded target', () => {
+  it('words each reason the server sends instead of showing its code (#573)', () => {
+    server.use(
+      http.get('/api/operations/runs/rent/preview/issued-coverage', () =>
+        HttpResponse.json({ rows: [] }),
+      ),
+    );
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <RunPreviewGrid
+          rows={[
+            row('a', 'Ada Tenant', { excludedReason: 'lease_not_in_schedule' }),
+            row('b', 'Ben Tenant', { excludedReason: 'rent_zero' }),
+          ]}
+          exceptions={[]}
+          selected={new Set()}
+          selectable={false}
+          issuedCoverage={{ type: 'rent', year: 2026, month: 5 }}
+        />
+      </QueryClientProvider>,
+    );
+
+    const ada = screen.getByText('Ada Tenant').closest('tr')!;
+    expect(within(ada).getByText('Lease not active in this period')).toBeVisible();
+    const ben = screen.getByText('Ben Tenant').closest('tr')!;
+    expect(within(ben).getByText('Rent is zero')).toBeVisible();
+    expect(screen.queryByText(/lease not in schedule|rent zero/i)).toBeNull();
+  });
+});
+
+describe('RunResultPanel — after a run is confirmed', () => {
+  it('links to what the run did to each target (#573)', () => {
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter>
+          <RunResultPanel
+            runId="run-9"
+            posted={0}
+            skipped={2}
+            excluded={1}
+            total={0}
+            onDone={() => {}}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole('link', { name: 'View run' })).toHaveAttribute(
+      'href',
+      '/operations/runs/run-9',
+    );
   });
 });

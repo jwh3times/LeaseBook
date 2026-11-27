@@ -1,48 +1,13 @@
 /**
  * Run history view — lists past bulk runs (all types) for this org, most recent first.
- * Each run shows: type badge, period, summary counts, and total posted.
+ * Each run shows: type badge, period, summary counts, and total posted. The period opens the run
+ * (#573), and as a link it is reached and followed from the keyboard.
  */
+import { Link } from 'react-router';
 import { Badge, Card, CardHeader, EmptyState, Money } from '@/design';
 import { QueryErrorState } from '@/components/QueryErrorState';
+import { formatPeriod, parseSummary, runTypeMeta } from './runFormat';
 import { useRunHistory } from './useRuns';
-import type { BadgeTone } from '@/design';
-
-const RUN_TYPE_META: Record<string, { label: string; tone: BadgeTone }> = {
-  Rent: { label: 'Rent', tone: 'accent' },
-  LateFee: { label: 'Late fee', tone: 'warn' },
-  Disbursement: { label: 'Disbursement', tone: 'pos' },
-};
-
-function runTypeMeta(runType: string): { label: string; tone: BadgeTone } {
-  return RUN_TYPE_META[runType] ?? { label: runType, tone: 'neutral' };
-}
-
-function parseSummary(json: string | null | undefined): {
-  posted?: number;
-  skipped?: number;
-  excluded?: number;
-  total?: number;
-} {
-  try {
-    return json
-      ? (JSON.parse(json) as {
-          posted?: number;
-          skipped?: number;
-          excluded?: number;
-          total?: number;
-        })
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function formatPeriod(year: number | string, month: number | string): string {
-  const y = Number(year);
-  const m = Number(month);
-  const date = new Date(y, m - 1, 1);
-  return date.toLocaleString('default', { month: 'long', year: 'numeric' });
-}
 
 export function RunHistoryView() {
   const history = useRunHistory();
@@ -92,7 +57,14 @@ export function RunHistoryView() {
                   <td>
                     <Badge tone={meta.tone}>{meta.label}</Badge>
                   </td>
-                  <td>{formatPeriod(run.periodYear, run.periodMonth)}</td>
+                  <td>
+                    <Link
+                      to={`/operations/runs/${run.id}`}
+                      aria-label={`${meta.label} run, ${formatPeriod(run.periodYear, run.periodMonth)}`}
+                    >
+                      {formatPeriod(run.periodYear, run.periodMonth)}
+                    </Link>
+                  </td>
                   <td className="num">{summary.posted ?? 0}</td>
                   <td className="num">{summary.skipped ?? 0}</td>
                   <td className="num">{summary.excluded ?? 0}</td>

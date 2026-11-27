@@ -1,3 +1,4 @@
+import type { BulkRunItemSpa } from '@/api';
 import { Badge, type BadgeTone, type IconName } from '@/design';
 
 // Status is never color-alone (CLAUDE.md UX contract): every badge pairs a dot + the capitalized label.
@@ -109,6 +110,25 @@ export function LeaseStatusBadge({ status }: { status: string }) {
   return (
     <Badge tone={LEASE_TONE[status] ?? 'neutral'} dot>
       {titleCase(status)}
+    </Badge>
+  );
+}
+
+// A run outcome (#573, CONTEXT.md "Run outcome"), typed over the contract's union so a new outcome
+// fails typecheck here instead of falling back to a neutral badge.
+type RunOutcome = BulkRunItemSpa['outcome'];
+
+const RUN_OUTCOME: Record<RunOutcome, { tone: BadgeTone; icon: IconName }> = {
+  Posted: { tone: 'pos', icon: 'check' },
+  Skipped: { tone: 'accent', icon: 'clock' },
+  Excluded: { tone: 'warn', icon: 'alert' },
+};
+
+export function RunOutcomeBadge({ outcome }: { outcome: RunOutcome }) {
+  const meta = RUN_OUTCOME[outcome];
+  return (
+    <Badge tone={meta.tone} icon={meta.icon}>
+      {outcome}
     </Badge>
   );
 }

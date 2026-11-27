@@ -9,9 +9,11 @@
  *   • Eligible      → checkbox (check/empty) when selectable
  */
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { IssuedStatementNotice } from '@/components/IssuedStatementNotice';
-import { Badge, Button, EmptyState, Money } from '@/design';
+import { Badge, Button, EmptyState, Money, buttonClassName } from '@/design';
 import { RunPreviewIssuedStatementNotice } from './RunPreviewIssuedStatementNotice';
+import { runReasonLabel } from './runReasons';
 import type { PreviewRowSpa, RunType } from './useRuns';
 
 export interface RunPreviewGridProps {
@@ -30,24 +32,12 @@ export interface RunPreviewGridProps {
   };
 }
 
-export const EXCLUDED_LABELS: Record<string, string> = {
-  non_positive_equity: 'Non-positive equity',
-  below_reserve_floor: 'Below reserve floor',
-  owner_not_found: 'Owner not found',
-  no_active_lease: 'No active lease',
-  zero_rent: 'Zero rent amount',
-};
-
 export const CAUTION_LABELS: Record<string, string> = {
   payment_in_transit: 'Payment in transit',
 };
 
 export function cautionLabel(caution: string): string {
   return CAUTION_LABELS[caution] ?? caution.replace(/_/g, ' ');
-}
-
-export function excludedLabel(reason: string): string {
-  return EXCLUDED_LABELS[reason] ?? reason.replace(/_/g, ' ');
 }
 
 export function RunPreviewGrid({
@@ -168,7 +158,7 @@ export function RunPreviewGrid({
                 <td>
                   {isExcluded ? (
                     <Badge tone="warn" icon="alert">
-                      {excludedLabel(row.excludedReason!)}
+                      {runReasonLabel(row.excludedReason!)}
                     </Badge>
                   ) : isAlreadyDone ? (
                     <Badge tone="accent" icon="check">
@@ -259,9 +249,15 @@ export function RunResultPanel({
       {posted > 0 && !noticeDismissed && (
         <IssuedStatementNotice target={{ runId }} onDismiss={() => setNoticeDismissed(true)} />
       )}
-      <Button variant="default" onClick={onDone}>
-        Back to Operations
-      </Button>
+      <div className="row gap8">
+        <Button variant="default" onClick={onDone}>
+          Back to Operations
+        </Button>
+        {/* What the run did to each target, which these counts summarize (#573). */}
+        <Link to={`/operations/runs/${runId}`} className={buttonClassName('ghost')}>
+          View run
+        </Link>
+      </div>
     </div>
   );
 }

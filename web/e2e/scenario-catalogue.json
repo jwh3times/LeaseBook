@@ -584,6 +584,15 @@
       "routes": ["GET /api/operations/runs"]
     },
     {
+      "id": "run-detail",
+      "workflow": "Open a confirmed run from the run history and see what it did to each owner, and why the ones it did not pay were excluded",
+      "area": "Operations",
+      "spec": "m6-bulk-operations.spec.ts",
+      "org": "scenario",
+      "events": [],
+      "routes": ["GET /api/operations/runs", "GET /api/operations/runs/{id}"]
+    },
+    {
       "id": "operations-navigation",
       "workflow": "Reach the disbursement run from the dashboard, and switch between the operations screens",
       "area": "Operations",
@@ -976,12 +985,6 @@
         "route": "GET /api/payments/unmatched",
         "reason": "The control appears only for a notice held for ten minutes, which a test would have to wait out.",
         "date": "2026-10-12"
-      },
-      {
-        "route": "GET /api/operations/runs/{id}",
-        "reason": "baseline gap",
-        "date": "2026-10-12",
-        "issue": 573
       }
     ]
   }
