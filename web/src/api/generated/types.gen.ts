@@ -929,6 +929,7 @@ export type ReconciliationLine = {
     amount: number | string;
     status: string;
     payoutReference: null | string;
+    notAssignableReason?: null | string;
 };
 
 export type ReconciliationLinesResponse = {

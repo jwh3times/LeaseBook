@@ -2,6 +2,7 @@ using LeaseBook.Modules.Accounting.Contracts;
 using LeaseBook.Modules.Accounting.Diagnostics;
 using LeaseBook.Modules.Accounting.Domain;
 using LeaseBook.Modules.Accounting.Features.Banking;
+using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Accounting.Features.Posting.Events;
 using LeaseBook.Modules.Accounting.Features.Reconciliation;
 using LeaseBook.Modules.Directory.Domain;
@@ -174,6 +175,57 @@ public sealed class ReconciliationMonthTests(PostgresFixture fixture)
             (interest, new DateOnly(2026, 4, 30), "April interest", 5m, "cleared"),
         ]);
         (await QueryAsync(scope, new GetReconciliationLines(UuidV7.NewId()), ct)).ShouldBeNull();
+    }
+
+    /// <summary>
+    /// #775: a payout's bank lines reconcile together (ADR-053), and finalize widens the lines it is
+    /// named to the whole payout. A payout with a line on 30 April and one on 1 May cannot be assigned
+    /// to April, so April's read marks its April line with finalize's own refusal. Before, the read
+    /// offered it plainly: the view ticked it, showed a zero difference against a statement that counted
+    /// it, and finalize refused.
+    /// </summary>
+    [Fact]
+    public async Task A_payout_whose_lines_straddle_the_month_end_is_offered_to_the_earlier_month_as_not_assignable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = await ProvisionedScopeAsync(fixture, ct, owners: [_owner], properties: [_property]);
+
+        var deposit = await DepositAsync(scope, 1_000m, new(2026, 4, 10), ct);
+        var wholeInApril = await PayoutLineAsync(scope, "po_2", "a", 60m, new(2026, 4, 20), ct);
+        var inApril = await PayoutLineAsync(scope, "po_1", "a", 100m, new(2026, 4, 30), ct);
+        // Two lines after April: the reason names the earlier, whichever posted first.
+        var laterInMay = await PayoutLineAsync(scope, "po_1", "c", 15m, new(2026, 5, 3), ct);
+        var inMay = await PayoutLineAsync(scope, "po_1", "b", 40m, new(2026, 5, 1), ct);
+        await ClearAsync(scope, [deposit, wholeInApril, inApril], ct);
+        var april = (await SendAsync(scope, new StartReconciliation(scope.TrustBankId, 2026, 4, 1_060m), ct)).Id;
+
+        const string Reason = "A line dated 2026-05-01 is after the end of 2026-04, so it cannot be reconciled in that month.";
+        var lines = (await QueryAsync(scope, new GetReconciliationLines(april), ct))!;
+        lines.Lines.Select(l => (l.JournalLineId, l.PayoutReference, l.NotAssignableReason)).ShouldBe(
+        [
+            (deposit, null, null),
+            (wholeInApril, "po_2", null),
+            (inApril, "po_1", Reason),
+        ]);
+
+        // Finalize refuses the line for the reason the read gave.
+        var refused = await Should.ThrowAsync<ReconciliationLineNotAssignableException>(
+            () => SendAsync(scope, new FinalizeReconciliation(april, [inApril]), ct));
+        refused.Message.ShouldBe(Reason);
+
+        // As the view does: tick every cleared line it may, and finalize at the statement they meet.
+        var ticked = lines.Lines.Where(l => l.Status == "cleared" && l.NotAssignableReason is null).ToList();
+        (lines.ReconciledThrough + ticked.Sum(l => l.Amount)).ShouldBe(1_060m);
+        (await SendAsync(scope, new FinalizeReconciliation(april, [.. ticked.Select(l => l.JournalLineId)]), ct))
+            .Status.ShouldBe("finalized");
+        (await StampsAsync(scope, ct)).ShouldBe(ignoreOrder: true, expected: new Dictionary<Guid, Guid?>
+        {
+            [deposit] = april,
+            [wholeInApril] = april,
+            [inApril] = null,
+            [inMay] = null,
+            [laterInMay] = null,
+        });
     }
 
     // ---- invariant I12 ----
@@ -417,6 +469,17 @@ public sealed class ReconciliationMonthTests(PostgresFixture fixture)
 
     private async Task<Guid> DepositAsync(OrgScope scope, decimal amount, DateOnly date, CancellationToken ct) =>
         await PostAsync(scope, new OwnerContribution(_owner, _property, new Money(amount), date, scope.TrustBankId, $"deposit {date}"), ct);
+
+    /// <summary>
+    /// A trust-bank line posted under a payout's source reference (ADR-053), dated <paramref name="date"/>.
+    /// A settlement dates every line of one payout alike; two processor bindings settling the same payout
+    /// id into one bank do not, and the journal groups them as one payout.
+    /// </summary>
+    private async Task<Guid> PayoutLineAsync(
+        OrgScope scope, string payout, string item, decimal amount, DateOnly date, CancellationToken ct) =>
+        await PostAsync(scope, new OwnerContribution(
+            _owner, _property, new Money(amount), date, scope.TrustBankId, $"payout {payout} {item}",
+            SourceRef: PayoutSourceRef.For(payout, item)), ct);
 
     /// <summary>Posts an event and returns its one trust-bank line.</summary>
     private static async Task<Guid> PostAsync(OrgScope scope, AccountingEvent @event, CancellationToken ct)

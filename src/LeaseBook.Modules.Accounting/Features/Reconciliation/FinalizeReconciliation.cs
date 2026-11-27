@@ -69,9 +69,17 @@ internal sealed class FinalizeReconciliationHandler(
             throw new ReconciliationLinesRequiredException(recon.PeriodYear, recon.PeriodMonth, today);
         }
 
-        var assigned = command.AssignedLineIds is null
-            ? await ReconciliationSql.DefaultAssignmentAsync(db, recon, ct)
-            : await NamedAssignmentAsync(recon, command.AssignedLineIds, ct);
+        List<ReconciliationLine> assigned;
+        if (command.AssignedLineIds is null)
+        {
+            assigned = await ReconciliationSql.DefaultAssignmentAsync(db, recon, ct);
+        }
+        else
+        {
+            // The named lines widened to whole payouts (ADR-053), refused as the lines read reports them.
+            var (lines, refusal) = await ReconciliationSql.AssignmentAsync(db, recon, command.AssignedLineIds, ct);
+            assigned = refusal is null ? lines : throw refusal;
+        }
 
         var cleared = await ReconciliationSql.ReconciledThroughAsync(db, recon.BankAccountId, recon.PeriodYear, recon.PeriodMonth, ct)
             + assigned.Sum(l => l.Amount);
@@ -131,36 +139,5 @@ internal sealed class FinalizeReconciliationHandler(
         await db.SaveChangesAsync(ct);
 
         return await ReconciliationSql.BuildAsync(db, recon, today, ct);
-    }
-
-    /// <summary>
-    /// The lines the caller named, widened to whole payouts (ADR-053), each checked assignable: an
-    /// unreconciled bank line of the account dated through the month's last day.
-    /// </summary>
-    private async Task<List<ReconciliationLine>> NamedAssignmentAsync(
-        BankReconciliation recon, IReadOnlyCollection<Guid> named, CancellationToken ct)
-    {
-        var (year, month) = (recon.PeriodYear, recon.PeriodMonth);
-        var monthEnd = ReconciliationSql.MonthEnd(year, month);
-        var ids = await PayoutLines.WithWholePayoutsAsync(db, named.Distinct().ToArray(), ct);
-
-        // Read the named lines without the month bound, so a line dated after it is named as such.
-        var lines = await ReconciliationSql.UnreconciledByIdAsync(db, recon.BankAccountId, ids, ct);
-        if (lines.Count != ids.Length)
-        {
-            var reconciled = await db.Set<BankLineState>().AnyAsync(
-                s => ids.Contains(s.JournalLineId) && s.Status == BankLineStatus.Reconciled, ct);
-            throw new ReconciliationLineNotAssignableException(
-                reconciled ? ReconciliationLineProblem.AlreadyReconciled : ReconciliationLineProblem.NotOnAccount, year, month);
-        }
-
-        var late = lines.Where(l => l.EntryDate > monthEnd).OrderBy(l => l.EntryDate).FirstOrDefault();
-        if (late is not null)
-        {
-            throw new ReconciliationLineNotAssignableException(
-                ReconciliationLineProblem.AfterMonthEnd, year, month, late.EntryDate);
-        }
-
-        return lines;
     }
 }
