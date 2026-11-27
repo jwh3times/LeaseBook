@@ -12,14 +12,13 @@ namespace LeaseBook.Web.Adapters;
 /// </summary>
 internal sealed class RunTargetNamesAdapter(ISender sender) : IRunTargetNames
 {
-    public async Task<IReadOnlyDictionary<Guid, Modules.Operations.Contracts.LeaseTargetName>> GetLeaseNamesAsync(
+    public async Task<IReadOnlyDictionary<Guid, RunLeaseTarget>> GetLeaseNamesAsync(
         IReadOnlyList<Guid> leaseIds, CancellationToken ct)
     {
         var names = await sender.Query(new GetLeaseTargetNames(leaseIds), ct);
         return names.ToDictionary(
             entry => entry.Key,
-            entry => new Modules.Operations.Contracts.LeaseTargetName(
-                entry.Value.TenantId, entry.Value.TenantName, entry.Value.UnitLabel));
+            entry => new RunLeaseTarget(entry.Value.TenantId, entry.Value.TenantName, entry.Value.UnitLabel));
     }
 
     public Task<IReadOnlyDictionary<Guid, string>> GetOwnerNamesAsync(

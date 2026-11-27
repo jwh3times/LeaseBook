@@ -100,8 +100,8 @@ public sealed class DisbursementRunStrategy(
 
             var (rowAmount, excludedReason) = decision switch
             {
-                DisburseOwner disbursement => (disbursement.Amounts.AfterReserve, (string?)null),
-                IneligibleForDisbursement ineligible => (0m, ineligible.Reason.Code()),
+                DisburseOwner disbursement => (disbursement.Amounts.AfterReserve, (RunReason?)null),
+                IneligibleForDisbursement ineligible => (0m, (RunReason?)ineligible.Reason),
                 _ => throw new InvalidOperationException(
                     $"Unknown disbursement decision case '{decision.GetType().Name}'."),
             };

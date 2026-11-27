@@ -25,7 +25,9 @@ public sealed record RunDetail(
     IReadOnlyList<RunDetailItem> Items);
 
 /// <summary>
-/// One target's run outcome.
+/// One target's run outcome. Items come back excluded first (the work could not be done), then
+/// skipped (it was already done), then posted; by target name within an outcome, ignoring case, with
+/// targets not found after named ones.
 /// </summary>
 /// <param name="Reason">Present exactly when <paramref name="Outcome"/> is skipped or excluded.</param>
 /// <param name="TargetName">
@@ -70,13 +72,18 @@ internal sealed class GetRunDetailHandler(DbContext db, IRunTargetNames names)
         var items = stored
             .Select(i =>
             {
-                var lease = i.TargetKind == RunTargetKind.Lease ? leases.GetValueOrDefault(i.TargetId) : null;
-                var name = i.TargetKind == RunTargetKind.Lease
-                    ? lease?.TenantName
-                    : owners.GetValueOrDefault(i.TargetId);
+                var reason = ReasonOf(i.Id, i.Status, i.SnapshotJson);
+                if (i.TargetKind == RunTargetKind.Lease)
+                {
+                    var lease = leases.GetValueOrDefault(i.TargetId);
+                    return new RunDetailItem(
+                        i.Id, i.TargetKind, i.TargetId, i.Status, i.Amount, reason,
+                        lease?.TenantName, lease?.UnitLabel, lease?.TenantId);
+                }
+
                 return new RunDetailItem(
-                    i.Id, i.TargetKind, i.TargetId, i.Status, i.Amount,
-                    ReasonOf(i.Id, i.Status, i.SnapshotJson), name, lease?.UnitLabel, lease?.TenantId);
+                    i.Id, i.TargetKind, i.TargetId, i.Status, i.Amount, reason,
+                    owners.GetValueOrDefault(i.TargetId), UnitLabel: null, TenantId: null);
             })
             .OrderBy(i => OutcomeOrder(i.Outcome))
             .ThenBy(i => i.TargetName is null)

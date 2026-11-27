@@ -79,7 +79,7 @@ public sealed class DisbursementTests
 
         preview.Rows.Count.ShouldBe(1);
         var row = preview.Rows[0];
-        row.ExcludedReason.ShouldBe("below_reserve_floor");
+        row.ExcludedReason.ShouldBe(RunReason.BelowReserveFloor);
         row.Amount.ShouldBe(0m);
     }
 
@@ -94,7 +94,7 @@ public sealed class DisbursementTests
 
         var preview = await strategy.PreviewAsync(new RunPeriod(2026, 6), ct);
 
-        preview.Rows[0].ExcludedReason.ShouldBe("non_positive_equity");
+        preview.Rows[0].ExcludedReason.ShouldBe(RunReason.NonPositiveEquity);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class DisbursementTests
 
         var preview = await strategy.PreviewAsync(new RunPeriod(2026, 6), ct);
 
-        preview.Rows[0].ExcludedReason.ShouldBe("non_positive_equity");
+        preview.Rows[0].ExcludedReason.ShouldBe(RunReason.NonPositiveEquity);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class DisbursementTests
 
         var preview = await strategy.PreviewAsync(new RunPeriod(2026, 6), ct);
 
-        preview.Rows[0].ExcludedReason.ShouldBe("non_positive_equity");
+        preview.Rows[0].ExcludedReason.ShouldBe(RunReason.NonPositiveEquity);
     }
 
     [Fact]
@@ -200,8 +200,40 @@ public sealed class DisbursementTests
 
         row.Amount.ShouldBe(expectedAmount);
         planAmount.ShouldBe(expectedAmount);
-        row.ExcludedReason.ShouldBe(expectedReason);
+        (row.ExcludedReason?.Code()).ShouldBe(expectedReason);
         planReason.ShouldBe(expectedReason);
+    }
+
+    /// <summary>
+    /// An owner below the reserve floor records the figures that put it there; an owner with no equity
+    /// has no fee or reserve arithmetic to record, only its equity.
+    /// </summary>
+    [Fact]
+    public async Task Only_a_below_reserve_floor_exclusion_records_the_fee_and_reserve_figures()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var belowFloor = Guid.NewGuid();
+        var noEquity = Guid.NewGuid();
+        var strategy = BuildStrategy(
+            owners:
+            [
+                new OwnerDisbursementRow(belowFloor, "Below floor", 200m, DefaultMgmtFeeBps: 800),
+                new OwnerDisbursementRow(noEquity, "No equity", 200m, DefaultMgmtFeeBps: 800),
+            ],
+            equity: [(belowFloor, 150m), (noEquity, 0m)]);
+
+        var plan = await strategy.PlanAsync(new RunPeriod(2026, 6), [belowFloor, noEquity], ct);
+
+        var floor = plan.OfType<PlannedExclusion>().Single(p => p.TargetId == belowFloor);
+        floor.Reason.ShouldBe(RunReason.BelowReserveFloor);
+        floor.Detail.Keys.ShouldBe(["equity", "fee", "netBeforeReserve", "reserve", "disburse"], ignoreOrder: true);
+        // 150.00 of equity less an 8% fee (12.00) leaves 138.00, under the 200.00 reserve.
+        (floor.Detail["fee"], floor.Detail["netBeforeReserve"], floor.Detail["reserve"])
+            .ShouldBe(((object?)12.00m, (object?)138.00m, (object?)200m));
+
+        var empty = plan.OfType<PlannedExclusion>().Single(p => p.TargetId == noEquity);
+        empty.Reason.ShouldBe(RunReason.NonPositiveEquity);
+        empty.Detail.Keys.ShouldBe(["equity"]);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

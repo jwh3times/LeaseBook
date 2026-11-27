@@ -7,6 +7,7 @@ using LeaseBook.Web.Calendar;
 using LeaseBook.Web.Reporting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
@@ -78,7 +79,7 @@ public sealed class OperationsEndpoints : IEndpointModule
                         r.Label,
                         r.Amount,
                         r.AlreadyDone,
-                        r.ExcludedReason,
+                        r.ExcludedReason?.Code(),
                         r.Detail,
                         r.Caution)).ToList();
 
@@ -191,12 +192,13 @@ public sealed class OperationsEndpoints : IEndpointModule
         // every item with its run outcome, its reason when it did not post, and who the target is
         // today. The order is the server's (GetRunDetail), so every consumer sees the same one.
         group.MapGet("/runs/{id:guid}",
-                async (Guid id, ISender sender, HttpContext httpContext, CancellationToken ct) =>
+                async Task<Results<Ok<BulkRunDetailResponse>, ProblemHttpResult>> (
+                    Guid id, ISender sender, HttpContext httpContext, CancellationToken ct) =>
                 {
                     var run = await sender.Query(new GetRunDetail(id), ct);
                     if (run is null)
                     {
-                        return ProblemResults.Problem(
+                        return ProblemResults.TypedProblem(
                             httpContext,
                             code: "run_not_found",
                             detail: "That run was not found.",
@@ -218,9 +220,8 @@ public sealed class OperationsEndpoints : IEndpointModule
                             i.TenantId))
                         .ToList();
 
-                    return Results.Ok(new BulkRunDetailResponse(header, items));
+                    return TypedResults.Ok(new BulkRunDetailResponse(header, items));
                 })
-            .Produces<BulkRunDetailResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
     }
 

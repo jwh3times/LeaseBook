@@ -52,7 +52,8 @@ public abstract record RunPlanItem
 /// </param>
 /// <param name="RefusedDetail">
 /// The same, for a refusal. The engine adds <c>reason</c>, which is derived from the
-/// <see cref="PostStatus"/> and is therefore identical across strategies.
+/// <see cref="PostStatus"/> and is therefore identical across strategies. A strategy must not supply
+/// its own <c>reason</c> key: the engine refuses one rather than overwrite it.
 /// </param>
 public sealed record PlannedPosting(
     RunTargetKind TargetKind,
@@ -75,7 +76,8 @@ public sealed record PlannedPosting(
 /// </param>
 /// <param name="Detail">
 /// The strategy's own account of the decision, for <c>snapshot_json</c>. The engine adds
-/// <c>reason</c>, the code of <paramref name="Reason"/>; everything else is copied through unread.
+/// <c>reason</c>, the code of <paramref name="Reason"/>, and refuses a <c>reason</c> key here rather
+/// than overwrite it; everything else is copied through unread.
 /// </param>
 public sealed record PlannedExclusion(
     RunTargetKind TargetKind,

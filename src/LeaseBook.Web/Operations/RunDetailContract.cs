@@ -6,9 +6,10 @@ using Microsoft.OpenApi;
 namespace LeaseBook.Web.Operations;
 
 /// <summary>
-/// Publishes the run outcome and the run reason codes as enums in the OpenAPI document (#573), the way
-/// <c>BudgetTasks</c> publishes the telemetry task list: <c>[AllowedValues]</c> is not emitted, so a
-/// schema transformer is what carries the list to the generated client. The SPA's wording map is
+/// Publishes the target kind, the run outcome and the run reason codes as enums in the OpenAPI
+/// document (#573), the way <c>BudgetTasks</c> publishes the telemetry task list:
+/// <c>[AllowedValues]</c> is not emitted, so a schema transformer is what carries the list to the
+/// generated client. The SPA's wording map is
 /// typed as a complete record over the generated reason type, so a code added here without wording
 /// fails the SPA typecheck instead of reaching a screen as raw text.
 /// </summary>
@@ -17,12 +18,16 @@ public static class RunDetailContract
     /// <summary>The run outcomes, as <c>RunItemStatus</c> names them on the wire.</summary>
     public static IReadOnlyList<string> Outcomes { get; } = [.. Enum.GetNames<RunItemStatus>()];
 
+    /// <summary>The target kinds, as <c>RunTargetKind</c> names them on the wire.</summary>
+    public static IReadOnlyList<string> TargetKinds { get; } = [.. Enum.GetNames<RunTargetKind>()];
+
     public static Task PublishEnums(
         OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken cancellationToken)
     {
         var type = context.JsonTypeInfo.Type;
         if (type == typeof(BulkRunItemSpa))
         {
+            Publish(schema, "targetKind", TargetKinds, nullable: false);
             Publish(schema, "outcome", Outcomes, nullable: false);
             Publish(schema, "reason", RunReasons.AllCodes, nullable: true);
         }

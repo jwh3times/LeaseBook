@@ -175,7 +175,7 @@ export type BulkRunDetailResponse = {
 
 export type BulkRunItemSpa = {
     id: string;
-    targetKind: string;
+    targetKind: 'Lease' | 'Owner';
     targetId: string;
     outcome: 'Posted' | 'Skipped' | 'Excluded';
     amount: number | string;

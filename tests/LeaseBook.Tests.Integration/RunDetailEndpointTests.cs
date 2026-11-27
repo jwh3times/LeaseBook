@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using LeaseBook.Modules.Accounting.Features.LedgerPosting;
 using LeaseBook.Modules.Directory.Features.BankAccounts;
 using LeaseBook.Modules.Directory.Features.Leases;
 using LeaseBook.Modules.Directory.Features.Owners;
@@ -95,6 +96,54 @@ public sealed class RunDetailEndpointTests(PostgresFixture fixture)
             ]);
     }
 
+    /// <summary>
+    /// Every outcome in one run, so the order between them is pinned and not only within one: what
+    /// could not be done, then what was already done, then what posted — and, within the exclusions,
+    /// a lease that still has a name before one that cannot be found.
+    /// </summary>
+    [Fact]
+    public async Task A_run_with_every_outcome_lists_exclusions_then_skips_then_postings()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (client, org) = await OrgWithLeasesAsync(ct);
+        var missingLease = UuidV7.NewId();
+        await ConfirmAsync(org.OrgId, RunType.Rent, [org.AliceLease], ct);
+
+        var runId = await ConfirmAsync(
+            org.OrgId, RunType.Rent, [org.BobLease, org.AliceLease, missingLease, org.CarolLease], ct);
+
+        var detail = await DetailAsync(client, runId, ct);
+        detail.Items.Select(i => (i.TargetId, i.Outcome, i.Reason, i.TargetName)).ShouldBe(
+        [
+            // Carol's lease ended in February, so March's schedule does not hold it; it is still hers.
+            (org.CarolLease, "Excluded", "lease_not_in_schedule", "Carol Ended"),
+            (missingLease, "Excluded", "lease_not_in_schedule", null),
+            (org.AliceLease, "Skipped", "already_charged_in_period", "Alice Full"),
+            (org.BobLease, "Posted", null, "Bob Full"),
+        ]);
+    }
+
+    [Fact]
+    public async Task A_disbursement_that_posts_names_its_owner_and_carries_no_reason()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (client, org) = await OrgWithLeasesAsync(ct);
+        await ConfirmAsync(org.OrgId, RunType.Rent, [org.AliceLease], ct);
+        await DispatchAsync(org.OrgId, s => s.Send(
+            new RecordPayment(
+                org.AliceTenant, 1450m, new DateOnly(2026, 3, 5), "check", org.TrustBankId,
+                "Rent payment", $"payment:2026-03:tenant={org.AliceTenant}"),
+            ct), ct);
+
+        var runId = await ConfirmAsync(org.OrgId, RunType.Disbursement, [org.OwnerId], ct);
+
+        var item = (await DetailAsync(client, runId, ct)).Items.ShouldHaveSingleItem();
+        (item.TargetKind, item.TargetId, item.Outcome, item.Reason, item.TargetName).ShouldBe(
+            ("Owner", org.OwnerId, "Posted", (string?)null, (string?)"Test Owner"));
+        // 1,450.00 of cash equity, less the 8% management fee (116.00), with no reserve.
+        item.Amount.ShouldBe(1334.00m);
+    }
+
     [Fact]
     public async Task Another_organizations_run_is_not_found()
     {
@@ -133,7 +182,8 @@ public sealed class RunDetailEndpointTests(PostgresFixture fixture)
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private sealed record Org(
-        Guid OrgId, Guid OwnerId, Guid AliceLease, Guid AliceTenant, Guid BobLease, Guid BobTenant);
+        Guid OrgId, Guid TrustBankId, Guid OwnerId, Guid AliceLease, Guid AliceTenant, Guid BobLease,
+        Guid BobTenant, Guid CarolLease);
 
     private static async Task<BulkRunDetailResponse> DetailAsync(HttpClient client, Guid runId, CancellationToken ct)
     {
@@ -142,7 +192,10 @@ public sealed class RunDetailEndpointTests(PostgresFixture fixture)
         return (await response.Content.ReadFromJsonAsync<BulkRunDetailResponse>(ct))!;
     }
 
-    /// <summary>A staff member signed in to a new organization with one owner and two full-month leases.</summary>
+    /// <summary>
+    /// A staff member signed in to a new organization with one owner, two leases that span March 2026
+    /// and one that ended in February.
+    /// </summary>
     private async Task<(HttpClient Client, Org Org)> OrgWithLeasesAsync(CancellationToken ct)
     {
         var (orgId, client) = await AuthTestSupport.SignedInToNewOrgAsync(fixture, Roles.PMStaff, ct);
@@ -150,18 +203,22 @@ public sealed class RunDetailEndpointTests(PostgresFixture fixture)
 
         await DispatchAsync(orgId, async s =>
         {
-            await s.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct);
+            var trust = await s.Send(new CreateBankAccount("Operating Trust", null, null, "trust"), ct);
             var ownerId = await s.Send(new CreateOwner("Test Owner", null, null, null, 800, 0m), ct);
             var propertyId = await s.Send(new CreateProperty(ownerId, "100 Main St", "Asheville", "NC", null, null), ct);
             var unitA = await s.Send(new CreateUnit(propertyId, "#A", 1450m, "available"), ct);
             var unitB = await s.Send(new CreateUnit(propertyId, "#B", 1380m, "available"), ct);
+            var unitC = await s.Send(new CreateUnit(propertyId, "#C", 1500m, "available"), ct);
             var alice = await s.Send(new CreateTenant("Alice Full", null, null, "current"), ct);
             var bob = await s.Send(new CreateTenant("Bob Full", null, null, "current"), ct);
+            var carol = await s.Send(new CreateTenant("Carol Ended", null, null, "past"), ct);
             var aliceLease = await s.Send(new CreateLease(alice, unitA,
                 new DateOnly(2025, 6, 1), new DateOnly(2027, 5, 31), 1450m, 1450m, "active"), ct);
             var bobLease = await s.Send(new CreateLease(bob, unitB,
                 new DateOnly(2025, 6, 1), new DateOnly(2027, 5, 31), 1380m, 1380m, "active"), ct);
-            org = new Org(orgId, ownerId, aliceLease, alice, bobLease, bob);
+            var carolLease = await s.Send(new CreateLease(carol, unitC,
+                new DateOnly(2025, 3, 1), new DateOnly(2026, 2, 28), 1500m, 1500m, "ended"), ct);
+            org = new Org(orgId, trust.Id, ownerId, aliceLease, alice, bobLease, bob, carolLease);
         }, ct);
 
         return (client, org!);

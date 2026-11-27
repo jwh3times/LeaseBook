@@ -13,7 +13,7 @@ namespace LeaseBook.Modules.Operations.Contracts;
 public interface IRunTargetNames
 {
     /// <summary>The tenant and unit of each lease in <paramref name="leaseIds"/> that exists.</summary>
-    Task<IReadOnlyDictionary<Guid, LeaseTargetName>> GetLeaseNamesAsync(
+    Task<IReadOnlyDictionary<Guid, RunLeaseTarget>> GetLeaseNamesAsync(
         IReadOnlyList<Guid> leaseIds, CancellationToken ct);
 
     /// <summary>The name of each owner in <paramref name="ownerIds"/> that exists.</summary>
@@ -22,4 +22,4 @@ public interface IRunTargetNames
 }
 
 /// <summary>One lease target's tenant (with the id a link to the tenant's ledger needs) and unit.</summary>
-public sealed record LeaseTargetName(Guid TenantId, string TenantName, string UnitLabel);
+public sealed record RunLeaseTarget(Guid TenantId, string TenantName, string UnitLabel);

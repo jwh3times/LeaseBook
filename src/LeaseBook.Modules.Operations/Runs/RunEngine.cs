@@ -450,6 +450,14 @@ public sealed class RunEngine(
     private static Dictionary<string, object?> WithReason(
         RunReason reason, IReadOnlyDictionary<string, object?> detail)
     {
+        // Overwriting would silently record the strategy's word for why nothing posted instead of the
+        // reason the plan or the posting outcome actually gave.
+        if (detail.ContainsKey("reason"))
+        {
+            throw new InvalidOperationException(
+                "A strategy's run-item detail must not carry its own 'reason'; the engine records it.");
+        }
+
         var withReason = new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason.Code() };
         foreach (var (key, value) in detail)
         {

@@ -15,6 +15,8 @@
   `RunType`
 - **Amended 2026-09-14 (self):** disbursement preview and plan now project one decision, and a
   non-empty preview validates the same operating-trust precondition as confirmation (§4c)
+- **Amended 2026-11-27 (self, #573):** the run reasons are one published list, and a reason decides
+  whether its target is skipped or excluded (the addendum under §4b)
 
 ## Context
 
@@ -171,6 +173,21 @@ than in its outer `catch`, so the classification is scoped to the one posting th
 Accounting's reserve-floor guard runs on `OwnerDisbursed` and nothing else; the same exception
 reaching a rent or late-fee posting would mean something is wrong in the layer below, and a
 uniformly-applied catch would file that away as an ordinary per-item exclusion on the money path.
+
+**Addendum (2026-11-27, #573): the reasons are one list, and a reason decides the outcome.** The run
+history now opens per run: `GET /api/operations/runs/{id}` returns each item's run outcome
+(`CONTEXT.md`), its reason and who the target is today. To make that reason something a screen can
+word, the fourteen codes written under `reason` — four from posting refusals, ten decided by the run
+types — became one enum, `RunReason`, whose table gives each its code and its outcome. A
+`PlannedExclusion` now names a `RunReason` and no longer carries a status beside it, so a skip
+recorded as an exclusion (or the reverse) cannot be written; the engine's guard against a
+"posted" exclusion went with the parameter it checked. The engine writes `reason` for a planned
+exclusion as well as for a refusal, and refuses a strategy detail that carries its own. Stored
+payloads are unchanged, and the codes are now a contract: they are stored in every committed run
+and published as enums in the OpenAPI document, so renaming one would make older runs
+unreadable. A unit test pins them as committed runs hold them. Target names are looked up today,
+by id, through a batch port (`IRunTargetNames`) rather than stored with the item: the item's
+record is the target id, and the wording at run time survives in each posted entry's description.
 
 ### 4c. A strategy states each rule once; preview and plan project it (amendment, 2026-08-20)
 
