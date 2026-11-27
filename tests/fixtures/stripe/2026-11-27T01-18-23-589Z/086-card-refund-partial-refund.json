@@ -1,0 +1,44 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/refunds",
+    "params": {
+      "payment_intent": "pi_synthetic000009",
+      "amount": 5000
+    },
+    "platform": false,
+    "idempotencyKey": "32582cd7-27c7-4a77-aeb9-ce57b01f746a"
+  },
+  "status": 200,
+  "requestId": "req_synthetic000031",
+  "stripeVersion": "2026-11-18.endive",
+  "elapsedMs": 1108,
+  "body": {
+    "id": "re_synthetic000002",
+    "object": "refund",
+    "amount": 5000,
+    "application": "ca_synthetic000001",
+    "balance_transaction": "txn_synthetic000013",
+    "charge": "ch_synthetic000006",
+    "created": 1795742455,
+    "currency": "usd",
+    "customer": null,
+    "customer_account": null,
+    "destination_details": {
+      "card": {
+        "reference_status": "pending",
+        "reference_type": "acquirer_reference_number",
+        "type": "refund"
+      },
+      "type": "card"
+    },
+    "metadata": {},
+    "payment_intent": "pi_synthetic000009",
+    "payment_method": "pm_synthetic000009",
+    "reason": null,
+    "receipt_number": null,
+    "source_transfer_reversal": null,
+    "status": "succeeded",
+    "transfer_reversal": null
+  }
+}

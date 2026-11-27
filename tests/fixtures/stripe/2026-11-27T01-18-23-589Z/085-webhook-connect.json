@@ -1,0 +1,131 @@
+{
+  "route": "/connect",
+  "signed": true,
+  "verified": true,
+  "event": {
+    "id": "evt_synthetic000055",
+    "object": "event",
+    "account": "acct_synthetic000002",
+    "api_version": "2026-11-18.endive",
+    "context": "acct_synthetic000002",
+    "created": 1795742454,
+    "data": {
+      "object": {
+        "id": "ch_synthetic000005",
+        "object": "charge",
+        "amount": 20000,
+        "amount_captured": 20000,
+        "amount_refunded": 20000,
+        "application": "ca_synthetic000001",
+        "application_fee": null,
+        "application_fee_amount": null,
+        "balance_transaction": "txn_synthetic000009",
+        "billing_details": {},
+        "calculated_statement_descriptor": "[scrubbed]",
+        "captured": true,
+        "created": 1795742424,
+        "currency": "usd",
+        "customer": null,
+        "description": null,
+        "destination": null,
+        "dispute": null,
+        "disputed": false,
+        "failure_balance_transaction": null,
+        "failure_code": null,
+        "failure_message": null,
+        "fraud_details": {},
+        "livemode": false,
+        "metadata": {
+          "leasebook_operation": "cf03c3d3-3e64-4035-b8a7-1b51277b5bbe",
+          "leasebook_generation": "e419a059-54d8-48f3-8dad-dbb21c485f3d"
+        },
+        "on_behalf_of": null,
+        "order": null,
+        "outcome": {
+          "advice_code": null,
+          "network_advice_code": null,
+          "network_decline_code": null,
+          "network_status": "approved_by_network",
+          "reason": null,
+          "risk_level": "normal",
+          "risk_score": 37,
+          "seller_message": "Payment complete.",
+          "type": "authorized"
+        },
+        "paid": true,
+        "payment_intent": "pi_synthetic000008",
+        "payment_method": "pm_synthetic000008",
+        "payment_method_details": {
+          "card": {
+            "amount_authorized": 20000,
+            "authorization_code": "[scrubbed]",
+            "brand": "visa",
+            "checks": {
+              "address_line1_check": null,
+              "address_postal_code_check": null,
+              "cvc_check": "pass"
+            },
+            "country": "US",
+            "electronic_commerce_indicator": "07",
+            "exp_month": 11,
+            "exp_year": 2027,
+            "extended_authorization": {
+              "status": "disabled"
+            },
+            "fingerprint": "[scrubbed]",
+            "funding": "credit",
+            "incremental_authorization": {
+              "status": "unavailable"
+            },
+            "installments": null,
+            "last4": "[scrubbed]",
+            "mandate": null,
+            "multicapture": {
+              "status": "unavailable"
+            },
+            "network": "visa",
+            "network_token": {
+              "used": false
+            },
+            "network_transaction_id": "[scrubbed]",
+            "overcapture": {
+              "maximum_amount_capturable": 20000,
+              "status": "unavailable"
+            },
+            "regulated_status": "unregulated",
+            "three_d_secure": null,
+            "transaction_link_id": null,
+            "wallet": null
+          },
+          "type": "card"
+        },
+        "radar_options": {},
+        "receipt_email": null,
+        "receipt_number": null,
+        "receipt_url": "[scrubbed]",
+        "refunded": true,
+        "review": null,
+        "shipping": null,
+        "source": null,
+        "source_transfer": null,
+        "statement_descriptor": null,
+        "statement_descriptor_suffix": null,
+        "status": "succeeded",
+        "transfer_data": null,
+        "transfer_group": null
+      },
+      "previous_attributes": {
+        "amount_refunded": 0,
+        "receipt_url": "[scrubbed]",
+        "refunded": false
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 2,
+    "request": {
+      "id": "req_synthetic000029",
+      "idempotency_key": "c40db697-1020-42d4-84a0-4f0b64bd65b4"
+    },
+    "type": "charge.refunded"
+  }
+}

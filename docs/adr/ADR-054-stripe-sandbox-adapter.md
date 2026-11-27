@@ -548,6 +548,21 @@ The suite still replays the three earlier runs, whose references are pinned by h
 the new run is read through the adapter by its own tests. `scripts/stripe-probe.test.mjs` fails if the
 pinned version has no recording, and if an earlier run holds a field the newest one has lost.
 
+**Implementation note, 2026-11-27 (API version `2026-11-18.endive`).** The adapter moved to Stripe.net
+53.2.0, which sends that version, together with a fresh probe run,
+`tests/fixtures/stripe/2026-11-27T01-18-23-589Z/`. It recorded every kind of answer and event the run
+of 2026-10-31 did, under the same names, and all 61 deliveries named the new version. Field for field,
+the only difference is that a refund now carries `application`, which the adapter does not read.
+Nothing was lost or changed type.
+
+Stripe lists events for 30 days, so the run fetched the events of only its two newest payouts, of
+2026-11-02 and 2026-11-09, and recorded the lines of its three newest: those two and the payout of
+2026-10-16. The payout of 2026-10-09 the earlier runs read again is not among them. The tests now read
+the payout of 2026-10-16 instead, at the previous pinned version and at this one, and it comes to the
+same lines. Its event is built from the run's own `payout.paid` envelope and its own listing of the
+payout; in both pinned runs an event's payout and the listing of it agree field for field. The run of
+2026-10-31 stays, as the earlier side of that comparison. No decision changes.
+
 The provisional assumptions of ADR-053 stay open. This ADR verifies none of them, and nothing here
 is approval to move real money.
 
@@ -653,7 +668,7 @@ says "to revisit", this list is where the item now lives.
   user agent among them, are not asserted.
 - **Most tests replay payloads from an earlier API version.** They are held to the shape of the
   recording at the pinned version by a test, but they do not carry the fields that version added. A
-  real host has not been run against a sandbox at `2026-10-28.endive`; only the probe has.
+  real host has not been run against a sandbox at `2026-11-18.endive`; only the probe has.
 - **Whether an event on the platform's own account is signed with the same secret is not shown.**
   None was delivered. The adapter drops an event that names no connected account.
 

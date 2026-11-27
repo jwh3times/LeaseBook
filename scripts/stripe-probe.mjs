@@ -40,7 +40,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** The API version the adapter's library is pinned to, so recorded shapes match what it will parse. */
-export const API_VERSION = "2026-10-28.endive";
+export const API_VERSION = "2026-11-18.endive";
 export const FIXTURE_ROOT = join("tests", "fixtures", "stripe");
 const RAW_ROOT = "stripe-probe.local";
 const API = "https://api.stripe.com";

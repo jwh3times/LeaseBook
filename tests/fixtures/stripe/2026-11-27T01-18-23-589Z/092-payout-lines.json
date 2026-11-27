@@ -1,0 +1,680 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/v1/balance_transactions",
+    "params": {
+      "payout": "po_synthetic000001",
+      "limit": 100,
+      "expand": [
+        "data.source"
+      ]
+    },
+    "platform": false,
+    "idempotencyKey": null
+  },
+  "status": 200,
+  "requestId": "req_synthetic000035",
+  "stripeVersion": "2026-11-18.endive",
+  "elapsedMs": 273,
+  "body": {
+    "object": "list",
+    "data": [
+      {
+        "id": "txn_synthetic000014",
+        "object": "balance_transaction",
+        "amount": -83170,
+        "available_on": 1794185619,
+        "balance_type": "payments",
+        "created": 1794185619,
+        "currency": "usd",
+        "description": "[scrubbed]",
+        "exchange_rate": null,
+        "fee": 0,
+        "fee_details": [],
+        "net": -83170,
+        "reporting_category": "payout",
+        "source": {
+          "id": "po_synthetic000001",
+          "object": "payout",
+          "amount": 83170,
+          "application_fee": null,
+          "application_fee_amount": null,
+          "arrival_date": 1794182400,
+          "automatic": true,
+          "balance_transaction": "txn_synthetic000014",
+          "created": 1794185619,
+          "currency": "usd",
+          "description": "[scrubbed]",
+          "destination": "ba_synthetic000001",
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "livemode": false,
+          "metadata": {},
+          "method": "standard",
+          "original_payout": null,
+          "payout_method": null,
+          "reconciliation_status": "completed",
+          "reversed_by": null,
+          "source_type": "card",
+          "statement_descriptor": null,
+          "status": "paid",
+          "trace_id": {},
+          "type": "bank_account"
+        },
+        "status": "available",
+        "type": "payout"
+      },
+      {
+        "id": "txn_synthetic000019",
+        "object": "balance_transaction",
+        "amount": -5000,
+        "available_on": 1794009600,
+        "balance_type": "payments",
+        "created": 1793409593,
+        "currency": "usd",
+        "description": "[scrubbed]",
+        "exchange_rate": null,
+        "fee": 0,
+        "fee_details": [],
+        "net": -5000,
+        "reporting_category": "refund",
+        "source": {
+          "id": "re_synthetic000003",
+          "object": "refund",
+          "amount": 5000,
+          "application": null,
+          "balance_transaction": "txn_synthetic000019",
+          "charge": "ch_synthetic000007",
+          "created": 1793409593,
+          "currency": "usd",
+          "customer": null,
+          "customer_account": null,
+          "destination_details": {
+            "card": {
+              "reference": "[scrubbed]",
+              "reference_status": "available",
+              "reference_type": "acquirer_reference_number",
+              "type": "refund"
+            },
+            "type": "card"
+          },
+          "metadata": {},
+          "payment_intent": "pi_synthetic000010",
+          "payment_method": "pm_synthetic000010",
+          "reason": null,
+          "receipt_number": null,
+          "source_transfer_reversal": null,
+          "status": "succeeded",
+          "transfer_reversal": null
+        },
+        "status": "available",
+        "type": "refund"
+      },
+      {
+        "id": "txn_synthetic000020",
+        "object": "balance_transaction",
+        "amount": -20000,
+        "available_on": 1794009600,
+        "balance_type": "payments",
+        "created": 1793409592,
+        "currency": "usd",
+        "description": "[scrubbed]",
+        "exchange_rate": null,
+        "fee": 0,
+        "fee_details": [],
+        "net": -20000,
+        "reporting_category": "refund",
+        "source": {
+          "id": "re_synthetic000004",
+          "object": "refund",
+          "amount": 20000,
+          "application": null,
+          "balance_transaction": "txn_synthetic000020",
+          "charge": "ch_synthetic000008",
+          "created": 1793409592,
+          "currency": "usd",
+          "customer": null,
+          "customer_account": null,
+          "destination_details": {
+            "card": {
+              "reference": "[scrubbed]",
+              "reference_status": "available",
+              "reference_type": "acquirer_reference_number",
+              "type": "refund"
+            },
+            "type": "card"
+          },
+          "metadata": {},
+          "payment_intent": "pi_synthetic000011",
+          "payment_method": "pm_synthetic000011",
+          "reason": null,
+          "receipt_number": null,
+          "source_transfer_reversal": null,
+          "status": "succeeded",
+          "transfer_reversal": null
+        },
+        "status": "available",
+        "type": "refund"
+      },
+      {
+        "id": "txn_synthetic000021",
+        "object": "balance_transaction",
+        "amount": 20000,
+        "available_on": 1794009600,
+        "balance_type": "payments",
+        "created": 1793409493,
+        "currency": "usd",
+        "description": null,
+        "exchange_rate": null,
+        "fee": 610,
+        "fee_details": [
+          {
+            "amount": 610,
+            "application": null,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "type": "stripe_fee"
+          }
+        ],
+        "net": 19390,
+        "reporting_category": "charge",
+        "source": {
+          "id": "ch_synthetic000007",
+          "object": "charge",
+          "amount": 20000,
+          "amount_captured": 20000,
+          "amount_refunded": 5000,
+          "application": "ca_synthetic000001",
+          "application_fee": null,
+          "application_fee_amount": null,
+          "balance_transaction": "txn_synthetic000021",
+          "billing_details": {},
+          "calculated_statement_descriptor": "[scrubbed]",
+          "captured": true,
+          "created": 1793409493,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": null,
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "livemode": false,
+          "metadata": {
+            "leasebook_generation": "07a8a0f1-7d1b-4fca-9e50-43ff46d94ee5",
+            "leasebook_operation": "be722387-0fe7-41b5-82d0-9ec649401f6f"
+          },
+          "on_behalf_of": null,
+          "order": null,
+          "outcome": {
+            "advice_code": null,
+            "network_advice_code": null,
+            "network_decline_code": null,
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 4,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_synthetic000010",
+          "payment_method": "pm_synthetic000010",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 20000,
+              "authorization_code": "[scrubbed]",
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "electronic_commerce_indicator": "07",
+              "exp_month": 10,
+              "exp_year": 2027,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "[scrubbed]",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "[scrubbed]",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "network_transaction_id": "[scrubbed]",
+              "overcapture": {
+                "maximum_amount_capturable": 20000,
+                "status": "unavailable"
+              },
+              "regulated_status": "unregulated",
+              "three_d_secure": null,
+              "transaction_link_id": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "radar_options": {},
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "[scrubbed]",
+          "refunded": false,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer_data": null,
+          "transfer_group": null
+        },
+        "status": "available",
+        "type": "charge"
+      },
+      {
+        "id": "txn_synthetic000022",
+        "object": "balance_transaction",
+        "amount": 20000,
+        "available_on": 1794009600,
+        "balance_type": "payments",
+        "created": 1793409489,
+        "currency": "usd",
+        "description": null,
+        "exchange_rate": null,
+        "fee": 610,
+        "fee_details": [
+          {
+            "amount": 610,
+            "application": null,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "type": "stripe_fee"
+          }
+        ],
+        "net": 19390,
+        "reporting_category": "charge",
+        "source": {
+          "id": "ch_synthetic000008",
+          "object": "charge",
+          "amount": 20000,
+          "amount_captured": 20000,
+          "amount_refunded": 20000,
+          "application": "ca_synthetic000001",
+          "application_fee": null,
+          "application_fee_amount": null,
+          "balance_transaction": "txn_synthetic000022",
+          "billing_details": {},
+          "calculated_statement_descriptor": "[scrubbed]",
+          "captured": true,
+          "created": 1793409489,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": null,
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "livemode": false,
+          "metadata": {
+            "leasebook_generation": "07a8a0f1-7d1b-4fca-9e50-43ff46d94ee5",
+            "leasebook_operation": "c4de9df2-4773-4e60-9f12-97e2e12ad5fd"
+          },
+          "on_behalf_of": null,
+          "order": null,
+          "outcome": {
+            "advice_code": null,
+            "network_advice_code": null,
+            "network_decline_code": null,
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 36,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_synthetic000011",
+          "payment_method": "pm_synthetic000011",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 20000,
+              "authorization_code": "[scrubbed]",
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "electronic_commerce_indicator": "07",
+              "exp_month": 10,
+              "exp_year": 2027,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "[scrubbed]",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "[scrubbed]",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "network_transaction_id": "[scrubbed]",
+              "overcapture": {
+                "maximum_amount_capturable": 20000,
+                "status": "unavailable"
+              },
+              "regulated_status": "unregulated",
+              "three_d_secure": null,
+              "transaction_link_id": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "radar_options": {},
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "[scrubbed]",
+          "refunded": true,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer_data": null,
+          "transfer_group": null
+        },
+        "status": "available",
+        "type": "charge"
+      },
+      {
+        "id": "txn_synthetic000023",
+        "object": "balance_transaction",
+        "amount": 20000,
+        "available_on": 1794009600,
+        "balance_type": "payments",
+        "created": 1793409482,
+        "currency": "usd",
+        "description": null,
+        "exchange_rate": null,
+        "fee": 610,
+        "fee_details": [
+          {
+            "amount": 610,
+            "application": null,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "type": "stripe_fee"
+          }
+        ],
+        "net": 19390,
+        "reporting_category": "charge",
+        "source": {
+          "id": "ch_synthetic000009",
+          "object": "charge",
+          "amount": 20000,
+          "amount_captured": 20000,
+          "amount_refunded": 0,
+          "application": "ca_synthetic000001",
+          "application_fee": null,
+          "application_fee_amount": null,
+          "balance_transaction": "txn_synthetic000023",
+          "billing_details": {},
+          "calculated_statement_descriptor": "[scrubbed]",
+          "captured": true,
+          "created": 1793409482,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": null,
+          "dispute": "du_synthetic000003",
+          "disputed": true,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "livemode": false,
+          "metadata": {
+            "leasebook_generation": "07a8a0f1-7d1b-4fca-9e50-43ff46d94ee5",
+            "leasebook_operation": "ed8661b3-9294-4d6b-9001-3b75b598aa0e"
+          },
+          "on_behalf_of": null,
+          "order": null,
+          "outcome": {
+            "advice_code": null,
+            "network_advice_code": null,
+            "network_decline_code": null,
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 50,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_synthetic000012",
+          "payment_method": "pm_synthetic000012",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 20000,
+              "authorization_code": "[scrubbed]",
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "electronic_commerce_indicator": "07",
+              "exp_month": 10,
+              "exp_year": 2027,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "[scrubbed]",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "[scrubbed]",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "network_transaction_id": "[scrubbed]",
+              "overcapture": {
+                "maximum_amount_capturable": 20000,
+                "status": "unavailable"
+              },
+              "regulated_status": "unregulated",
+              "three_d_secure": null,
+              "transaction_link_id": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "radar_options": {},
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "[scrubbed]",
+          "refunded": false,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer_data": null,
+          "transfer_group": null
+        },
+        "status": "available",
+        "type": "charge"
+      },
+      {
+        "id": "txn_synthetic000024",
+        "object": "balance_transaction",
+        "amount": 51524,
+        "available_on": 1794009600,
+        "balance_type": "payments",
+        "created": 1793409360,
+        "currency": "usd",
+        "description": null,
+        "exchange_rate": null,
+        "fee": 1524,
+        "fee_details": [
+          {
+            "amount": 1524,
+            "application": null,
+            "currency": "usd",
+            "description": "[scrubbed]",
+            "type": "stripe_fee"
+          }
+        ],
+        "net": 50000,
+        "reporting_category": "charge",
+        "source": {
+          "id": "ch_synthetic000010",
+          "object": "charge",
+          "amount": 51524,
+          "amount_captured": 51524,
+          "amount_refunded": 0,
+          "application": "ca_synthetic000001",
+          "application_fee": null,
+          "application_fee_amount": null,
+          "balance_transaction": "txn_synthetic000024",
+          "billing_details": {},
+          "calculated_statement_descriptor": "[scrubbed]",
+          "captured": true,
+          "created": 1793409360,
+          "currency": "usd",
+          "customer": null,
+          "description": null,
+          "destination": null,
+          "dispute": null,
+          "disputed": false,
+          "failure_balance_transaction": null,
+          "failure_code": null,
+          "failure_message": null,
+          "fraud_details": {},
+          "livemode": false,
+          "metadata": {
+            "leasebook_generation": "07a8a0f1-7d1b-4fca-9e50-43ff46d94ee5",
+            "leasebook_operation": "596e6c14-0bde-4b17-aa7b-1fbbe9bf05e4"
+          },
+          "on_behalf_of": null,
+          "order": null,
+          "outcome": {
+            "advice_code": null,
+            "network_advice_code": null,
+            "network_decline_code": null,
+            "network_status": "approved_by_network",
+            "reason": null,
+            "risk_level": "normal",
+            "risk_score": 13,
+            "seller_message": "Payment complete.",
+            "type": "authorized"
+          },
+          "paid": true,
+          "payment_intent": "pi_synthetic000013",
+          "payment_method": "pm_synthetic000013",
+          "payment_method_details": {
+            "card": {
+              "amount_authorized": 51524,
+              "authorization_code": "[scrubbed]",
+              "brand": "visa",
+              "checks": {
+                "address_line1_check": null,
+                "address_postal_code_check": null,
+                "cvc_check": "pass"
+              },
+              "country": "US",
+              "electronic_commerce_indicator": "07",
+              "exp_month": 10,
+              "exp_year": 2027,
+              "extended_authorization": {
+                "status": "disabled"
+              },
+              "fingerprint": "[scrubbed]",
+              "funding": "credit",
+              "incremental_authorization": {
+                "status": "unavailable"
+              },
+              "installments": null,
+              "last4": "[scrubbed]",
+              "mandate": null,
+              "multicapture": {
+                "status": "unavailable"
+              },
+              "network": "visa",
+              "network_token": {
+                "used": false
+              },
+              "network_transaction_id": "[scrubbed]",
+              "overcapture": {
+                "maximum_amount_capturable": 51524,
+                "status": "unavailable"
+              },
+              "regulated_status": "unregulated",
+              "three_d_secure": null,
+              "transaction_link_id": null,
+              "wallet": null
+            },
+            "type": "card"
+          },
+          "radar_options": {},
+          "receipt_email": null,
+          "receipt_number": null,
+          "receipt_url": "[scrubbed]",
+          "refunded": false,
+          "review": null,
+          "shipping": null,
+          "source": null,
+          "source_transfer": null,
+          "statement_descriptor": null,
+          "statement_descriptor_suffix": null,
+          "status": "succeeded",
+          "transfer_data": null,
+          "transfer_group": null
+        },
+        "status": "available",
+        "type": "charge"
+      }
+    ],
+    "has_more": false,
+    "url": "[scrubbed]"
+  }
+}
