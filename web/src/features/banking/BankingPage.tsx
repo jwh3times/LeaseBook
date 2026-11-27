@@ -184,11 +184,14 @@ export function BankingPage() {
 
   // Takes the account explicitly: a mutation's callbacks see the latest render, so reading `acctId` here
   // after the user switched accounts mid-request would refresh the wrong register.
+  // Every write that refreshes an account changes what the dashboard shows of it: its bank row, the
+  // trust total and the uncleared count (#774).
   const refreshAccount = (accountId: string) => {
     void queryClient.invalidateQueries({ queryKey: bankRegisterKey(accountId) });
     void queryClient.invalidateQueries({ queryKey: ['bank-balances'] });
     void queryClient.invalidateQueries({ queryKey: reconciliationHistoryKey(accountId) });
     void queryClient.invalidateQueries({ queryKey: heldFeesKey(accountId) });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   };
 
   // The month reconciled is the organization's current month, taken from the zone its books keep: the
@@ -528,12 +531,11 @@ export function BankingPage() {
             refreshAccount(acctId);
             if (toBankAccountId) refreshAccount(toBankAccountId);
             if (kind === 'owner-contribution' || kind === 'vendor-payment') {
-              // The owner's money moved — in, or out to a vendor (#745): their balances, statements
-              // and the dashboard's owner balances.
+              // The owner's money moved — in, or out to a vendor (#745): their balances and
+              // statements. The dashboard, owner balances included, is refreshed with the account.
               void queryClient.invalidateQueries({ queryKey: ['owners'] });
               void queryClient.invalidateQueries({ queryKey: ['owner'] });
               void queryClient.invalidateQueries({ queryKey: ['statement'] });
-              void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             }
             setAdjustmentNotice(
               recordedNotice(
