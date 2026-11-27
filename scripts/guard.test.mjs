@@ -317,6 +317,20 @@ test("a Write to AGENTS.md is denied only when it changes a shared block", () =>
 
 // --- Repository rules ----------------------------------------------------------------------------
 
+const WRAPPERS_MD = `## Git wrappers
+
+- \`cst git\` — runs Git with whatever follows.
+- \`cst\` — runs Git for every first word it does not answer itself.
+
+## Ask commands
+
+- \`^cst git reset\\b\` — only for a stale landing.
+
+## Deny commands
+
+- \`^git push\\b\` — push with \`cst push\`.
+`;
+
 const GUARD_MD = [
   "# Guard",
   "",
@@ -350,6 +364,10 @@ test("guard.md parses its three headings, continuations and none; other headings
   ]);
   assert.equal(settings.ask.length, 1);
   assert.equal(settings.protected.length, 2);
+  assert.deepEqual(parseGuardSettings(WRAPPERS_MD).wrappers.map((w) => [w.words, w.line]), [
+    [["cst", "git"], 3],
+    [["cst"], 4],
+  ]);
   assert.deepEqual(parseGuardSettings("## Deny commands\n\nnone\n"), emptySettings());
   assert.deepEqual(parseGuardSettings("# Guard\r\n"), emptySettings());
 });
@@ -362,6 +380,7 @@ test("a malformed guard.md throws, naming the line", () => {
     ["## Ask commands\n\n## Deny commands\nnone\n", /guard\.md:1: '## Ask commands' has no value/],
     ["## Ask commands\nnone\n## Ask commands\nnone\n", /guard\.md:3: '## Ask commands' appears twice/],
     ["## Protected paths\n\nSome prose.\n", /guard\.md:3:/],
+    ["## Git wrappers\n\n- cst — no backticks\n", /guard\.md:3: expected `none` or a bullet `- \\`<command prefix>\\` — <reason>`/],
   ];
   for (const [text, pattern] of bad) assert.throws(() => parseGuardSettings(text), pattern, text);
 });
@@ -380,6 +399,69 @@ test("repository rules deny, ask and protect paths, matched on the command with 
   assert.equal(edit("Edit", { file_path: "/repo/.env", old_string: "1", new_string: "2" }, { files }), null);
   const unparsed = bash("supabase db reset 'open", { files });
   assert.equal(unparsed.decision, "ask");
+});
+
+// A Git wrapper runs Git with the words after it, so the shared git rules read those words as
+// git's, while repository rules still match the command as written: causet's ask rule names
+// `cst git reset`, and its `^git push` deny must not catch `cst git push` (skills#92).
+test("a Git wrapper's commands meet the shared git rules; repository rules match them as written", () => {
+  const files = { "/repo/docs/agents/guard.md": WRAPPERS_MD, "/repo/src/a.js": "" };
+  const dirty = { files, git: DIRTY };
+  const shared = [
+    ["push --force origin feat/x", "deny", ["D5"]],
+    ["push origin main", "ask", ["A1"]],
+    ["push origin --delete feat/x", "ask", ["A2"]],
+    ["branch -D feat/x", "ask", ["A3"]],
+    ["checkout -- src/a.js", "ask", ["A4"]],
+    ["restore src/a.js", "ask", ["A4"]],
+    ["clean -fdx", "ask", ["A4c"]],
+  ];
+  for (const [args, decision, expected] of shared) {
+    for (const command of [`cst git ${args}`, `cst ${args}`, `cst.exe git ${args}`]) {
+      const result = bash(command, dirty);
+      assert.equal(result?.decision, decision, command);
+      assert.deepEqual(rules(result), expected, command);
+    }
+  }
+  assert.deepEqual(rules(bash("cst git reset --hard", dirty)), ["A4", "R"]);
+  assert.deepEqual(rules(bash("cst reset --hard", dirty)), ["A4"]);
+  assert.deepEqual(rules(bash("git push origin feat/x", dirty)), ["R"]);
+  for (const harmless of [
+    "cst git status",
+    "cst log --oneline",
+    "cst push --no-records -u origin feat/x",
+    "cst commit -m x --generated-by y",
+    "cst branch feat/y origin/main",
+    "cst reset --hard",
+  ]) {
+    assert.equal(bash(harmless, harmless.includes("reset") ? { files, git: CLEAN } : dirty), null, harmless);
+  }
+  // A wrapper comes from the setting; without it, `cst` is just a program.
+  assert.equal(bash("cst git reset --hard", { git: DIRTY }), null);
+  // The longest prefix wins wherever it is listed.
+  const reversed = { "/repo/docs/agents/guard.md": "## Git wrappers\n\n- `cst` — a.\n- `cst git` — b.\n" };
+  assert.deepEqual(rules(bash("cst git push --force origin feat/x", { files: reversed, git: DIRTY })), ["D5"]);
+  // Text that cannot be parsed asks when a wrapper, of one word or two, runs a risky git subcommand.
+  assert.match(bash("cst push --force 'open", dirty).reason, /Could not parse[^\n]*cst push --force/);
+  assert.match(bash("cst git push --force 'open", dirty).reason, /Could not parse[^\n]*cst git push --force/);
+  // A wrapped `git rm` meets the protected paths as `git rm` does.
+  const protectedMd = `${WRAPPERS_MD}\n## Protected paths\n\n- \`^\\.env$\` — the local secrets.\n`;
+  const withEnv = { files: { "/repo/docs/agents/guard.md": protectedMd, "/repo/.env": "" }, git: CLEAN };
+  for (const command of ["git rm .env", "cst git rm .env", "cst rm -f .env"]) {
+    assert.equal(bash(command, withEnv)?.decision, "ask", command);
+  }
+  assert.equal(bash("cst rm --cached .env", withEnv), null);
+  // The dirty check reads the directory a wrapped `-C` names.
+  const ctx = fakeCtx(repo(dirty));
+  evaluate({ tool: "Bash", input: { command: "cst git -C ../other reset --hard" }, cwd: "/repo" }, ctx);
+  assert.ok(ctx.calls.some((call) => call.startsWith("/other: git status")), ctx.calls.join("\n"));
+});
+
+test("git -C after a wrapper moves the directory its dirty check reads", () => {
+  const { wrappers } = parseGuardSettings(WRAPPERS_MD);
+  const dirs = (text) => resolveDirs(splitCommands(text), "/repo", { platform: "linux", home: "/home/me", wrappers });
+  assert.deepEqual(dirs("cst git -C ../other status; cst -C x status"), ["/other", "/repo/x"]);
+  assert.deepEqual(resolveDirs(splitCommands("cst git -C ../other status"), "/repo", { platform: "linux" }), ["/repo"]);
 });
 
 // --- Windows warnings ----------------------------------------------------------------------------
