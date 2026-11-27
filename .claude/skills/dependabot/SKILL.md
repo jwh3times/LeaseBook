@@ -59,10 +59,12 @@ out, and report, a PR that is a `draft`, carries a label containing `hold`, `do-
 ## 2. Triage
 
 - **Already reviewed:** a PR whose `verdict` is `current` is not reviewed again unless the user
-  asks. A `low-risk` verdict stops being current when it no longer names the PR's versions
-  (Dependabot retargeted it) or when the PR's checks have failed since; report it as stale, never
-  as a basis for landing, and review the PR again: the new verdict, the latest marked comment,
-  replaces it. On a PR with `parsed: false`, a `low-risk` verdict also counts only while it
+  asks. A `low-risk` verdict stops being current when it does not name every one of the PR's
+  versions or when the PR's checks have failed since; report it as stale, never as a basis for
+  landing, and review the PR again: the new verdict, the latest marked comment, replaces it. Its
+  `versionsUnnamed` says which updates it misses: report each as the old version named
+  (Dependabot retargeted the PR) or never named (the verdict was incomplete as written), and start
+  the review from them. On a PR with `parsed: false`, a `low-risk` verdict also counts only while it
   carries the PR's current `manifestReviewMarker` (step 6), which changes when the PR's title or
   its diff does. A `needs-effort` verdict stays current either way. Only a marked comment by the
   repository's owner, a member or a collaborator is a `verdict`. One by anyone else is in
@@ -156,11 +158,16 @@ Rules, each from a verdict that once went wrong:
 Write each verdict to its own file, named for the repository and the PR. It starts with `✅
 **VERIFIED LOW-RISK**` or `⚠️ **NEEDS EFFORT**`, and its last line is `marker`, exactly.
 
-On a PR with `parsed: false`, the verdict names every dependency's new version as read from the
-manifests' diff, and the line before `marker` is the PR's `manifestReviewMarker`, exactly. It
-records what was reviewed, so the next run, finding the same title and diff, does not review and
-post it again. If the PR changed during the review, run `list --pr <n>` again and review what
-changed before copying its new marker.
+Every verdict names each update as `<name>` from → to, every member of a grouped PR included,
+never summed up ("and seven patches"): a `low-risk` verdict counts only while it names every new
+version (step 2), and a summary hides a member the `Review triggers` name. Take from and to from
+`updates`, or from the manifests' diff where `from` is null or `parsed` is false. Put them in a
+list, or one line, after the opening line; the length guidance above is for the prose around them.
+
+On a PR with `parsed: false`, the versions come from the manifests' diff, and the line before
+`marker` is the PR's `manifestReviewMarker`, exactly. It records what was reviewed, so the next
+run, finding the same title and diff, does not review and post it again. If the PR changed during
+the review, run `list --pr <n>` again and review what changed before copying its new marker.
 
 ## 7. Post the verdicts
 

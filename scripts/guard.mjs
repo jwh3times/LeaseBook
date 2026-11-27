@@ -13,7 +13,8 @@
 // failed: ..." and the script always exits 0: a broken guard must not lock every tool out.
 //
 // Universal rules are below; each repository adds its own in `docs/agents/guard.md` (the `guard`
-// settings topic). `scripts/sync-agents.mjs` registers this script in `.claude/settings.json`.
+// settings topic), and names there the wrappers that run Git, so the universal git rules reach
+// them too. `scripts/sync-agents.mjs` registers this script in `.claude/settings.json`.
 //
 // This file is shared verbatim across repositories. Change it in jwh3times/skills, copy it to all.
 
@@ -550,9 +551,29 @@ const GIT_GLOBAL_WITH_VALUE = new Set([
   "--config-env",
 ]);
 
+// How many words the longest `Git wrappers` prefix takes at `words[at]` (so `cst git` beats
+// `cst`), or 0 when none matches. The first word is compared as a program name.
+function wrapperLength(words, at, wrappers) {
+  let best = 0;
+  for (const { words: prefix } of wrappers) {
+    const matches = prefix.every((word, k) => (k === 0 ? programName(words[at] ?? "") === word : words[at + k] === word));
+    if (matches && prefix.length > best) best = prefix.length;
+  }
+  return best;
+}
+
+// The index of git's first argument in a command's words: 1 after `git`, or past a `Git wrappers`
+// prefix, which runs Git with the words after it. -1 when the command does not run Git.
+export function gitStart(words, wrappers = []) {
+  if (words.length === 0) return -1;
+  if (programName(words[0]) === "git") return 1;
+  return wrapperLength(words, 0, wrappers) || -1;
+}
+
 // The directory each command acts in: the session's, as moved by `cd`, `pushd` and `popd` (a
-// subshell's move ends with it), and for git as moved again by `-C`. Null where it cannot be known.
-export function resolveDirs(commands, cwd, { platform = process.platform, home = null } = {}) {
+// subshell's move ends with it), and for git (or a Git wrapper) as moved again by `-C`. Null where
+// it cannot be known.
+export function resolveDirs(commands, cwd, { platform = process.platform, home = null, wrappers = [] } = {}) {
   const scopes = new Map();
   const start = cwd === null ? null : resolvePath(null, cwd, { platform });
   // Each scope has its directory and its pushd stack, both copied from the enclosing scope.
@@ -589,9 +610,10 @@ export function resolveDirs(commands, cwd, { platform = process.platform, home =
       scope.dir = scope.stack.length ? scope.stack.pop() : null;
       return scope.dir;
     }
-    if (command.program !== "git") return here;
+    const start = gitStart(command.words, wrappers);
+    if (start < 0) return here;
     let dir = here;
-    for (let i = 1; i < command.words.length && command.words[i].startsWith("-"); i += 1) {
+    for (let i = start; i < command.words.length && command.words[i].startsWith("-"); i += 1) {
       if (command.words[i] === "-C") dir = i + 1 < command.words.length ? at(dir, command, i + 1) : null;
       if (GIT_GLOBAL_WITH_VALUE.has(command.words[i])) i += 1;
     }
@@ -946,7 +968,7 @@ const PS_SWITCHES = /^-(force|recurse|append|nonewline|passthru|whatif|confirm|n
 
 // The words naming files a command deletes or overwrites, each marked `removes` when the path
 // itself goes (a removal or a move's source) rather than gets written. Redirect targets count.
-export function writtenPaths(command) {
+export function writtenPaths(command, wrappers = []) {
   const { program, shell } = command;
   const args = command.words.map((text, i) => ({ text, dynamic: command.dynamic[i] })).slice(1);
   const named = [];
@@ -971,11 +993,12 @@ export function writtenPaths(command) {
   if (REMOVERS.has(program)) add([...named, ...positional], true);
   else if (COPIERS.has(program)) add(target ? [target] : named.length ? named : positional.slice(-1), false);
   else if (WRITERS.has(program)) add(named.length ? named : program === "tee" || program === "truncate" ? positional : positional.slice(0, 1), false);
-  else if (program === "git") {
+  else if (gitStart(command.words, wrappers) > 0) {
+    const git = args.slice(gitStart(command.words, wrappers) - 1);
     let k = 0;
-    while (args[k]?.text.startsWith("-")) k += GIT_GLOBAL_WITH_VALUE.has(args[k].text) ? 2 : 1;
-    if (args[k]?.text === "rm" && !args.some((word) => word.text === "--cached")) {
-      add(args.slice(k + 1).filter((word) => !word.text.startsWith("-")), true);
+    while (git[k]?.text.startsWith("-")) k += GIT_GLOBAL_WITH_VALUE.has(git[k].text) ? 2 : 1;
+    if (git[k]?.text === "rm" && !git.some((word) => word.text === "--cached")) {
+      add(git.slice(k + 1).filter((word) => !word.text.startsWith("-")), true);
     }
   }
   return paths;
@@ -996,16 +1019,18 @@ const SECTIONS = new Map([
   ["Deny commands", "deny"],
   ["Ask commands", "ask"],
   ["Protected paths", "protected"],
+  ["Git wrappers", "wrappers"],
 ]);
 
 export function emptySettings() {
-  return { deny: [], ask: [], protected: [] };
+  return { deny: [], ask: [], protected: [], wrappers: [] };
 }
 
-// Parses `docs/agents/guard.md`. Each of its three headings holds `none` (or a `discover:` value,
+// Parses `docs/agents/guard.md`. Each of its four headings holds `none` (or a `discover:` value,
 // which sets no rules) or bullets of the form `` - `<regex>` — <reason> `` (`*` bullets, and an en
-// dash or hyphen, work too), a reason continued on indented lines. Other headings are someone
-// else's and ignored. Anything else under the three throws, naming the line.
+// dash or hyphen, work too), a reason continued on indented lines. Under `Git wrappers` the
+// backticked text is a command prefix, its words matched literally (`cst git`). Other headings are
+// someone else's and ignored. Anything else under the four throws, naming the line.
 export function parseGuardSettings(text, file = SETTINGS_FILE) {
   const settings = emptySettings();
   const seen = new Set();
@@ -1047,6 +1072,13 @@ export function parseGuardSettings(text, file = SETTINGS_FILE) {
     const bullet = /^[-*][ \t]+`([^`]+)`[ \t]+(?:—|–|--?)[ \t]+(\S.*)$/.exec(line);
     if (bullet) {
       if (state.none) throw new Error(`${file}:${n}: '## ${section}' says \`none\` and also lists rules`);
+      if (section === "Git wrappers") {
+        const words = bullet[1].trim().split(/\s+/);
+        last = { pattern: bullet[1], words: [programName(words[0]), ...words.slice(1)], reason: bullet[2].trim(), line: n };
+        settings.wrappers.push(last);
+        state.count += 1;
+        return;
+      }
       let regex;
       let folded;
       try {
@@ -1064,8 +1096,9 @@ export function parseGuardSettings(text, file = SETTINGS_FILE) {
       last.reason += ` ${line.trim()}`;
       return;
     }
+    const value = section === "Git wrappers" ? "<command prefix>" : "<regex>";
     throw new Error(
-      `${file}:${n}: expected \`none\` or a bullet \`- \\\`<regex>\\\` — <reason>\` under '## ${section}'; got ${JSON.stringify(line)}`,
+      `${file}:${n}: expected \`none\` or a bullet \`- \\\`${value}\\\` — <reason>\` under '## ${section}'; got ${JSON.stringify(line)}`,
     );
   });
   close();
@@ -1148,12 +1181,15 @@ function classifyShell(text, shell, tool, cwd, ctx, settings) {
     if (!(error instanceof ParseError)) throw error;
     return unparsedFindings(text, error.message, settings);
   }
-  const dirs = resolveDirs(commands, cwd, { platform: ctx.platform, home: ctx.home });
+  const dirs = resolveDirs(commands, cwd, { platform: ctx.platform, home: ctx.home, wrappers: settings.wrappers });
   const state = gitState(ctx);
   const findings = [];
   commands.forEach((command, i) => {
     const args = command.words.slice(1);
-    if (command.program === "git") findings.push(...classifyGit(args, state(dirs[i])));
+    // A wrapper's command meets the shared git rules as git's; repository rules below still
+    // match it as written.
+    const start = gitStart(command.words, settings.wrappers);
+    if (start > 0) findings.push(...classifyGit(command.words.slice(start), state(dirs[i])));
     if (command.program === "gh") findings.push(...classifyGh(args));
     if (command.words.length > 0) {
       const line = [command.program, ...args].join(" ");
@@ -1166,7 +1202,7 @@ function classifyShell(text, shell, tool, cwd, ctx, settings) {
       findings.push(...windowsWarnings(command, { platform: ctx.platform, tool }));
     }
     if (settings.protected.length) {
-      for (const word of writtenPaths(command)) {
+      for (const word of writtenPaths(command, settings.wrappers)) {
         const abs = resolvePath(dirs[i], globBase(word.text), { platform: ctx.platform, home: ctx.home, dynamic: word.dynamic });
         const verb = word.removes ? "removes or moves" : "writes";
         findings.push(...protectedFindings(abs, verb, settings, ctx, { removes: word.removes }));
@@ -1182,13 +1218,14 @@ const RISKY_GIT = /^(push|checkout|restore|reset|clean|branch|switch|rm)(\W|$)/;
 // True when a statement (words joined by single spaces) starts with a risky git or gh subcommand,
 // past the prefixes that only run it. Walked word by word, never by one regex over the statement,
 // so an adversarial run of options costs linear time (CodeQL js/redos).
-function startsRisky(statement) {
+function startsRisky(statement, wrappers = []) {
   const words = statement.split(" ");
   let i = 0;
   while (i < words.length && (ASSIGNMENT.test(words[i]) || STATEMENT_PREFIXES.has(words[i]))) i += 1;
   const program = programName(words[i] ?? "");
-  i += 1;
-  if (program === "git") {
+  const wrapped = wrapperLength(words, i, wrappers);
+  i += wrapped || 1;
+  if (program === "git" || wrapped) {
     while (i < words.length && words[i].startsWith("-")) i += words[i] === "-C" || words[i] === "-c" ? 2 : 1;
     return RISKY_GIT.test(words[i] ?? "");
   }
@@ -1208,7 +1245,7 @@ function unparsedFindings(text, why, settings) {
     .map((statement) => statement.trim().replace(/\s+/g, " "))
     .filter(Boolean);
   const findings = [];
-  const risky = statements.find(startsRisky);
+  const risky = statements.find((statement) => startsRisky(statement, settings.wrappers));
   if (risky) {
     findings.push(finding("ask", "A5", `Could not parse this command (${why}), and it runs \`${risky.slice(0, 80)}\`.`));
   }
@@ -1297,7 +1334,7 @@ function check() {
   try {
     const settings = parseGuardSettings(readFileSync(file, "utf8"));
     console.log(
-      `${SETTINGS_FILE}: ${settings.deny.length} deny, ${settings.ask.length} ask and ${settings.protected.length} protected-path rule(s).`,
+      `${SETTINGS_FILE}: ${settings.deny.length} deny, ${settings.ask.length} ask and ${settings.protected.length} protected-path rule(s), and ${settings.wrappers.length} Git wrapper(s).`,
     );
     return 0;
   } catch (error) {

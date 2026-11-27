@@ -31,11 +31,13 @@
 //   - `verdict`: the latest comment carrying the review marker by the repository's owner, a member
 //     or a collaborator (`author_association`), its `kind` (low-risk or
 //     needs-effort, by its first character), `versionsNamed`, true when it names every update's
-//     new version, `manifestReviewed`, when `parsed` is false: whether it carries the current
-//     `manifestReviewMarker` (null otherwise), and `current`: false for a low-risk verdict that no
-//     longer names the versions, lacks the current manifest marker, or whose PR's checks have
-//     since failed. `ignoredVerdicts`: each marked comment by anyone else, with its author,
-//     association and link, which never counts. `comments`: the other comments people wrote.
+//     new version (a version counts only on its own, not inside a longer one), `versionsUnnamed`,
+//     the `name@version` of each update it does not name, `manifestReviewed`, when `parsed` is
+//     false: whether it carries the current `manifestReviewMarker` (null otherwise), and
+//     `current`: false for a low-risk verdict that does not name every version, lacks the current
+//     manifest marker, or whose PR's checks have since failed. `ignoredVerdicts`: each marked
+//     comment by anyone else, with its author, association and link, which never counts.
+//     `comments`: the other comments people wrote.
 // `marker` is the closing line a verdict comment carries, with `--label` (default: the repository's
 // name) as the name in it.
 //
@@ -319,9 +321,18 @@ export function summarizeChecks(checkRuns, combinedStatus) {
   return checks;
 }
 
+// A digest counts as named by its short form. A version counts only on its own, never inside a
+// longer one: `5.1.1` is not named by `5.1.10`, `5.1.1.2`, `15.1.1` or `1.5.1.1`.
 function versionNamed(text, version) {
   if (/^[0-9a-f]{7,64}$/i.test(version)) return text.includes(version.slice(0, 7));
-  return text.includes(version);
+  const digit = (at) => /\d/.test(text[at] ?? "");
+  for (let at = text.indexOf(version); at >= 0; at = text.indexOf(version, at + 1)) {
+    const end = at + version.length;
+    const longerBefore = digit(at - 1) || (text[at - 1] === "." && digit(at - 2));
+    const longerAfter = digit(end) || (text[end] === "." && digit(end + 1));
+    if (!longerBefore && !longerAfter) return true;
+  }
+  return false;
 }
 
 // With `manifestReviewMarker` (a PR whose updates were not all read), the verdict must also carry
@@ -346,14 +357,14 @@ export function readVerdict(comments, updates, { manifestReviewMarker: reviewMar
       const first = body.trimStart();
       const lines = body.split(/\r?\n/).map((line) => line.trim());
       const text = lines.filter((line) => !MANIFEST_MARKER.test(line)).join("\n");
+      const unnamed = updates.filter((update) => update.to && !versionNamed(text, update.to));
       verdict = {
         kind: first.startsWith("✅") ? "low-risk" : first.startsWith("⚠") ? "needs-effort" : "unknown",
         label: marker[1],
         url: comment.html_url ?? null,
         createdAt: comment.created_at ?? null,
-        versionsNamed:
-          (updates.length > 0 || reviewMarker !== null) &&
-          updates.filter((update) => update.to).every((update) => versionNamed(text, update.to)),
+        versionsNamed: (updates.length > 0 || reviewMarker !== null) && unnamed.length === 0,
+        versionsUnnamed: unnamed.map((update) => `${update.name}@${update.to}`),
         manifestReviewed: reviewMarker === null ? null : lines.includes(reviewMarker),
       };
     } else if (comment.user?.type !== "Bot") {

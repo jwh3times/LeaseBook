@@ -12,7 +12,7 @@
     },
     "ci-triage": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/ci-triage/SKILL.md",
       "computedHash": "ad1a0b2fbb51091acf5a4dba6970e0dd80acb7277c6aeada91521e0417957294",
@@ -38,10 +38,10 @@
     },
     "dependabot": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/dependabot/SKILL.md",
-      "computedHash": "9d1d36521990cc8461ce28c7819b6ff2e4e2b7c39c47250c3d08feda9ba4ef6c",
+      "computedHash": "12c2e654cce6e74b71957a8007726ac6971d91aa5bf7da452f4d45e63825f614",
       "installMode": "copy"
     },
     "diagnosing-bugs": {
@@ -55,7 +55,7 @@
     },
     "docs-updater": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/docs-updater/SKILL.md",
       "computedHash": "fa3c9099af568e2fc2ba663477180b9a1cce80d4217dd9f25a4f887068175a9f",
@@ -72,7 +72,7 @@
     },
     "end-session": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/end-session/SKILL.md",
       "computedHash": "4055d3643f31f3f86fd3e4162cc3595d70ec50801b761e5d5dbc4b8457693bbc",
@@ -107,7 +107,7 @@
     },
     "handoff": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/handoff/SKILL.md",
       "computedHash": "719f56f754ca21761ddd3a0ddd414616bdc0d88b55abc61dd9ce0f0a607cf525",
@@ -133,7 +133,7 @@
     },
     "land": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/land/SKILL.md",
       "computedHash": "21ee9d245e4d77342b231d29bd7146dcf5f5fb43f3ea2e7824d523ec4f225334",
@@ -141,7 +141,7 @@
     },
     "lets-go": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/lets-go/SKILL.md",
       "computedHash": "72274b9985f8d415b922f2d71f1fed736c76f01c2cfae26f62ef4a1126fcfea4",
@@ -149,10 +149,10 @@
     },
     "open-pr": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/open-pr/SKILL.md",
-      "computedHash": "8ffb3584affb3ca788c928268f4e82a002e768ddc0121a0e0d8979ee3e25bd9d",
+      "computedHash": "9726219315e5e59d8d40edac4662447b69da7fb4942fc23dfd7e43481294e456",
       "installMode": "copy"
     },
     "prototype": {
@@ -166,7 +166,7 @@
     },
     "records-audit": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/records-audit/SKILL.md",
       "computedHash": "1969f525971c99f71a8b0461eca47ed0a71039811a8596f4eb50025d9f18dc8d",
@@ -210,10 +210,18 @@
     },
     "test-prover": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/test-prover/SKILL.md",
       "computedHash": "c0fbe0454762a606aaf05abcc1889eefc1f5d3c36549b37aada20f2668075158",
+      "installMode": "copy"
+    },
+    "tldr": {
+      "source": "jwh3times/skills",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
+      "sourceType": "github",
+      "skillPath": "skills/tldr/SKILL.md",
+      "computedHash": "32df33740e9664c89d165ca5d6b5ed91224a18a241685ba5e0777018ee9c1eaf",
       "installMode": "copy"
     },
     "to-questionnaire": {
@@ -272,7 +280,7 @@
     },
     "what-next": {
       "source": "jwh3times/skills",
-      "commit": "8bd886d0a855b0e2c3a4ec9951ea5f1091778d82",
+      "commit": "1a403195a88226d39b6c631a0ec56c9fce039378",
       "sourceType": "github",
       "skillPath": "skills/what-next/SKILL.md",
       "computedHash": "55b26a34503809272c7ad65924bf01a67f9501fa8a189a307cc81a264ec15d33",
