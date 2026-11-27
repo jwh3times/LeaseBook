@@ -38,7 +38,8 @@ definitions sit beside it. Resolve each `discover:` value once, here, and reuse 
 
 **Invoked by handoff:** when the arguments say `invoked by handoff; document at <path>`, the
 handoff document is already written and registered. Carry its path into the report, and treat the
-user's work as continuing on the other machine, not in this checkout.
+user's work as continuing in the next session, on either machine, which resumes from that document
+rather than from this checkout.
 
 ## 1. Take stock
 

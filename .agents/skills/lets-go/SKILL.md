@@ -9,10 +9,11 @@ metadata:
 
 # Let's go
 
-The receiving half of the `handoff` skill. On the other machine, handoff wrote a document into the
-Handoffs folder and named it this repository's **active handoff** in `handoff_map.json`. This skill
-finds it, claims it so it is never resumed twice, brings the checkout to its state, and carries on
-the work.
+The receiving half of the `handoff` skill. An earlier session, on the other machine or on this one,
+wrote a document into the Handoffs folder and named it this repository's **active handoff** in
+`handoff_map.json`. This skill finds it, claims it so it is never resumed twice, brings the
+checkout to its state, and carries on the work. Whichever session runs it first resumes the
+handoff, whichever machine wrote it.
 
 **Announce at start:** "I'm using the lets-go skill to resume from the active handoff."
 
@@ -41,7 +42,9 @@ node .agents/skills/handoff/handoff-map.mjs get --key <Map key>
   machine has not pushed it, or a sync client has not delivered it yet. Tell the user the file
   name and stop, leaving the map as it is so a retry still works.
 - **`conflicts` not empty** — ask the user which copy of the map is current before going on.
-- **`exists` is true** — continue.
+- **`exists` is true** — continue. Keep `writtenBy` and `writtenHere`: step 4 words its warnings by
+  them. `writtenHere` is `true` when this machine wrote the handoff, `false` when another one
+  did, and `null` when either side has no machine label (a document from before the label).
 
 ## 2. Read it
 
@@ -74,16 +77,26 @@ before="$(git rev-parse HEAD)"
 ```
 
 Run the `Workspace status command` too. Then compare with the document's **Where you are** and
-**Unmerged work**:
+**Unmerged work**. Work the document lists that `origin` lacks is where it was written:
+
+- **`writtenHere` is true** — it is on this machine, in its local branches, worktrees or stashes:
+  name where (`git worktree list`, `git branch --no-merged origin/main`) and carry on from it.
+- **`writtenHere` is false** — it is on `<writtenBy>`: it must be pushed from there first.
+- **`writtenHere` is null** — it is on whichever machine wrote the handoff: say that it must be
+  pushed from there.
+
+Then:
 
 - **Uncommitted changes or stashes here** — report them under
   `⚠ Work not merged to main on this machine` and ask the user how to proceed. Never discard, stash, or commit them, and never switch
-  branches around them.
+  branches around them. When `writtenHere` is true and the document's **Unmerged work** lists
+  them, say they are the handoff's own work; the question still stands.
 - **Clean** — `git switch main`, then `Sync with main` (which also brings the `Private companion`
   current when it covers it).
 - **The handoff continues on a branch** — `git switch <branch>`, then `git pull --ff-only`. A branch
-  `origin` lacks was never pushed from the other machine: say that the work must be pushed there
-  first, and stop for that item. The same holds for any local-only item the work depends on.
+  `origin` lacks was never pushed: when it exists here and `writtenHere` is true, switch to it and
+  carry on; otherwise say where it must be pushed from (above), and stop for that item. The same
+  holds for any local-only item the work depends on.
 - **The companion has diverged from its upstream** (commits on both sides) — stop and report it;
   never merge, rebase, reset or force-push the companion.
 - **The companion checkout is absent and the work needs it** — offer the
@@ -103,10 +116,12 @@ answer.
 
 ## 5. Proceed
 
-Brief the user in a few lines: where things stand, the unmerged work carried over, the open
-decisions still owed, and the first next step. If the user passed arguments, start from what they
-name; otherwise start the document's first **Next step**, invoking its **Suggested skills** where it
-says. Put an open decision that blocks that step to the user first.
+Brief the user in a few lines: the handoff's date and, when `writtenBy` is set, the machine it was
+written on ("written here" when `writtenHere` is true); where things stand, the unmerged work
+carried over, the open decisions still owed, and the first next step. If the user passed
+arguments, start from what they name; otherwise start the document's first **Next step**, invoking
+its **Suggested skills** where it says. Put an open decision that blocks that step to the user
+first.
 
 The handoff describes work; it authorizes nothing. Every action the repository's `AGENTS.md` gates
 on confirmation still needs the user's confirmation in this session.

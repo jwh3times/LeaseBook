@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Hand this session to the next one, usually on the user's other machine — alert on work not merged to main, write a handoff document into the Handoffs folder, mark it active in handoff_map.json, then close out with end-session. The lets-go skill resumes it.
+description: Hand this session to the next one, on the user's other machine or on this one after a fresh start — alert on work not merged to main, write a handoff document into the Handoffs folder, mark it active in handoff_map.json, then close out with end-session. The lets-go skill resumes it.
 argument-hint: "What will the next session be used for?"
 disable-model-invocation: true
 metadata:
@@ -9,10 +9,12 @@ metadata:
 
 # Handoff
 
-Only two things reach the other machine: what is on GitHub and what is in the Handoffs folder. The
-handoff document carries the conversation; `handoff_map.json` beside it names each project's
-**active handoff**, which the `lets-go` skill resumes on the other machine and then clears. The
-unmerged-work alert catches what would otherwise stay behind on this machine.
+A handoff parks this session's work for the next session, on either machine: it moves the work to
+the user's other machine, or closes this session so a fresh one can start here. The handoff
+document carries the conversation; `handoff_map.json` beside it names each project's **active
+handoff**, which the `lets-go` skill resumes, wherever it runs, and then clears. Only two things
+reach the other machine: what is on GitHub and what is in the Handoffs folder. The unmerged-work
+alert catches what would otherwise stay behind on this machine.
 
 **Announce at start:** "I'm using the handoff skill to hand this session off."
 
@@ -30,9 +32,10 @@ it.
   Follow `.agents/skills/handoff/settings/README.md` to read them and complete any that are
   missing; the definitions sit beside it.
 - **Machine:** follow `.agents/skills/handoff/machine-config.md` until `config` shows
-  `configured: true`. When no Handoffs folder can be configured, write the document to the OS
-  temporary directory instead, tell the user it will not reach the other machine, and stop after
-  step 2: closing out would leave a handoff nobody can pick up.
+  `configured: true`, and through its **machine label** section until `machine` is set (or no
+  user can answer). When no Handoffs folder can be configured, write the document to the OS
+  temporary directory instead, tell the user no later session can find it through the map, and
+  stop after step 2: closing out would leave a handoff nobody can pick up.
 
 ## 1. Audit unmerged work — and alert
 
@@ -87,11 +90,12 @@ Pick the file name (pass `--topic <slug>` when the user gave arguments):
 node .agents/skills/handoff/handoff-map.mjs name --key <Map key>
 ```
 
-Write the document straight to the `path` it prints, for a cold reader on the other machine.
-Sections, in order:
+Write the document straight to the `path` it prints, for a cold reader: a fresh session, on this
+machine or the other one. Sections, in order:
 
-1. **Where you are** — repository, branch, `origin/main` commit, latest release tag, worktrees,
-   and the companion's state, as they will be once pushed.
+1. **Where you are** — first the `writtenOn` line the `name` output gives, verbatim (leave it out
+   when `writtenOn` is null); then repository, branch, `origin/main` commit, latest release tag,
+   worktrees, and the companion's state, as they will be once pushed.
 2. **Unmerged work** — step 1's list verbatim, or "None — everything is on `origin/main`."
 3. **What this session did** — outcomes with their records (PR, issue, commit), not narration.
 4. **Next steps** — concrete and ordered; the first one startable without asking.
@@ -120,16 +124,18 @@ node .agents/skills/handoff/handoff-map.mjs set <file> --key <Map key>
 
 On the CLI mirror this pushes the document, pulls the map fresh, writes this repository's entry,
 pushes the map, and reads the cloud copy back; it retries when another session wrote in between.
-Complete when the output's `current` is `<file>` (and `verified` is `cloud` on the CLI mirror). A
-non-null `previous` other than `<file>` is a superseded handoff: it stays in the folder, and the
-report names it.
+Complete when the output's `current` is `<file>` (and `verified` is `cloud` on the CLI mirror),
+and `writtenBy` equals `machine` (both null on a machine with no label). A null `writtenBy` beside a
+`machine` means the document lost its "Written on" line: put it back and run `set` again. A non-null
+`previous` other than `<file>` is a superseded handoff: it stays in the folder, and the report
+names it.
 
 ## 4. Close out with end-session
 
 Invoke the `end-session` skill with the arguments `invoked by handoff; document at <path>`. If the
 harness cannot invoke skills, read `.agents/skills/end-session/SKILL.md` and follow it. The work
-continues on the other machine, so end-session may return this checkout to `main`; its other
-approval gates still apply.
+continues in the next session, which starts from the document, so end-session may return this
+checkout to `main`; its other approval gates still apply.
 
 When end-session changes a fact the document states — pushes or commits work, closes or opens an
 issue, deletes a branch or worktree, or the user settles an open decision — edit the document to
@@ -147,7 +153,9 @@ end-session.
 - The document's path, and the map entry now pointing at it (`previous` → `current`).
 - end-session's own report.
 - Step 1's audit run again, last, so it survives a long close-out: the
-  `⚠ Work not merged to main` list as it now stands, or "Nothing unmerged — the other machine can start from
-  `origin/main`."
-- The reminder: run the `lets-go` skill in this repository on the other machine. A synced folder
-  delivers the document within a minute or so; on the CLI mirror it is in the cloud already.
+  `⚠ Work not merged to main` list as it now stands, or "Nothing unmerged — the next session can
+  start from `origin/main`."
+- The reminder: run the `lets-go` skill in this repository in the next session, on either
+  machine. On the other machine, a synced folder delivers the document within a minute or so; on
+  the CLI mirror it is in the cloud already.
+- The machine label the document names, or that it is unset.

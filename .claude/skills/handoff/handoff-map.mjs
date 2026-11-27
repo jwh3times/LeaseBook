@@ -2,8 +2,10 @@
 // Reads and updates handoff_map.json, the map in the Handoffs folder that names each project's
 // active handoff document. The handoff and lets-go skills change the map only through this script:
 // it is shared by every repository on every machine, so a hand-edited slip breaks all of them.
+// what-next reads it here too, and never writes.
 //
-//   node .agents/skills/handoff/handoff-map.mjs config [--write] [--transport T] [--dir D] [--remote R]
+//   node .agents/skills/handoff/handoff-map.mjs config [--write] [--transport T] [--dir D]
+//                                                     [--remote R] [--machine M]
 //   node .agents/skills/handoff/handoff-map.mjs get --key <key>
 //   node .agents/skills/handoff/handoff-map.mjs name --key <key> [--topic <slug>]
 //   node .agents/skills/handoff/handoff-map.mjs set <file> --key <key>
@@ -21,6 +23,10 @@
 //                                   proton-drive CLI
 //   HANDOFFS_DIR        the local Handoffs folder (the synced folder, or the mirror)
 //   HANDOFFS_REMOTE     proton-cli only: the cloud folder (default /my-files/Documents/Handoffs)
+//   HANDOFFS_MACHINE    the machine label, a lowercase slug the user picks (fedora, windows-desk).
+//                       It only informs: a machine without one is still configured. `name` gives
+//                       the document's "Written on" line, and `get` and `set` read it back as
+//                       `writtenBy`; the map itself never records the machine.
 
 import { spawnSync } from "node:child_process";
 import {
@@ -34,14 +40,15 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir, hostname as osHostname, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const MAP_FILE = "handoff_map.json";
 export const TRANSPORTS = ["folder", "proton-cli"];
 export const DEFAULT_REMOTE = "/my-files/Documents/Handoffs";
-const CONFIG_KEYS = ["HANDOFFS_TRANSPORT", "HANDOFFS_DIR", "HANDOFFS_REMOTE"];
+const CONFIG_KEYS = ["HANDOFFS_TRANSPORT", "HANDOFFS_DIR", "HANDOFFS_REMOTE", "HANDOFFS_MACHINE"];
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const MAX_ATTEMPTS = 3;
 
 export class HandoffError extends Error {}
@@ -62,6 +69,7 @@ export function parseArgs(argv) {
     transport: "--transport",
     dir: "--dir",
     remote: "--remote",
+    machine: "--machine",
   };
   const options = { command, write: false, file: undefined };
   for (let index = 0; index < rest.length; index += 1) {
@@ -103,9 +111,14 @@ export function parseArgs(argv) {
       );
     }
   }
-  if (options.topic && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(options.topic)) {
+  if (options.topic && !SLUG.test(options.topic)) {
     throw new HandoffError(
       `--topic takes a lowercase slug such as ship-port; got ${options.topic}`,
+    );
+  }
+  if (options.machine && !SLUG.test(options.machine)) {
+    throw new HandoffError(
+      `--machine takes a lowercase slug such as fedora; got ${options.machine}`,
     );
   }
   return options;
@@ -151,15 +164,29 @@ export function readConfig({ env = process.env, home = homedir(), read = readIfE
   else if (!TRANSPORTS.includes(transport))
     problems.push(`HANDOFFS_TRANSPORT must be one of ${TRANSPORTS.join(", ")}; got ${transport}`);
   if (!dir) problems.push("HANDOFFS_DIR is not set");
+  // The label only informs: a machine without one (or with a malformed one) is still configured.
+  const label = merged.HANDOFFS_MACHINE ?? null;
+  const machine = label !== null && SLUG.test(label) ? label : null;
   return {
     file,
     fileExists: text !== null,
     transport,
     dir,
     remote,
+    machine,
+    machineProblem:
+      label !== null && machine === null
+        ? `HANDOFFS_MACHINE must be a lowercase slug such as fedora; got ${label}`
+        : null,
     configured: problems.length === 0,
     problems,
   };
+}
+
+/** A machine label proposed from the hostname: `DESKTOP-7Q2.lan` becomes `desktop-7q2-lan`. */
+export function machineSlug(name) {
+  const slug = keySlug(name ?? "");
+  return slug === "" ? null : slug;
 }
 
 function readIfExists(file) {
@@ -242,13 +269,14 @@ export function proposeConfig({
   return { transport: "folder", dir: synced[0] ?? null, remote: null, evidence };
 }
 
-export function formatConfig({ transport, dir, remote }) {
+export function formatConfig({ transport, dir, remote, machine }) {
   const lines = [
-    "# Handoffs machine config, read by the handoff and lets-go skills (jwh3times/skills).",
+    "# Handoffs machine config for the handoff, lets-go and what-next skills (jwh3times/skills).",
     `HANDOFFS_TRANSPORT=${transport}`,
     `HANDOFFS_DIR=${dir}`,
   ];
   if (transport === "proton-cli") lines.push(`HANDOFFS_REMOTE=${remote ?? DEFAULT_REMOTE}`);
+  if (machine) lines.push(`HANDOFFS_MACHINE=${machine}`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -344,6 +372,29 @@ export function keySlug(key) {
 export function localDate(date) {
   const pad = (value) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** The line `handoff` puts in a document's Where you are section: the machine it was written on. */
+export function writtenOnLine(machine) {
+  return `- **Written on:** \`${machine}\``;
+}
+
+/**
+ * The machine label a document's `Written on` line names, or null without a well-formed one. The
+ * line may be a bullet or plain, bold or not, the label in backticks or bare.
+ */
+export function parseWrittenBy(text) {
+  for (const line of text.split(/\r?\n/u)) {
+    const match = line.match(/^\s*(?:[-*]\s+)?(?:\*\*)?Written on(?::\*\*|\*\*:|:)\s*(.*?)\s*$/u);
+    if (!match) continue;
+    const label = match[1].replace(/^`(.*)`$/u, "$1");
+    return SLUG.test(label) ? label : null;
+  }
+  return null;
+}
+
+function writtenByOf(file) {
+  return parseWrittenBy(readFileSync(file, "utf8"));
 }
 
 /** `<key>-handoff-<date>[-<topic>].md`, numbered from -2 when the name is taken. */
@@ -518,6 +569,7 @@ export function run(
     cli = runCli,
     now = () => new Date(),
     read = readIfExists,
+    hostname = osHostname,
   } = {},
 ) {
   const config = readConfig({ env, home, read });
@@ -530,13 +582,15 @@ export function run(
     };
     if (!options.write) {
       const proposal = config.configured ? null : proposeConfig({ env, home });
-      return { ...config, proposal };
+      const machineProposal = config.machine === null ? machineSlug(hostname()) : null;
+      return { ...config, proposal, machineProposal };
     }
     const base = config.configured ? config : proposeConfig({ env, home });
     const values = {
       transport: chosen.transport ?? base.transport,
       dir: chosen.dir ?? base.dir,
       remote: chosen.remote ?? base.remote,
+      machine: options.machine ?? config.machine,
     };
     if (!TRANSPORTS.includes(values.transport))
       throw new HandoffError(`--transport must be one of ${TRANSPORTS.join(", ")}`);
@@ -549,7 +603,7 @@ export function run(
   requireConfig(config);
   const cloud = config.transport === "proton-cli" ? makeCloud(config, cli) : null;
   const context = { config, cloud, now };
-  const base = { transport: config.transport, dir: config.dir };
+  const base = { transport: config.transport, dir: config.dir, machine: config.machine };
 
   if (options.command === "get") {
     if (cloud && !cloud.download(MAP_FILE))
@@ -566,6 +620,7 @@ export function run(
         note =
           "the cloud folder does not have this document yet: the other machine has not pushed it";
     }
+    const writtenBy = exists ? writtenByOf(docPath) : null;
     return {
       ...base,
       key: key ?? options.key,
@@ -573,6 +628,9 @@ export function run(
       file,
       path: docPath,
       exists,
+      writtenBy,
+      writtenHere:
+        writtenBy === null || config.machine === null ? null : writtenBy === config.machine,
       conflicts: conflictCopies(config.dir),
       ...(note ? { note } : {}),
     };
@@ -583,7 +641,12 @@ export function run(
     const taken = new Set(existsSync(config.dir) ? readdirSync(config.dir) : []);
     if (cloud) for (const name of cloud.list()) taken.add(name);
     const file = pickName(options.key, taken, now(), options.topic);
-    return { ...base, file, path: path.join(config.dir, file) };
+    return {
+      ...base,
+      file,
+      path: path.join(config.dir, file),
+      writtenOn: config.machine === null ? null : writtenOnLine(config.machine),
+    };
   }
 
   if (options.command === "set") {
@@ -597,6 +660,7 @@ export function run(
     return {
       ...base,
       ...writeEntry(context, options.key, options.file),
+      writtenBy: writtenByOf(path.join(config.dir, options.file)),
       ...(pushed ? { document: pushed } : {}),
     };
   }
