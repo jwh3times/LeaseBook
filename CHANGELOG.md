@@ -19,6 +19,17 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.40.5] - 2026-11-26
+
+### Fixed
+
+- **The dashboard shows a reconciliation's cleared lines as soon as it finalizes** (#774).
+  Finalizing from Banking's reconcile-in-place screen cleared the ticked lines, but a dashboard read
+  in the 30 seconds before kept showing the old uncleared count and trust figures until its cache
+  expired. Every Banking write that refreshes an account now refreshes the dashboard too: the
+  in-place finalize, a statement import's confirm, and every bank fee, transfer, fee sweep and
+  owner contribution.
+
 ## [0.40.4] - 2026-11-26
 
 ### Changed
@@ -2762,7 +2773,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.4...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.40.5...HEAD
+[0.40.5]: https://github.com/jwh3times/LeaseBook/compare/v0.40.4...v0.40.5
 [0.40.4]: https://github.com/jwh3times/LeaseBook/compare/v0.40.3...v0.40.4
 [0.40.3]: https://github.com/jwh3times/LeaseBook/compare/v0.40.2...v0.40.3
 [0.40.2]: https://github.com/jwh3times/LeaseBook/compare/v0.40.1...v0.40.2
