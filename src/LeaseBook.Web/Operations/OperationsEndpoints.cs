@@ -1,4 +1,5 @@
 using LeaseBook.Modules.Operations.Domain;
+using LeaseBook.Modules.Operations.Features.Runs;
 using LeaseBook.Modules.Operations.Runs;
 using LeaseBook.SharedKernel.Cqrs;
 using LeaseBook.SharedKernel.Endpoints;
@@ -186,21 +187,13 @@ public sealed class OperationsEndpoints : IEndpointModule
             })
             .Produces<RunHistoryResponse>();
 
-        // GET /api/operations/runs/{id} — single run header + its items.
+        // GET /api/operations/runs/{id} — what one run did to each target (#573): its header, then
+        // every item with its run outcome, its reason when it did not post, and who the target is
+        // today. The order is the server's (GetRunDetail), so every consumer sees the same one.
         group.MapGet("/runs/{id:guid}",
-                async (Guid id, DbContext db, HttpContext httpContext, CancellationToken ct) =>
+                async (Guid id, ISender sender, HttpContext httpContext, CancellationToken ct) =>
                 {
-                    var run = await db.Set<BulkRun>()
-                        .Where(r => r.Id == id)
-                        .Select(r => new BulkRunSpa(
-                            r.Id,
-                            r.RunType.ToString(),
-                            r.PeriodYear,
-                            r.PeriodMonth,
-                            r.SummaryJson,
-                            r.CreatedAt))
-                        .FirstOrDefaultAsync(ct);
-
+                    var run = await sender.Query(new GetRunDetail(id), ct);
                     if (run is null)
                     {
                         return ProblemResults.Problem(
@@ -210,21 +203,25 @@ public sealed class OperationsEndpoints : IEndpointModule
                             status: StatusCodes.Status404NotFound);
                     }
 
-                    var items = await db.Set<BulkRunItem>()
-                        .Where(i => i.RunId == id)
-                        .OrderBy(i => i.CreatedAt)
+                    var header = new BulkRunSpa(
+                        run.Id, run.RunType.ToString(), run.PeriodYear, run.PeriodMonth, run.SummaryJson, run.CreatedAt);
+                    var items = run.Items
                         .Select(i => new BulkRunItemSpa(
                             i.Id,
                             i.TargetKind.ToString(),
                             i.TargetId,
-                            i.Status.ToString(),
+                            i.Outcome.ToString(),
                             i.Amount,
-                            i.CreatedAt))
-                        .ToListAsync(ct);
+                            i.Reason?.Code(),
+                            i.TargetName,
+                            i.UnitLabel,
+                            i.TenantId))
+                        .ToList();
 
-                    return Results.Ok(new BulkRunDetailResponse(run, items));
+                    return Results.Ok(new BulkRunDetailResponse(header, items));
                 })
-            .Produces<BulkRunDetailResponse>();
+            .Produces<BulkRunDetailResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
     }
 
 }
@@ -289,7 +286,7 @@ public sealed record RunResultSpaResponse(
     int Excluded,
     decimal Total);
 
-/// <summary>One run header row as the SPA expects (excludes internal jsonb).</summary>
+/// <summary>One run header row as the SPA expects. <c>SummaryJson</c> carries the run's counts and total.</summary>
 public sealed record BulkRunSpa(
     Guid Id,
     string RunType,
@@ -298,14 +295,26 @@ public sealed record BulkRunSpa(
     string SummaryJson,
     DateTime CreatedAt);
 
-/// <summary>One run-item row as the SPA expects.</summary>
+/// <summary>
+/// One target's run outcome as the SPA expects (#573). <see cref="RunDetailContract"/> publishes
+/// <paramref name="Outcome"/> and <paramref name="Reason"/> as enums, so the generated client types
+/// them and the SPA's wording map must cover every reason.
+/// </summary>
+/// <param name="Outcome"><c>Posted</c>, <c>Skipped</c> or <c>Excluded</c>.</param>
+/// <param name="Reason">A run reason code; present exactly when the target was skipped or excluded.</param>
+/// <param name="TargetName">The tenant's or owner's name today; <c>null</c> when the target is not found.</param>
+/// <param name="UnitLabel">The lease's unit; <c>null</c> for an owner or a lease not found.</param>
+/// <param name="TenantId">The lease's tenant, for a link to the ledger; <c>null</c> otherwise.</param>
 public sealed record BulkRunItemSpa(
     Guid Id,
     string TargetKind,
     Guid TargetId,
-    string Status,
+    string Outcome,
     decimal Amount,
-    DateTime CreatedAt);
+    string? Reason,
+    string? TargetName,
+    string? UnitLabel,
+    Guid? TenantId);
 
 /// <summary>SPA shape for GET /api/operations/runs.</summary>
 public sealed record RunHistoryResponse(IReadOnlyList<BulkRunSpa> Runs);

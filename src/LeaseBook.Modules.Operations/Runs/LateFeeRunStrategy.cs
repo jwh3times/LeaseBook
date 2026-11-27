@@ -157,7 +157,7 @@ public sealed class LateFeeRunStrategy(
         {
             if (!byLeaseId.TryGetValue(leaseId, out var row))
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, "lease_not_delinquent"));
+                plan.Add(new PlannedExclusion(RunTargetKind.Lease, leaseId, RunReason.LeaseNotDelinquent));
                 continue;
             }
 
@@ -168,7 +168,7 @@ public sealed class LateFeeRunStrategy(
             var decision = Decide(row, policy, assessmentDate, period);
             if (decision is IneligibleForLateFee ineligible)
             {
-                plan.Add(Exclude(leaseId, RunItemStatus.Excluded, ineligible.Code));
+                plan.Add(new PlannedExclusion(RunTargetKind.Lease, leaseId, ineligible.Reason));
                 continue;
             }
 
@@ -204,10 +204,6 @@ public sealed class LateFeeRunStrategy(
         }
 
         return plan;
-
-        static PlannedExclusion Exclude(Guid leaseId, RunItemStatus status, string reason) =>
-            new(RunTargetKind.Lease, leaseId, status,
-                new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = reason });
     }
 
     // ── the decision ─────────────────────────────────────────────────────────
@@ -234,13 +230,13 @@ public sealed class LateFeeRunStrategy(
     /// <summary>
     /// Do not charge this lease, and why — in <b>both</b> vocabularies at once.
     /// <para>
-    /// <paramref name="Code"/> is the machine reason the run log records; <paramref name="Explanation"/>
+    /// <paramref name="Reason"/> is the machine reason the run log records; <paramref name="Explanation"/>
     /// is the sentence the operator reads in the preview. They are constructed together, at the single
     /// point the condition is recognised, precisely because they had drifted into two parallel
     /// vocabularies stated in two different loops (#199).
     /// </para>
     /// </summary>
-    private sealed record IneligibleForLateFee(string Code, string Explanation) : LateFeeDecision;
+    private sealed record IneligibleForLateFee(RunReason Reason, string Explanation) : LateFeeDecision;
 
     /// <summary>
     /// The one statement of late-fee eligibility and amount, projected by <see cref="PreviewAsync"/>
@@ -276,14 +272,14 @@ public sealed class LateFeeRunStrategy(
         if (rentObligationEntryId is null)
         {
             return new IneligibleForLateFee(
-                "rent_obligation_not_found",
+                RunReason.RentObligationNotFound,
                 $"{row.TenantName}: no open rent obligation found for {period.Key} — skipped.");
         }
 
         if (policy is null)
         {
             return new IneligibleForLateFee(
-                "no_policy",
+                RunReason.NoPolicy,
                 $"{row.TenantName}: no late-fee policy found — skipped.");
         }
 
@@ -299,7 +295,7 @@ public sealed class LateFeeRunStrategy(
         if (assessmentDate < eligibilityDate)
         {
             return new IneligibleForLateFee(
-                "before_late_fee_eligibility",
+                RunReason.BeforeLateFeeEligibility,
                 $"{row.TenantName}: not eligible until {eligibilityDate:yyyy-MM-dd} " +
                 $"({daysLate} late days, threshold {contractualThreshold}) — skipped.");
         }

@@ -254,9 +254,7 @@ public sealed class RunEngineTests(PostgresFixture fixture)
         await using var _ = scope;
 
         var posting = new NoOpBatchPosting();
-        var excluded = new PlannedExclusion(
-            RunTargetKind.Lease, _t1, RunItemStatus.Excluded,
-            new Dictionary<string, object?>(StringComparer.Ordinal) { ["reason"] = "rent_zero" });
+        var excluded = new PlannedExclusion(RunTargetKind.Lease, _t1, RunReason.RentZero);
 
         var engine = new RunEngine(
             scope.Db, [new PlanFromStrategy([excluded, Post(_t2, 900m)])], posting,

@@ -124,5 +124,5 @@ public sealed class RentRunStrategyTests
             EndDate: endDate);
 
     private static string Reason(RunPlanItem item) =>
-        (string)((PlannedExclusion)item).Detail["reason"]!;
+        ((PlannedExclusion)item).Reason.Code();
 }

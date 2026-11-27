@@ -195,7 +195,7 @@ public sealed class DisbursementTests
         var item = plan.ShouldHaveSingleItem();
         var planAmount = item is PlannedPosting posting ? posting.Amount : 0m;
         var planReason = item is PlannedExclusion exclusion
-            ? exclusion.Detail["reason"] as string
+            ? exclusion.Reason.Code()
             : null;
 
         row.Amount.ShouldBe(expectedAmount);
