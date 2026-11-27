@@ -415,6 +415,40 @@ describe('BankingPage reconcile mode', () => {
     expect(await screen.findByText('Book balance')).toBeInTheDocument();
   });
 
+  it('marks the dashboard stale once a finalize clears lines (#774)', async () => {
+    const recon = {
+      id: 'rec1',
+      bankAccountId: 'acct1',
+      year: 2026,
+      month: 2,
+      statementEndingBalance: 1300,
+      clearedBalance: 1300,
+      difference: 0,
+      status: 'in_progress',
+      finalizedAt: null,
+    };
+    server.use(
+      ...baseHandlers(),
+      registerHandler(REGISTER),
+      http.post('/api/accounting/banks/clearances', () => HttpResponse.json({ affected: 1 })),
+      http.post('/api/accounting/reconciliations', () => HttpResponse.json(recon)),
+      http.post('/api/accounting/reconciliations/:id/finalize', () =>
+        HttpResponse.json({ ...recon, status: 'finalized', finalizedAt: '2026-06-21T00:00:00Z' }),
+      ),
+    );
+    const queryClient = renderPage();
+    // The dashboard was read moments ago: within the 30-second staleTime its uncleared count would be
+    // served unchanged unless the finalize marks it stale.
+    queryClient.setQueryData(['dashboard'], { kpis: { uncleared: -200, unclearedCount: 1 } });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconcile account' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Select all uncleared' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Finalize' }));
+
+    expect(await screen.findByText('Book balance')).toBeInTheDocument();
+    expect(queryClient.getQueryState(['dashboard'])?.isInvalidated).toBe(true);
+  });
+
   it('reconciles the organization’s month, not the viewer’s (#740)', async () => {
     // 06:30 UTC on 1 Nov 2026 is already November for this suite's Eastern viewer, and still 31 Oct
     // for an organization that keeps Pacific time.
@@ -824,6 +858,7 @@ describe('BankingPage bank fee or transfer (#553)', () => {
     );
     const queryClient = renderPage();
     queryClient.setQueryData(bankRegisterKey('acct3'), REGISTER);
+    queryClient.setQueryData(['dashboard'], { kpis: { trustTotal: 1300 } });
     const user = userEvent.setup();
     await screen.findByText('Rent deposit');
 
@@ -843,6 +878,8 @@ describe('BankingPage bank fee or transfer (#553)', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(queryClient.getQueryState(bankRegisterKey('acct3'))?.isInvalidated).toBe(true);
+    // The sweep left the trust account, so the dashboard's trust total is read again (#774).
+    expect(queryClient.getQueryState(['dashboard'])?.isInvalidated).toBe(true);
     // The held fees were on screen when the sweep posted, so they are read again, not trusted.
     await vi.waitFor(() => expect(heldReads.length).toBeGreaterThan(readsBeforeSave));
     expect(
