@@ -19,6 +19,12 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.41.4] - 2026-11-27
+
+### Changed
+
+- Take the latest shared skills and scripts from `jwh3times/skills` (#858)
+
 ## [0.41.3] - 2026-11-27
 
 ### Fixed
@@ -2832,7 +2838,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.41.3...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.41.4...HEAD
+[0.41.4]: https://github.com/jwh3times/LeaseBook/compare/v0.41.3...v0.41.4
 [0.41.3]: https://github.com/jwh3times/LeaseBook/compare/v0.41.2...v0.41.3
 [0.41.2]: https://github.com/jwh3times/LeaseBook/compare/v0.41.1...v0.41.2
 [0.41.1]: https://github.com/jwh3times/LeaseBook/compare/v0.41.0...v0.41.1
