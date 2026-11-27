@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living catalogue and method
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-26
+- **Last reviewed:** 2026-11-27
 
 A scenario is one workflow a person carries out in the product, driven through a real browser by
 one or more Playwright tests. This page records how scenarios are catalogued, what CI checks about
@@ -228,7 +228,7 @@ not edit between the markers.
 <!-- scenario-catalogue:start -->
 <!-- prettier-ignore-start -->
 
-87 scenarios, 1 of them an expected failure that shows a known limit. 2 journal event types and 11 routes are exempt.
+88 scenarios, 1 of them an expected failure that shows a known limit. 2 journal event types and 10 routes are exempt.
 
 ### Scenarios
 
@@ -291,6 +291,7 @@ not edit between the markers.
 | `month-cycle-reconcile-and-statement` | Reach reconcile mode in 2 clicks, and read an owner statement that ties after the month's postings | Reporting | `m6-bulk-operations.spec.ts` |  |  | `GET /api/accounting/banks/{bankAccountId}/register`<br>`GET /api/statements/{ownerId}` |
 | `month-cycle-disbursement-run` | Preview and confirm the owner disbursement run | Operations | `m6-bulk-operations.spec.ts` | demo | `ManagementFeeAssessed`<br>`OwnerDisbursed` | `GET /api/operations/runs/{type}/preview`<br>`POST /api/operations/runs/{type}/confirm` |
 | `month-cycle-run-history` | See the confirmed runs in the run history | Operations | `m6-bulk-operations.spec.ts` |  |  | `GET /api/operations/runs` |
+| `run-detail` | Open a confirmed run from the run history and see what it did to each owner, and why the ones it did not pay were excluded | Operations | `m6-bulk-operations.spec.ts` | scenario |  | `GET /api/operations/runs`<br>`GET /api/operations/runs/{id}` |
 | `operations-navigation` | Reach the disbursement run from the dashboard, and switch between the operations screens | Operations | `m6-operations.spec.ts` |  |  | `GET /api/operations/runs`<br>`GET /api/operations/runs/{type}/preview`<br>`GET /api/payments` |
 | `onboarding-import-verify-sign-off` | Import a portfolio and its opening balances, correct a non-tying import, verify and sign off | Migration | `m7-onboarding.spec.ts` | cutover | `OpeningBalance`<br>`EntryVoided` | `GET /api/onboarding/status`<br>`POST /api/onboarding/import/{kind}`<br>`POST /api/onboarding/import-balances/{kind}`<br>`POST /api/onboarding/import-balances/{kind}/supersede`<br>`POST /api/onboarding/verification`<br>`POST /api/onboarding/verification/{id}/signoff` |
 | `audit-log-review` | Read the audit trail, open one event, and narrow it with filters | Audit | `m8-audit-review.spec.ts` |  |  | `GET /api/audit/events`<br>`GET /api/audit/events/{id}`<br>`GET /api/audit/filters` |
@@ -335,7 +336,6 @@ not edit between the markers.
 | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 1 |
 | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 1 |
 | The control appears only when delivery to the local test inbox failed, and no screen makes a delivery fail. | 1 |
-| baseline gap | 1 |
 
 #### Journal event types with no scenario
 
@@ -358,7 +358,6 @@ not edit between the markers.
 | `GET /api/portal/tenant/payments/{id}` | No screen requests it; the portal reads the tenant's whole list of payments. | 2026-10-12 |  |
 | `POST /api/payments/{id}/retry` | The control appears only after six failed attempts with waits of up to ten minutes, and the simulated processor accepts every payment. | 2026-10-12 |  |
 | `GET /api/payments/unmatched` | The control appears only for a notice held for ten minutes, which a test would have to wait out. | 2026-10-12 |  |
-| `GET /api/operations/runs/{id}` | baseline gap | 2026-10-12 | #573 |
 
 <!-- prettier-ignore-end -->
 <!-- scenario-catalogue:end -->

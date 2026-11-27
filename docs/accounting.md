@@ -737,6 +737,9 @@ below the reserve floor is an exclusion (ADR-019, the addendum under §4b). The 
 lists all completed runs for the organization, most recent first, and
 `GET /api/operations/runs/{id}` returns one run's items with each outcome, its reason and the
 tenant or owner it names as Directory reads them today — excluded first, then skipped, then posted.
+Each run in the history, and the result shown after a run is confirmed, opens that run's page,
+which lists every target in that order with its outcome, amount and reason, and narrows the list
+by outcome.
 
 ### Period locking
 

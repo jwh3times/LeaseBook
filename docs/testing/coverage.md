@@ -3,7 +3,7 @@
 - **Audience:** Contributors, reviewers and maintainers
 - **Status:** Living measurement record
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-26
+- **Last reviewed:** 2026-11-27
 
 LeaseBook measures what its test suites exercise: which lines and branches of each module ran, and
 which API routes the browser tests called. This page records how that is measured, how to run each
@@ -414,9 +414,10 @@ The 22 routes no test reached, by what they have in common:
   the saved ones and had no control that saved one. Its map step now saves one, and a browser test
   reaches the route (#567). The web client has a function that reads one tenant-portal
   payment and no screen calls it: the portal reads the tenant's whole list. The catalogue records it
-  as a permanent exemption. The web client has a function that reads one operations run with its
-  items and no screen calls it: run history lists each run's counts and total and opens nothing.
-  Its exemption points at #573, and no exemption points at #544 any more. `GET /api/health` is for
+  as a permanent exemption. No screen read one operations run with its items when this was
+  measured: run history listed each run's counts and total and opened nothing. Each run in history
+  now opens its own page, and a browser test reaches the route (#573); no exemption points at #544
+  any more. `GET /api/health` is for
   probes, and the catalogue records it as a permanent exemption.
 
 All nine auth routes are now reached. The account-security tests change no seeded account. Setting

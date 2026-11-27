@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import {
   getApiOperationsRuns,
+  getApiOperationsRunsById,
   getApiOperationsRunsByTypePreview,
   getApiOperationsRunsByTypePreviewIssuedCoverage,
   postApiOperationsRunsByTypeConfirm,
@@ -40,6 +41,8 @@ export const runPreviewKey = (type: RunType, year: number, month: number) =>
   ['operations', 'preview', type, year, month] as const;
 
 export const runHistoryKey = () => ['operations', 'history'] as const;
+
+export const runDetailKey = (id: string) => ['operations', 'run', id] as const;
 
 export const runPreviewIssuedCoverageKey = (type: RunType, year: number, month: number) =>
   ['operations', 'preview', type, year, month, 'issued-coverage'] as const;
@@ -79,6 +82,17 @@ export function useRunPreviewIssuedCoverage(
         'Failed to check for issued statements affected by this run.',
       ),
     retry: false,
+  });
+}
+
+/**
+ * What one confirmed run did to each target (#573), in the server's order. A run is append-only, so
+ * nothing that writes later changes what this read returns and no mutation needs to invalidate it.
+ */
+export function useRunDetail(id: string): UseQueryResult<BulkRunDetailResponse> {
+  return useQuery({
+    queryKey: runDetailKey(id),
+    queryFn: () => unwrap(getApiOperationsRunsById({ path: { id } }), 'Failed to load the run.'),
   });
 }
 
