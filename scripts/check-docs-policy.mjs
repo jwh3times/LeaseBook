@@ -215,6 +215,21 @@ function commandCopyAllowed(file) {
   );
 }
 
+/**
+ * AGENTS.md is loaded whole into every agent request (Claude Code imports it through CLAUDE.md), and
+ * Codex silently drops whatever lies past `project_doc_max_bytes`, 32,768 bytes by default. The cap
+ * keeps the contract well inside that limit, with headroom for the shared blocks that
+ * scripts/sync-agents.mjs writes. It is measured as UTF-8 with CRLF normalized to LF, so a Windows
+ * checkout reads the same as CI. Issue #760 trimmed the file to fit, with room left under the cap for
+ * the shared blocks to grow.
+ */
+const agentsMdByteCap = 25_000;
+const codexProjectDocLimit = 32_768;
+
+function agentsMdBytes(content) {
+  return Buffer.byteLength(content.replace(/\r\n/g, "\n"), "utf8");
+}
+
 function lineOf(content, index) {
   return content.slice(0, index).split(/\r?\n/).length;
 }
@@ -260,6 +275,20 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
         }
       }
     }
+  }
+
+  const agentsMd = contents.get("AGENTS.md");
+  const agentsMdSize = agentsMd === undefined ? 0 : agentsMdBytes(agentsMd);
+  if (agentsMdSize > agentsMdByteCap) {
+    errors.push({
+      file: "AGENTS.md",
+      line: 1,
+      message:
+        `AGENTS.md is ${agentsMdSize} bytes, over its ${agentsMdByteCap}-byte cap ` +
+        `(Codex truncates project instructions past ${codexProjectDocLimit} bytes). Move reference ` +
+        "material behind a pointer in this repository's own sections; if the shared blocks are what " +
+        "grew, trim their text in jwh3times/skills.",
+    });
   }
 
   const authorityText = [...contents]

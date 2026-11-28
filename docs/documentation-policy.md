@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-24
+- **Last reviewed:** 2026-11-27
 
 This policy keeps LeaseBook documentation public-safe, navigable, and maintainable. It applies to
 Markdown, runbooks, diagrams, planning artifacts, and documentation embedded in source or automation.
@@ -60,8 +60,14 @@ override the public engineering contract after code, tests, and accepted ADRs es
 - Link to a canonical section instead of copying it when readers can reasonably follow the link.
 - README keeps a short quick start and the authoritative port map; the local-development runbook owns
   the complete command reference.
-- `AGENTS.md` intentionally repeats critical commands and invariants because coding agents require
-  them in immediate context. `CLAUDE.md` is a tool-specific adapter that points to `AGENTS.md`.
+- `AGENTS.md` intentionally repeats the core commands and the invariants because coding agents
+  require them in immediate context; everything else it needs sits behind a one-line pointer.
+  `CLAUDE.md` is a tool-specific adapter that points to `AGENTS.md`.
+- `AGENTS.md` has a byte cap (`agentsMdByteCap` in `scripts/check-docs-policy.mjs`, 25,000 bytes
+  measured as LF, its shared blocks included), and `npm run docs:check` fails a file over it. Every
+  agent request loads the whole file, and Codex silently truncates project instructions past
+  32,768 bytes. Over the cap, move reference material behind a pointer; if the shared blocks are
+  what grew, trim their text in `jwh3times/skills`.
 - CONTRIBUTING may repeat verification commands as merge requirements, not as an operational command
   reference.
 - ADRs and changelog entries may repeat enough context to remain intelligible historical records.
@@ -117,7 +123,7 @@ npm run docs:check
 ```
 
 The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, copied
-mutable commands, obsolete authority claims and ADR index consistency
+mutable commands, obsolete authority claims, ADR index consistency and the `AGENTS.md` byte cap
 (`scripts/check-docs-policy.mjs`), then local and private-link boundaries and that every document
 has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater` skill audits from
 (`scripts/check-docs.mjs`, shared with the other repositories that install these skills).

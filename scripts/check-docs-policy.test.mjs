@@ -125,6 +125,53 @@ test("obsolete authority claims are caught outside docs/", (context) => {
   );
 });
 
+// AGENTS.md is loaded whole on every request, and Codex silently truncates project instructions past
+// 32,768 bytes (its `project_doc_max_bytes` default). These pin the cap that keeps it well under that.
+function agentsMdSizeErrors(content, context) {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(path.join(root, "AGENTS.md"), content);
+  return validateRepository(root, ["AGENTS.md"]).filter(
+    (error) =>
+      error.file === "AGENTS.md" && error.message.includes("-byte cap"),
+  );
+}
+
+test("an AGENTS.md over 25,000 bytes fails, naming its size, the cap and Codex's limit", (context) => {
+  const errors = agentsMdSizeErrors(`${"x".repeat(25_000)}\n`, context);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /25001 bytes/);
+  assert.match(errors[0].message, /25000-byte cap/);
+  assert.match(errors[0].message, /32768/);
+  assert.match(errors[0].message, /jwh3times\/skills/);
+});
+
+test("an AGENTS.md over the cap only because of CRLF line endings passes", (context) => {
+  // 1,250 lines of 19 characters: 25,000 bytes as LF, 26,250 as a Windows CRLF checkout.
+  const lines = Array.from({ length: 1_250 }, () => "x".repeat(19));
+  assert.deepEqual(
+    agentsMdSizeErrors(`${lines.join("\r\n")}\r\n`, context),
+    [],
+  );
+});
+
+test("an AGENTS.md of exactly 25,000 bytes passes, and the cap counts bytes, not characters", (context) => {
+  assert.deepEqual(agentsMdSizeErrors("x".repeat(25_000), context), []);
+  // 8,334 em dashes are 8,334 characters but 25,002 UTF-8 bytes.
+  assert.equal(agentsMdSizeErrors("—".repeat(8_334), context).length, 1);
+});
+
+test("a repository with no AGENTS.md raises no size error", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(path.join(root, "README.md"), "# Readme\n");
+  const errors = validateRepository(root, ["README.md"]);
+  assert.deepEqual(
+    errors.filter((error) => error.message.includes("-byte cap")),
+    [],
+  );
+});
+
 test("generated skill mirrors do not double-report an authored claim", (context) => {
   const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
   context.after(() => rmSync(root, { recursive: true, force: true }));

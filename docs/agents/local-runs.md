@@ -3,11 +3,11 @@
 - **Audience:** Coding agents and maintainers
 - **Status:** Living policy
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-26
+- **Last reviewed:** 2026-11-27
 
-How to run builds, tests and gates on a development machine without a false green. The commands
-are in `AGENTS.md` and [`docs/runbooks/local-dev.md`](../runbooks/local-dev.md); this file holds
-their traps.
+How to run builds, tests and gates on a development machine without a false green. The core
+commands are in `AGENTS.md` and the complete reference is
+[`docs/runbooks/local-dev.md`](../runbooks/local-dev.md); this file holds their traps.
 
 ## Exit codes
 
@@ -98,6 +98,10 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
 - **`.agents/skills/` is outside the gate and every formatter** (`web/.prettierignore`, and the
   globs in `web/package.json` and `cspell.json`): `scripts/check-skills.mjs` fails an installed copy
   that differs from `skills-lock.json`, so never format one.
+- **Never put a symlink under `.claude/skills/`**; `node scripts/sync-agents.mjs` reports and
+  removes one. This repository's `core.symlinks` is `false`, so git silently commits a copy of every
+  file inside a symlinked directory instead of a link. Check with `git config core.symlinks` and
+  `git add -n <path>`: a multi-file listing instead of one entry means it has happened.
 - **cspell scans Markdown only**: reword a one-off coinage rather than growing `cspell.json`.
 - **A new table row wider than the columns makes Prettier reflow the whole table.** Pad the new row
   to the existing widths.
@@ -118,6 +122,8 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
 
 ## The OpenAPI build
 
+- **`npm run api:generate` (from `web/`) emits the contract itself**: it needs no running host or
+  database.
 - **It runs as Production.** The schema-drift job runs `Program` up to `app.Run()` with no
   environment, so `appsettings.Production.json` applies with no connection string. Anything startup
   touches that needs a dependency must be left out in the OpenAPI build mode
