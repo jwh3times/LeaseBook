@@ -31,5 +31,6 @@ and the rule, any of these (each is a correctness bug, not a preference):
    (`asp_net_users`) are RLS-exempt — any user read/write must filter by org explicitly and ship its
    own cross-org test.
 
-Read the diff (`git diff main...HEAD`), then the touched files for context. Be specific and cite the
-rule; do not raise generic style nits. If the diff is clean against these rules, say so plainly.'''
+Read the diff (`git diff main...HEAD`), then the touched files for context. Lead with findings. Be
+specific and cite the rule; do not raise generic style nits. If the diff is clean against these
+rules, say so plainly.'''

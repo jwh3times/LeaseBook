@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living runbook; canonical development command reference
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-11
+- **Last reviewed:** 2026-11-27
 
 ## Prerequisites
 
@@ -205,6 +205,12 @@ Restore the local tool manifest once (`dotnet tool restore`), then apply migrati
 
 ```bash
 dotnet ef database update --project src/LeaseBook.Web --context AppDbContext
+```
+
+Add a migration the same way, from the repo root:
+
+```bash
+dotnet ef migrations add <Name> --project src/LeaseBook.Web --context AppDbContext
 ```
 
 Seed the demo org (`Tarheel Property Group`) and its admin — idempotent, safe to re-run:

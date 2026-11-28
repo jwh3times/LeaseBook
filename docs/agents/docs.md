@@ -13,12 +13,14 @@ are not living documents and carry no such line. Work state — what is done, ne
 issue, never a doc edit, and no plan file (`private/TODO.md`, `private/roadmap.md` or a successor)
 is recreated.
 
-- `AGENTS.md` — the cross-agent engineering contract: repository state, ground rules, commands,
-  domain guidance routing, agent skills (development flow, shared skills, trackers, human follow-ups,
-  machine handoff), architecture, invariants, working conventions. **When:**
-  - a milestone merges or the frontier changes: Repository State, after the merge only;
-  - a command, port or script changes (`scripts/dev.ps1`, `web/package.json`, `package.json`, the
-    verbs under `src/LeaseBook.Web/Cli/`): Commands;
+- `AGENTS.md` — the cross-agent engineering contract, loaded whole into every agent request and
+  capped at 25,000 bytes (`docs/documentation-policy.md`): the rules every session needs, the core
+  commands, domain guidance routing, agent skills (development flow, shared skills, trackers, human
+  follow-ups, MCP), architecture, invariants, working conventions. Reference material goes behind a
+  one-line pointer, never inline. **When:**
+  - an operating rule for the repository changes: Repository State;
+  - a core command, port or script changes (`scripts/dev.ps1`, `web/package.json`, `package.json`,
+    the verbs under `src/LeaseBook.Web/Cli/`): Commands, or the doc its pointer names;
   - a module, boundary or invariant changes (`src/LeaseBook.Modules.*/`, the RLS helper): Architecture
     and Non-Negotiable Invariants;
   - an agent or skill is added, removed or replaced (`.claude/agents/`, `.agents/skills/`,
@@ -126,6 +128,8 @@ is recreated.
   PR to finished merge; proving a test, guard or claim; running builds, tests and gates locally
   without a false green. **When:** a lesson is learned that no script or test enforces, or a
   command, check or ruleset rule they quote changes.
+- `docs/agents/mcp.md` — the shared MCP servers: configuration, what each is for, why there is no
+  database server. **When:** `.mcp.json` gains, loses or repins a server.
 - `docs/agents/dependabot.md` — what reviewing a Dependabot PR takes here: review triggers, the
   installs CI runs, where each dependency is pinned, stack facts and known fixes. **When:**
   `.github/dependabot.yml`, a toolchain or image pin, or a fix a bump needed changes.
