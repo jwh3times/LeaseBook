@@ -5,9 +5,7 @@
 - **Owner:** Maintainers
 - **Last reviewed:** 2026-11-27
 
-The shared MCP servers, and what each is for. `AGENTS.md` keeps the rules every session needs:
-when to query a documentation server, what never goes into a query, and that `.mcp.json` is the
-only file to edit.
+The shared MCP servers: how they are configured and what each is for.
 
 ## Configuration
 
@@ -20,9 +18,8 @@ only file to edit.
 ## The servers
 
 - `microsoft-learn` covers .NET, ASP.NET Core, EF Core and Azure; `context7` covers the SPA and
-  third-party libraries. Both send the query text to an outside service.
+  third-party libraries.
 - `playwright` drives a browser against the running app (`:5373`) to check a change or a UX click
   budget. It does not replace e2e coverage of a budgeted flow.
-- GitHub work goes through `gh`, not an MCP server.
 - There is deliberately no database server: a session missing `app.org_id` or `app.persona` reads
   zero rows and reports them as fact. Use `./scripts/dev.ps1 psql` and set both.

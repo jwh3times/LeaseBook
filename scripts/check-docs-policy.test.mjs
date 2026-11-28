@@ -132,7 +132,8 @@ function agentsMdSizeErrors(content, context) {
   context.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(path.join(root, "AGENTS.md"), content);
   return validateRepository(root, ["AGENTS.md"]).filter(
-    (error) => error.file === "AGENTS.md" && error.message.includes("bytes"),
+    (error) =>
+      error.file === "AGENTS.md" && error.message.includes("-byte cap"),
   );
 }
 
@@ -158,6 +159,17 @@ test("an AGENTS.md of exactly 25,000 bytes passes, and the cap counts bytes, not
   assert.deepEqual(agentsMdSizeErrors("x".repeat(25_000), context), []);
   // 8,334 em dashes are 8,334 characters but 25,002 UTF-8 bytes.
   assert.equal(agentsMdSizeErrors("—".repeat(8_334), context).length, 1);
+});
+
+test("a repository with no AGENTS.md raises no size error", (context) => {
+  const root = mkdtempSync(path.join(tmpdir(), "leasebook-docs-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(path.join(root, "README.md"), "# Readme\n");
+  const errors = validateRepository(root, ["README.md"]);
+  assert.deepEqual(
+    errors.filter((error) => error.message.includes("-byte cap")),
+    [],
+  );
 });
 
 test("generated skill mirrors do not double-report an authored claim", (context) => {

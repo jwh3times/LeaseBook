@@ -14,11 +14,12 @@ issue, never a doc edit, and no plan file (`private/TODO.md`, `private/roadmap.m
 is recreated.
 
 - `AGENTS.md` — the cross-agent engineering contract, loaded whole into every agent request and
-  capped at 25,000 bytes (`docs/documentation-policy.md`): the rules every session needs, the core
+  byte-capped (`docs/documentation-policy.md`): the rules every session needs, the core
   commands, domain guidance routing, agent skills (development flow, shared skills, trackers, human
   follow-ups, MCP), architecture, invariants, working conventions. Reference material goes behind a
   one-line pointer, never inline. **When:**
-  - an operating rule for the repository changes: Repository State;
+  - the board, operator-gated work, the payment fixtures or the `private/` checkout changes how
+    agents work: Repository State;
   - a core command, port or script changes (`scripts/dev.ps1`, `web/package.json`, `package.json`,
     the verbs under `src/LeaseBook.Web/Cli/`): Commands, or the doc its pointer names;
   - a module, boundary or invariant changes (`src/LeaseBook.Modules.*/`, the RLS helper): Architecture

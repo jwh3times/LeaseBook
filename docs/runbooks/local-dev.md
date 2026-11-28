@@ -75,6 +75,23 @@ Both modes share the same `docker-compose.yml` and the same data volume; the dif
 `full` profile. `docker compose up -d` runs db-only; `docker compose --profile full up -d --build`
 runs everything.
 
+## Builds, tests and the image
+
+From the repo root. Integration tests use Testcontainers, so Docker must be running; local compose
+is not required. The test projects are xUnit v3 on Microsoft.Testing.Platform, so filters use its
+flags (their traps are in [local runs](../agents/local-runs.md#net-test-runs)):
+
+```bash
+dotnet test --project tests/LeaseBook.Tests.Integration/LeaseBook.Tests.Integration.csproj   # one project
+dotnet test --project <proj> --filter-class '*OrgIsolationTests'                            # one class
+dotnet test --project <proj> --filter-method '*Reads_under_an_org_context_see_only_that_orgs_rows'  # one method
+```
+
+Regenerate the API client from `web/` with `npm run api:generate`; it emits the contract itself.
+
+Build the image with `docker build -t leasebook .` and run it with `ConnectionStrings__Default` set.
+The container serves the SPA and `/api` on internal port `8080`.
+
 ## Running the full product in Docker
 
 ```bash

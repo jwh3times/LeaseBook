@@ -220,10 +220,10 @@ function commandCopyAllowed(file) {
  * Codex silently drops whatever lies past `project_doc_max_bytes`, 32,768 bytes by default. The cap
  * keeps the contract well inside that limit, with headroom for the shared blocks that
  * scripts/sync-agents.mjs writes. It is measured as UTF-8 with CRLF normalized to LF, so a Windows
- * checkout reads the same as CI. Issue #760 trimmed the file from 35,069 bytes to about 20,000,
- * leaving the shared blocks about 5,000 bytes to grow before a sync fails here.
+ * checkout reads the same as CI. Issue #760 trimmed the file to fit, with room left under the cap for
+ * the shared blocks to grow.
  */
-export const agentsMdByteCap = 25_000;
+const agentsMdByteCap = 25_000;
 const codexProjectDocLimit = 32_768;
 
 function agentsMdBytes(content) {
@@ -278,12 +278,13 @@ export function validateRepository(root = defaultRoot, suppliedFiles) {
   }
 
   const agentsMd = contents.get("AGENTS.md");
-  if (agentsMd !== undefined && agentsMdBytes(agentsMd) > agentsMdByteCap) {
+  const agentsMdSize = agentsMd === undefined ? 0 : agentsMdBytes(agentsMd);
+  if (agentsMdSize > agentsMdByteCap) {
     errors.push({
       file: "AGENTS.md",
       line: 1,
       message:
-        `AGENTS.md is ${agentsMdBytes(agentsMd)} bytes, over its ${agentsMdByteCap}-byte cap ` +
+        `AGENTS.md is ${agentsMdSize} bytes, over its ${agentsMdByteCap}-byte cap ` +
         `(Codex truncates project instructions past ${codexProjectDocLimit} bytes). Move reference ` +
         "material behind a pointer in this repository's own sections; if the shared blocks are what " +
         "grew, trim their text in jwh3times/skills.",

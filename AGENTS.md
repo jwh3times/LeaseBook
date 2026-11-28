@@ -24,13 +24,17 @@ details but defer to this file for rules, commands, invariants and documentation
 
 Verify, do not assume.
 
-- A fact you cannot confirm from code, docs, or a quick local check gets verified before you design
-  against it, above all trust-accounting and domain facts: NCREC rules (21 NCAC 58A .0116-.0118;
-  retention .0108), basis behavior, posting-template lines, golden and seed figures, EF/RLS/posting
-  runtime behavior, anything fiduciary.
-- Ground truth is usually local: scope in the PRD and `private/claude_design_files/`; decided work
-  in closed issues and `private/planning/*_retro.md`; real figures from `check-invariants`, the
-  golden/invariant/property suites, the demo org, and the migration, RLS-helper and posting code.
+- Do not build on unverified assumptions. When a task depends on a fact that cannot be confirmed
+  from code, docs, or a quick local check, stop and verify before designing against it.
+- This is especially important for trust-accounting and domain facts: NCREC trust-money rules
+  (21 NCAC 58A .0116-.0118; record retention is .0108), basis behavior, posting-template lines,
+  prototype golden figures, demo-seed numbers, EF/RLS/posting runtime behavior, and anything that
+  can affect fiduciary correctness.
+- Ground truth is usually local: scope in `private/LeaseBook_PRD_v1.0.md` and
+  `private/claude_design_files/`; built or decided work in closed issues and
+  `private/planning/*_retro.md` (the record of how completed work went); real figures from
+  `check-invariants`, the golden/invariant/property suites, the seeded demo org, or the migration,
+  RLS-helper and posting-template code.
 - A structure built to discover an unknown at runtime is still an assumption: verify it against real
   data such as journal replay or the golden dataset.
 - A low-stakes default is fine: state it and proceed. If being wrong would force rework, move a
@@ -64,21 +68,23 @@ one-shot `migrator` image), never at app startup. Seed and check with
 Before editing a domain, read its guidance file in `.claude/agents/` and apply its rules, whichever
 harness you are in; where one conflicts with an invariant here, the invariant wins.
 
-- `dotnet-api.md`: .NET endpoints, slices, integration tests
-- `react-frontend.md`: React components, hooks, tokens, frontend tests
-- `postgres-specialist.md`: migrations, RLS, schema, Postgres queries
-- `trust-accounting.md`: posting logic, journal entries, the trust equation
-- `code-reviewer.md`: reviewing a diff before merging
-- `azure-infrastructure.md`: Azure, Bicep, deploy workflows, Key Vault, PITR
+- `dotnet-api.md`: .NET features, endpoints, commands/queries, integration tests
+- `react-frontend.md`: React components, hooks, design tokens, frontend tests
+- `postgres-specialist.md`: migrations, RLS policies, DB schema design, Postgres queries
+- `trust-accounting.md`: accounting posting logic, journal entries, trust equation changes
+- `code-reviewer.md`: reviewing a diff for correctness bugs before merging
+- `azure-infrastructure.md`: Azure infra, Bicep, deploy workflows, Key Vault, managed identity, PITR
 
 **Edit `.claude/agents/` and `.agents/skills/` only**, never the generated `.codex/agents/` and
-`.claude/skills/`; then run `npm run docs:format` (from `web/`) and `node scripts/sync-agents.mjs`,
-in that order, and commit the result. Never put a symlink under `.claude/skills/`
-(`docs/agents/local-runs.md`).
+`.claude/skills/`, which the next sync overwrites. Then run `npm run docs:format` (from `web/`)
+before `node scripts/sync-agents.mjs`, since formatting after the sync re-drifts the mirror, and
+commit the result. Keep `.claude/skills/` plain copied files, never reintroducing a symlink there
+(`docs/agents/local-runs.md`, "The docs gate").
 
-When a change affects docs, ports, ADR-worthy decisions, workflows, commands, or business events,
-update the docs in the same change; when accuracy is in doubt, run the `docs-updater` skill and
-update only what drifted.
+When a change affects docs, ports, ADR-worthy decisions, user workflows, commands, or business
+events, update the relevant docs in the same change. When accuracy is affected or in doubt, run the
+`docs-updater` skill and update only the docs that actually drifted. It and `/open-pr` are
+session-scoped: no harness is guaranteed to run them, and CI does not.
 
 ## Agent skills
 
@@ -205,24 +211,35 @@ using `playwright` or changing a server, read [`docs/agents/mcp.md`](docs/agents
 
 ## Architecture
 
-`docs/architecture.md` is the canonical map of the built system (`docs/blueprint.md` is the pre-M0
-baseline). These test-enforced patterns bind future modules:
+`docs/architecture.md` is the canonical public map of the implemented system. `docs/blueprint.md` is
+the historical pre-M0 baseline; accepted ADRs and implemented behavior supersede it where the system
+evolved. These test-enforced patterns bind future modules:
 
-- Modules reference `SharedKernel` only (`ModuleBoundaryTests`), which stays pure cross-cutting
-  primitives, with no module contracts.
-- A module never reads another module's tables or data: no cross-module SQL, LINQ or entity types.
-  It reads through a port in its own `Contracts`, which a host adapter fills via `ISender`. The
-  reporting/read layer is the sole exception, under its own ADR.
+- Modular monolith: an ASP.NET Core host plus one project per module (`Accounting`, `Directory`,
+  `Banking`, `Reporting`, `Operations`, `Capabilities`, `Payments`, `SharedKernel`, `Migrator`).
+  Modules reference `SharedKernel` only (`ModuleBoundaryTests`), which stays pure cross-cutting
+  primitives; module contracts do not live there.
+- Cross-module calls go through `Contracts` ports so modules stay extractable. A feature module
+  must never read another module's tables or data directly: no cross-module SQL, no cross-module
+  LINQ, and no referencing another module's entity types. Cross-module reads use a port declared in
+  the consuming module's `Contracts`, implemented by a host adapter delegating via `ISender`. The
+  reporting/read layer is the sole intentional exception, under its own ADR.
 - Ports expose batch reads that return maps, never per-id reads, except a posting's read of the one
-  tenant or property it names (ADR-014 addendum). Adapters run on the ambient RLS transaction and
+  tenant or property it names (ADR-014 addendum of 2026-11-14).
+  Adapters run on the ambient RLS transaction and
   must not open a new connection.
 - CQRS vertical slices: one file per feature with its record, `AbstractValidator` and handler.
   Minimal APIs only (`IEndpointModule`, `TypedResults`), a hand-rolled `ISender`; no MediatR or
   AutoMapper.
+- Within a module, `db.Database.SqlQuery<T>` is acceptable for that module's own analytical reads.
+  Prefer EF LINQ for simple reads; reserve raw SQL for window functions, `FILTER`, trigram queries,
+  or other queries LINQ cannot express.
 - Accounting gets the highest test rigor. Its double-entry journal is written only through posting
   templates keyed to business events, lines tagged cash/accrual/both so each basis is a query.
   Ledgers, registers and statements are journal projections, never independently maintained state.
-- The stack is PRD-locked; any deviation from a `docs/blueprint.md` default gets a short ADR.
+- The stack is PRD-locked: .NET current LTS, React and TypeScript with Vite, PostgreSQL, Azure
+  Container Apps in East US 2, Key Vault and managed identity. Changing one, or deviating from any
+  other default tabled in `docs/blueprint.md`, requires a short ADR.
 
 ## Non-Negotiable Invariants
 
@@ -243,7 +260,8 @@ Violating these is a correctness bug, not a style issue.
 - Reconciliation finalize locks the accounting period. Postings into locked periods are rejected.
 - Capabilities gate **reachability only** (ADR-028): whether a posting path runs, never its lines or
   amounts. No capability-derived value may become an argument to an Accounting command, business
-  event, or posting-template input; money parameters belong in `OrgSettings`. A multi-step run
+  event, or posting-template input; money-affecting parameters belong in `OrgSettings`. A
+  multi-step run
   resolves the capability set once and passes it explicitly, never re-asking mid-run.
 
 ### Organization Isolation
@@ -256,33 +274,40 @@ Violating these is a correctness bug, not a style issue.
   (`system`/`staff`/`tenant`/`owner`/`none`) and `app.user_id`. `PersonaResolver` maps roles, a
   mixed or unrecognised set to `none`; `OrgContextCallSiteTests` fails a second setter.
 - Missing org context fails closed, and so does a missing persona: every session reading org data,
-  an operator's `psql` or pgAdmin included, sets `app.persona` (e.g. `staff`) and `app.org_id`, or it
-  sees zero rows.
+  an operator's `psql` or pgAdmin included, must set `app.persona` (e.g. `staff`) as well as
+  `app.org_id`, or it sees zero rows.
 - Three DB roles: `leasebook_migrator` (owns `public`, migrations only), `leasebook_app` (runtime,
   under `FORCE ROW LEVEL SECURITY`), `leasebook_ops` (read-only).
 - `leasebook_app` deliberately owns the `hangfire` schema (ADR-001), its only `CREATE` privilege.
   Do not "correct" it to migrator ownership: that breaks the first Hangfire upgrade. Nothing
   org-scoped lives there.
-- Every new org-scoped table goes through the migrations RLS helper: org policy, `FORCE` and the
-  deny-by-default persona gate (ADR-048) in one call. The gate admits `staff` and `system`
-  org-wide, tenants and owners only by a migration's explicit `Rls.ApplyPersonaGate` grant, derived
-  from their active `owner_access`/`resident_access` link, never an app-set id. ADR-003's app
-  checks stay the first layer. A schema guard test fails CI on a missing policy or gate and pins
-  every gate predicate.
-- `FORCE` binds the migrator too: a migration rewriting data brackets its DML with
-  `NO FORCE ROW LEVEL SECURITY` / `FORCE ROW LEVEL SECURITY` (`ALTER TABLE`) in the same `Sql`
-  block, for every forced table it names. Never use EF's `InsertData`/`UpdateData`/`DeleteData`
-  for this, as they can't be bracketed; an architecture test fails CI on all three.
+- Every new org-scoped table goes through the migrations RLS helper: column, `USING`/`WITH CHECK`
+  policy, `FORCE ROW LEVEL SECURITY` and the deny-by-default persona gate (ADR-048) in one call.
+  The gate admits `staff` and `system` org-wide, and tenants and owners only through a migration's
+  explicit `Rls.ApplyPersonaGate` grant, derived from their active `owner_access`/`resident_access`
+  link, never from an id the application sets. The ADR-003 application-layer checks remain the
+  first layer.
+- A schema guard test fails CI if any `org_id` table lacks its policy or persona gate, and it pins
+  every persona-gate predicate exactly.
+- `FORCE ROW LEVEL SECURITY` binds the migrator too, so a migration that rewrites data must bracket
+  its DML with `ALTER TABLE <t> NO FORCE ROW LEVEL SECURITY` / `... FORCE ROW LEVEL SECURITY` in
+  the same `Sql` block, for every forced table the statement names, not just the target. EF's
+  `InsertData`/`UpdateData`/`DeleteData` builders are not usable for this, since no block can
+  bracket them. An architecture test fails CI on a missing lift, a missing restore, and those
+  builders.
 - The four platform capability tables are gated on `SET LOCAL app.platform` (ADR-028) in three
-  deliberate shapes: `entitlements` and `capability_cohorts` add a platform escape to their org
-  read policy, `feature_flags` is globally readable and platform-write-only, and
-  `platform_audit_events` is platform-only. `app.platform` is set in exactly one place, never in a
-  request transaction (tested). Do not "correct" any to a plain org policy or to no RLS
-  ([why](docs/architecture.md#the-capability-seam)).
-- Background jobs establish org context explicitly and throw when it is missing.
-- A read of `entitlements`, `capability_cohorts` or `platform_audit_events` beyond the ambient org
-  asserts platform scope and throws without it; an `UPDATE`/`DELETE` on the four tables off the
-  tracked-entity path asserts its affected-row count. RLS filters both to zero rows silently.
+  deliberate shapes: `entitlements` and `capability_cohorts` keep `org_id` and an org read policy
+  plus a platform escape; `feature_flags` is globally readable and platform-write-only; only
+  `platform_audit_events` is platform-only in both directions. `app.platform` is set in exactly one
+  place, never inside a request transaction, and an architecture test scanning `src/`/`infra/`
+  fails the build on a second call site. Do not "correct" any of these to a plain org policy or to
+  no RLS ([why](docs/architecture.md#the-capability-seam)).
+- Background jobs must establish organization context explicitly and throw when it is missing.
+- Any read of `entitlements`, `capability_cohorts` or `platform_audit_events` that needs rows beyond
+  the ambient org must assert platform scope and throw when it is missing, and an `UPDATE`/`DELETE`
+  on any of the four tables off the tracked-entity path must assert an affected-row count: RLS
+  filters both to zero rows silently. The reasons for these rules are in
+  [`docs/architecture.md`](docs/architecture.md#organization-isolation-and-security).
 
 ### UX Contract
 
@@ -291,12 +316,15 @@ These flows are instrumented in telemetry; regressions fail the release checklis
 - Record a tenant payment in at most 3 interactions; owner ending balances visible at 0 clicks;
   uncleared trust items within 1 click; start reconciliation within 2 clicks, completed in place;
   issue a refund check, printing included, within 4 interactions.
-- UI uses the design tokens and primitives ported from the prototype; money renders with tabular
-  numerals; status is never conveyed by color alone.
+- UI must use design tokens and primitives ported from the prototype.
+- Money renders with tabular numerals.
+- Status is never conveyed by color alone.
 
 ## Working Conventions
 
-- The Definition of Done in `CONTRIBUTING.md` applies to every task.
+- The Definition of Done in `CONTRIBUTING.md` applies to every task: tests at the right altitude,
+  audit/telemetry events on money-touching paths, empty/loading/error states, keyboard path, and
+  demoability on the seed org.
 - `docs/product-scope.md` is the product boundary: additions outside its non-goals need a formal
   scope change first, with commercial or customer consequences recorded privately.
 - Seed data is sacred: the demo dataset is the golden fixture, reconciled to the cent. Never casually
