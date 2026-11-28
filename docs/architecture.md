@@ -3,7 +3,7 @@
 - **Audience:** Contributors and maintainers
 - **Status:** Living architecture guide
 - **Owner:** Maintainers
-- **Last reviewed:** 2026-11-14
+- **Last reviewed:** 2026-11-27
 
 This is the canonical public map of the system **as implemented**. It explains how the pieces fit
 together and links the decisions that shaped them without reproducing every invariant. Accepted
@@ -142,9 +142,18 @@ at all, but never what an accounting event produces. Money-affecting parameters 
 Architecture tests keep the seam out of `Accounting` and out of `SharedKernel`, and a bulk run freezes
 its capability set once at run-confirmation entry so one run cannot straddle a toggle. Cheap reads are served
 from a short-lived in-process cache invalidated by a Postgres `NOTIFY`; money-path reads bypass it and
-resolve inside the ambient transaction. The platform tables use an RLS platform escape rather than no
-RLS, so a forgotten scope returns zero rows rather than another organization's. See
-[ADR-028](adr/ADR-028-platform-capability-model.md).
+resolve inside the ambient transaction. See [ADR-028](adr/ADR-028-platform-capability-model.md).
+
+The four platform tables are gated on `SET LOCAL app.platform`, each shape chosen for what it
+protects. `entitlements` and `capability_cohorts` keep `org_id` and an organization read policy plus a
+platform escape, an escape rather than no RLS, so a forgotten scope returns zero rows rather than
+every organization's. `feature_flags` is deployment config: globally readable (`USING (true)`) and
+platform-write-only, because the property worth protecting is that an organization cannot _toggle_ a
+flag. `platform_audit_events` is platform-only in both directions. That zero-row failure is why a
+read needing rows beyond the ambient organization asserts platform scope and throws without it: RLS
+filters rather than raises, and "no row" is a meaningful answer here (the default, not entitled, not
+in the cohort), so a scope-less read renders a coherent wrong answer instead of failing. Writes off
+the tracked-entity path assert their affected-row count for the same reason.
 
 There is deliberately no endpoint and no screen that writes this state: the `capabilities` CLI verb is
 the only write surface, and in production it runs as a manual-trigger Container Apps job inside the
@@ -213,13 +222,15 @@ runtime role holds no DDL privilege in `public` and none on the database; its si
 org-scoped table is created through the migrations RLS helper (column + `USING`/`WITH CHECK` policy +
 `FORCE` in one call), and a schema-guard test fails CI if any `org_id` table lacks its policy.
 `FORCE` binds the migrator role too, so a migration that rewrites existing rows must lift and restore
-it around the statement; an architecture test reads migration source and fails the build on an
-unbracketed data rewrite, which would otherwise match no rows in silence.
+it around the statement, for every forced table the statement names; an architecture test reads
+migration source and fails the build on an unbracketed data rewrite, which would otherwise match no
+rows in silence. A missing restore would leave the table unprotected.
 
 Inside the organization, row-level security also enforces the portal personas
 ([ADR-048](adr/ADR-048-per-persona-row-level-security.md), amending
 [ADR-003](adr/ADR-003-portal-suborg-scoping-at-app-layer.md)). Every org-scoped table carries a
-deny-by-default persona gate: three `RESTRICTIVE` policies that combine with the unchanged org or
+deny-by-default persona gate: three `RESTRICTIVE` policies (`{t}_persona`, `{t}_persona_no_update`,
+`{t}_persona_no_delete`) that combine with the unchanged org or
 platform policies. They admit `staff` and `system` organization-wide and admit a tenant or owner only
 through that table's explicit read or insert grant. An unset, `none` or unknown persona sees nothing,
 and updates and deletes stay with the organization-wide personas. The database derives the caller's
