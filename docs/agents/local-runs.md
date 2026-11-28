@@ -85,9 +85,11 @@ Use `npm run e2e:fresh` ([local-dev](../runbooks/local-dev.md#end-to-end-playwri
 
 ## The docs gate
 
-- **`npm run format` covers `web/` only.** Root Markdown, `docs/`, `infra/`, `.github/` and
-  `.claude/agents/` need `npm run docs:format`, which must run before `node scripts/sync-agents.mjs`,
-  or the mirror is generated from unformatted source.
+- **`npm run format` covers `web/` only.** Root Markdown, `docs/`, `infra/`, `.github/`,
+  `.claude/agents/` and the `changelog.d/` fragments need `npm run docs:format`, which must run
+  before `node scripts/sync-agents.mjs`, or the mirror is generated from unformatted source. A
+  fragment is checked on its own PR because the stamp copies it into `CHANGELOG.md` unchanged on a
+  commit that runs no CI.
 - **Run `docs:check` after committing.** Its review-date rule compares a doc's `Last reviewed:`
   header with the file's last commit date, so on a dirty tree it always passes. Editing any doc with
   that header, runbooks included, means bumping it.
