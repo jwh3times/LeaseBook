@@ -35,6 +35,7 @@ No unreleased changes.
   - the MCP server notes to the new `docs/agents/mcp.md`
 
   Claude Code, which loads the whole file on every request, now reads about a third less.
+
 - `npm run docs:check` fails when `AGENTS.md` is over 25,000 bytes, measured as UTF-8 with CRLF
   line endings counted as LF (`scripts/check-docs-policy.mjs`). The documentation policy records
   why, and what to trim when a shared-skill sync pushes it over.
