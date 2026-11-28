@@ -123,7 +123,7 @@ npm run docs:check
 ```
 
 The command checks Prettier formatting, Markdown structure, spelling, lifecycle metadata, copied
-mutable commands, obsolete authority claims and ADR index consistency
+mutable commands, obsolete authority claims, ADR index consistency and the `AGENTS.md` byte cap
 (`scripts/check-docs-policy.mjs`), then local and private-link boundaries and that every document
 has an entry in the `Doc map` of `docs/agents/docs.md`, which the `docs-updater` skill audits from
 (`scripts/check-docs.mjs`, shared with the other repositories that install these skills).

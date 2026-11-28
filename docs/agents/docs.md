@@ -231,7 +231,7 @@ milestone-plan, retrospective and prototype content.
 
 - `web/`: `npm run docs:check` — Prettier, markdownlint and cspell, the docs-policy tests, then
   `scripts/check-docs-policy.mjs` (lifecycle metadata and review dates, copied commands, authority
-  claims, the ADR index) and `scripts/check-docs.mjs` (local links and anchors, private links,
+  claims, the ADR index, the `AGENTS.md` byte cap) and `scripts/check-docs.mjs` (local links and anchors, private links,
   `Doc map` coverage)
 - repo root, when `private/.git` exists: `node private/scripts/check-docs.mjs` — the companion's own
   gate
