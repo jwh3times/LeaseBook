@@ -402,6 +402,10 @@ export function detect(output, { zeroMatch = [], count = [] } = {}) {
   }
   signature ??= ZERO_MATCH_PATTERNS.find((entry) => entry.pattern.test(text))?.name ?? null;
   let testCount = null;
+  // `--count` is a regex by design, so this and `lastGroup`'s rebuild of it trip CodeQL's
+  // js/regex-injection, dismissed as "won't fix" (#141): it is the operator's own pattern, run on
+  // their own test output under the run's timeout, and the same caller's `--command` already runs
+  // in bash. Dismiss a new alert here the same way; escaping the value would remove the feature.
   for (const source of count) {
     const value = lastGroup(new RegExp(source, "gm"), text);
     if (value !== null && Number.isFinite(value)) {
