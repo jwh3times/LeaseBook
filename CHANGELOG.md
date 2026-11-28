@@ -19,6 +19,19 @@ have no section of their own: their changes are in the next section.
 
 No unreleased changes.
 
+## [0.41.6] - 2026-11-28
+
+### Changed
+
+- `npm run docs:format` and the docs gate now also format and check the `changelog.d/` fragments,
+  so an unformatted entry fails on its own pull request instead of after the release stamps it.
+
+### Fixed
+
+- `npm run docs:check` passes on `main` again. The v0.41.5 release copied an unformatted changelog
+  entry into `CHANGELOG.md`, which failed the **Web (lint + test + build)** check on every branch
+  that caught up with `main`.
+
 ## [0.41.5] - 2026-11-27
 
 ### Changed
@@ -35,6 +48,7 @@ No unreleased changes.
   - the MCP server notes to the new `docs/agents/mcp.md`
 
   Claude Code, which loads the whole file on every request, now reads about a third less.
+
 - `npm run docs:check` fails when `AGENTS.md` is over 25,000 bytes, measured as UTF-8 with CRLF
   line endings counted as LF (`scripts/check-docs-policy.mjs`). The documentation policy records
   why, and what to trim when a shared-skill sync pushes it over.
@@ -2858,7 +2872,8 @@ No unreleased changes.
 
      and add a matching link reference at the bottom. -->
 
-[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.41.5...HEAD
+[Unreleased]: https://github.com/jwh3times/LeaseBook/compare/v0.41.6...HEAD
+[0.41.6]: https://github.com/jwh3times/LeaseBook/compare/v0.41.5...v0.41.6
 [0.41.5]: https://github.com/jwh3times/LeaseBook/compare/v0.41.4...v0.41.5
 [0.41.4]: https://github.com/jwh3times/LeaseBook/compare/v0.41.3...v0.41.4
 [0.41.3]: https://github.com/jwh3times/LeaseBook/compare/v0.41.2...v0.41.3
